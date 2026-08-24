@@ -22,9 +22,6 @@ namespace NexoMarket.CentralServer
             Console.WriteLine("Marketplace: " + (string.IsNullOrWhiteSpace(publicBase) ? "http://localhost:" + port + "/" : publicBase.TrimEnd('/') + "/"));
             Console.WriteLine("API:         http://localhost:" + port + "/api");
             Console.WriteLine("Datos:       Data/nexomarket_stores.xml / Data/nexomarket_catalog.xml / Data/nexomarket_orders.xml");
-            Console.WriteLine("Presioná ENTER para detener.");
-            Console.ReadLine();
-            server.Dispose();
         }
     }
 }
