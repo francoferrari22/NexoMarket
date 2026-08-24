@@ -15,7 +15,7 @@ NexoMarket Admin usa `%LOCALAPPDATA%\NexoMarket\Admin\Data`. License Manager usa
 El código NLM1 nuevo es autocontenido: lleva la clave pública necesaria para verificar la firma. Windows puede validarlo incluso si todavía no tiene `license_public_key.xml` ni conexión al servidor. El servidor, cuando `LICENSE_PUBLIC_KEY_XML` está configurada, exige esa clave como raíz de confianza.
 
 ## Render
-El servicio está configurado como `starter`, no `free`, porque la versión Free se duerme después de 15 minutos sin tráfico y su filesystem es efímero. Para producción siempre activa hay que usar una instancia paga.
+El servicio está configurado como `free`, no `free`, porque la versión Free se duerme después de 15 minutos sin tráfico y su filesystem es efímero. Para producción siempre activa hay que usar una instancia paga.
 
 `PUBLIC_BASE_URL` debe quedar en producción como `https://nexomarket.app` cuando el dominio haya sido añadido a Render.
 
@@ -52,3 +52,7 @@ Configurar en Render, nunca dentro del repositorio:
 5. Apagar completamente la PC del vendedor.
 6. Desde un teléfono externo abrir `https://nexomarket.app`.
 7. Confirmar que la tienda, imágenes, promociones, cupones y pedidos siguen funcionando.
+
+
+## Importante sobre el plan gratuito
+La instancia Free de Render es suficiente para pruebas y para mantener el servicio sin costo, pero puede suspenderse después de 15 minutos sin tráfico. El primer acceso posterior puede tardar aproximadamente un minuto. R2 mantiene los datos y archivos fuera del disco efímero.

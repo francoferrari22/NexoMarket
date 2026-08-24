@@ -37,7 +37,7 @@ La web genera un código de recuperación de 6 dígitos con vencimiento de 10 mi
 
 ## Persistencia y archivos
 
-Render ejecuta el servidor; no se usa su disco local como almacenamiento definitivo.
+Render ejecuta el servidor. Para mantener el costo en cero se usa la instancia Free; esta instancia puede entrar en suspensión después de 15 minutos sin tráfico y puede tardar alrededor de un minuto en despertar. Los datos definitivos NO dependen del disco local: R2 conserva los objetos y las copias de los XML centrales.
 
 - R2: imágenes, logos, fotos de productos, promociones y comprobantes.
 - R2 también conserva copias de los XML centrales de cuentas, catálogo, pedidos, licencias y tiendas.
@@ -84,6 +84,6 @@ No se necesitan los TXT históricos de correcciones para compilar.
 
 ## Arquitectura cloud 4.2
 
-El servidor central puede ejecutarse en Render sin depender de la PC del vendedor. Los datos centrales se replican en Cloudflare R2 cuando R2 está configurado. El Seller Center está disponible en `/seller` y el login en `/seller/login`.
+El servidor central puede ejecutarse en Render sin depender de la PC del vendedor. En Free queda disponible públicamente pero puede dormir por inactividad; para disponibilidad 24/7 garantizada se necesita una instancia que no se suspenda. Los datos centrales se replican en Cloudflare R2 cuando R2 está configurado. El Seller Center está disponible en `/seller` y el login en `/seller/login`.
 
 La PC Windows queda como cliente/sincronizador y no como servidor público obligatorio.
