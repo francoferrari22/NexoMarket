@@ -20,8 +20,10 @@ namespace NexoMarket.CentralServer
             Console.WriteLine("NexoMarket Central Server 4.0");
             string publicBase = Environment.GetEnvironmentVariable("PUBLIC_BASE_URL");
             Console.WriteLine("Marketplace: " + (string.IsNullOrWhiteSpace(publicBase) ? "http://localhost:" + port + "/" : publicBase.TrimEnd('/') + "/"));
-            Console.WriteLine("API:         http://localhost:" + port + "/api");
+            Console.WriteLine("API:         " + (string.IsNullOrWhiteSpace(publicBase) ? "http://localhost:" + port + "/api" : publicBase.TrimEnd('/') + "/api"));
             Console.WriteLine("Datos:       Data/nexomarket_stores.xml / Data/nexomarket_catalog.xml / Data/nexomarket_orders.xml");
+            Console.WriteLine("Servidor ejecutándose. Render mantiene el proceso activo.");
+            System.Threading.Thread.Sleep(System.Threading.Timeout.Infinite);
         }
     }
 }
