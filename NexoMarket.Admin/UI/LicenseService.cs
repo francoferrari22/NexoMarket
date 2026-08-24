@@ -9,42 +9,9 @@ namespace NexoMarket.Admin.UI
     public sealed class LicenseService
     {
         private readonly string _dataRoot;
-        private const int TrialDays = 30;
-        public LicenseService(string dataRoot) { _dataRoot = dataRoot; EnsureTrialStart(); }
+        public LicenseService(string dataRoot) { _dataRoot = dataRoot; }
         public string MachineId { get { return LicenseCore.MachineId(); } }
         public string LicensePath { get { return Path.Combine(_dataRoot, "nexomarket.license"); } }
-        private string TrialStartPath { get { return Path.Combine(_dataRoot, "trial_started_utc.txt"); } }
-
-        private void EnsureTrialStart()
-        {
-            try
-            {
-                Directory.CreateDirectory(_dataRoot);
-                if (!File.Exists(TrialStartPath)) File.WriteAllText(TrialStartPath, DateTime.UtcNow.ToString("o"), Encoding.UTF8);
-            }
-            catch { }
-        }
-
-        private bool GetTrial(out DateTime startedUtc, out int daysRemaining)
-        {
-            startedUtc = DateTime.MinValue; daysRemaining = 0;
-            try
-            {
-                if (!File.Exists(TrialStartPath)) return false;
-                if (!DateTime.TryParse(File.ReadAllText(TrialStartPath, Encoding.UTF8).Trim(), null, System.Globalization.DateTimeStyles.RoundtripKind, out startedUtc)) return false;
-                if (startedUtc.Kind != DateTimeKind.Utc) startedUtc = startedUtc.ToUniversalTime();
-                DateTime expires = startedUtc.AddDays(TrialDays);
-                if (expires <= DateTime.UtcNow) return false;
-                daysRemaining = Math.Max(0, (int)(expires.Date - DateTime.UtcNow.Date).TotalDays);
-                return true;
-            }
-            catch { return false; }
-        }
-
-        public bool IsTrialActive(out int daysRemaining)
-        {
-            DateTime started; return GetTrial(out started, out daysRemaining);
-        }
 
         public LicenseRecord Load()
         {
@@ -66,31 +33,15 @@ namespace NexoMarket.Admin.UI
         public bool IsValid(out string status, out int daysRemaining)
         {
             LicenseRecord r = Load();
+            status = LicenseCore.Status(r, DateTime.UtcNow);
+            daysRemaining = LicenseCore.DaysRemaining(r, DateTime.UtcNow);
             string remote = GetRemoteStatus();
             if (!string.IsNullOrWhiteSpace(remote) && !string.Equals(remote, "Active", StringComparison.OrdinalIgnoreCase))
-            {
-                status = remote; daysRemaining = 0; return false;
-            }
-
-            if (r != null)
-            {
-                status = LicenseCore.Status(r, DateTime.UtcNow);
-                daysRemaining = LicenseCore.DaysRemaining(r, DateTime.UtcNow);
-                if (r.StoreId == StoreId() && r.MachineId == MachineId && LicenseCore.Verify(r, GetPublicKey()) && status == "Activa") return true;
-            }
-
-            int trialDays;
-            DateTime trialStarted;
-            if (GetTrial(out trialStarted, out trialDays))
-            {
-                status = "Activa · Prueba 30 días";
-                daysRemaining = trialDays;
-                return true;
-            }
-
-            status = r == null ? "Sin licencia" : LicenseCore.Status(r, DateTime.UtcNow);
-            daysRemaining = r == null ? 0 : LicenseCore.DaysRemaining(r, DateTime.UtcNow);
-            return false;
+                status = remote;
+            if (r == null || !string.Equals(r.StoreId, StoreId(), StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(r.MachineId, MachineId, StringComparison.OrdinalIgnoreCase)) return false;
+            string pub = GetPublicKey();
+            return LicenseCore.Verify(r, pub) && status == "Activa";
         }
 
         private string RemoteStatusPath { get { return Path.Combine(_dataRoot, "license_remote_status.txt"); } }
@@ -111,26 +62,6 @@ namespace NexoMarket.Admin.UI
             return "";
         }
 
-        public void InstallActivationCode(string code, string serverBaseUrl)
-        {
-            LicenseRecord r;
-            if (!LicenseCore.TryParse(code, out r)) throw new InvalidDataException("Código de activación inválido.");
-            if (!string.Equals(r.StoreId, StoreId(), StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("El Store ID del código no coincide con esta tienda.");
-            if (!string.Equals(r.MachineId, MachineId, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("El Machine ID del código no coincide con esta PC.");
-            string pub = GetPublicKey();
-            if (string.IsNullOrWhiteSpace(pub) && !string.IsNullOrWhiteSpace(serverBaseUrl))
-            {
-                string url = serverBaseUrl.Trim().TrimEnd('/') + "/api/licenses/public-key";
-                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url); req.Method = "GET"; req.Timeout = 8000;
-                using (WebResponse resp = req.GetResponse()) using (StreamReader sr = new StreamReader(resp.GetResponseStream(), Encoding.UTF8)) pub = sr.ReadToEnd().Trim();
-            }
-            if (!LicenseCore.Verify(r, pub)) throw new InvalidDataException("Firma digital inválida o clave pública no disponible.");
-            Directory.CreateDirectory(_dataRoot);
-            File.WriteAllText(LicensePath, code.Trim(), Encoding.UTF8);
-            File.WriteAllText(Path.Combine(_dataRoot, "license_public_key.xml"), string.IsNullOrWhiteSpace(pub) ? (r.PublicKeyXml ?? "") : pub, Encoding.UTF8);
-            try { if (File.Exists(RemoteStatusPath)) File.Delete(RemoteStatusPath); } catch { }
-        }
-
         public void InstallToken(string token, string publicKeyXml)
         {
             LicenseRecord r;
@@ -141,7 +72,6 @@ namespace NexoMarket.Admin.UI
             Directory.CreateDirectory(_dataRoot);
             File.WriteAllText(LicensePath, token.Trim(), Encoding.UTF8);
             File.WriteAllText(Path.Combine(_dataRoot, "license_public_key.xml"), publicKeyXml, Encoding.UTF8);
-            try { if (File.Exists(RemoteStatusPath)) File.Delete(RemoteStatusPath); } catch { }
         }
 
         public bool RefreshFromServer(string baseUrl)
@@ -158,7 +88,8 @@ namespace NexoMarket.Admin.UI
                     string token=sr.ReadToEnd().Trim();
                     if (token.StartsWith("REVOKED|", StringComparison.OrdinalIgnoreCase))
                     {
-                        File.WriteAllText(RemoteStatusPath, token.Substring(8).Trim(), Encoding.UTF8); return false;
+                        File.WriteAllText(RemoteStatusPath, token.Substring(8).Trim(), Encoding.UTF8);
+                        return false;
                     }
                     LicenseRecord r;
                     if (!LicenseCore.TryParse(token,out r)) return false;

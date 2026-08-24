@@ -13,10 +13,7 @@ namespace NexoMarket.Admin
         private static void Main()
         {
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            string userData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NexoMarket", "Admin", "Data");
-            string legacyData = Path.Combine(baseDir, "Data");
-            MigrateLegacyData(legacyData, userData);
-            string logDir = Path.Combine(userData, "logs");
+            string logDir = Path.Combine(baseDir, "logs");
             Directory.CreateDirectory(logDir);
             string log = Path.Combine(logDir, "nexomarket_admin.log");
 
@@ -45,7 +42,7 @@ namespace NexoMarket.Admin
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
 
-                using (var store = new AppDataStore(userData))
+                using (var store = new AppDataStore(Path.Combine(baseDir, "Data")))
                 using (var login = new SellerAccountForm(store))
                 {
                     if (login.ShowDialog() != DialogResult.OK)
@@ -66,23 +63,6 @@ namespace NexoMarket.Admin
                 MessageBox.Show("NexoMarket no pudo iniciarse.\r\n\r\nDetalle guardado en:\r\n" + log,
                     "NexoMarket", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
-        }
-
-        private static void MigrateLegacyData(string legacyDir, string userDir)
-        {
-            try
-            {
-                Directory.CreateDirectory(userDir);
-                if (!Directory.Exists(legacyDir) || string.Equals(Path.GetFullPath(legacyDir).TrimEnd('\\'), Path.GetFullPath(userDir).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)) return;
-                foreach (string source in Directory.GetFiles(legacyDir, "*", SearchOption.AllDirectories))
-                {
-                    string relative = source.Substring(Path.GetFullPath(legacyDir).TrimEnd('\\').Length).TrimStart('\\');
-                    string destination = Path.Combine(userDir, relative);
-                    Directory.CreateDirectory(Path.GetDirectoryName(destination));
-                    if (!File.Exists(destination)) File.Copy(source, destination, false);
-                }
-            }
-            catch { }
         }
 
         private static void Log(string path, string text)

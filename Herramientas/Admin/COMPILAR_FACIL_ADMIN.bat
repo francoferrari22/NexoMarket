@@ -14,7 +14,7 @@ if exist "NexoMarket.Admin\bin\Release" rmdir /s /q "NexoMarket.Admin\bin\Releas
 if exist "NexoMarket.Admin\obj\Release" rmdir /s /q "NexoMarket.Admin\obj\Release"
 if exist "NexoMarket.Admin\SALIDA" rmdir /s /q "NexoMarket.Admin\SALIDA"
 mkdir "NexoMarket.Admin\SALIDA"
-"%MSBUILD%" "NexoMarket.Admin\NexoMarket.Admin.csproj" /t:Rebuild /p:Configuration=Release /p:Platform="AnyCPU" /v:minimal /nologo >"%LOG%" 2>&1
+"%MSBUILD%" "NexoMarket.Admin\NexoMarket.Admin.csproj" /t:Build /p:Configuration=Release /p:Platform="AnyCPU" /v:minimal /nologo >"%LOG%" 2>&1
 if errorlevel 1 (
   echo ERROR DE COMPILACION DEL ADMIN.
   type "%LOG%"

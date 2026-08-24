@@ -132,8 +132,6 @@ namespace NexoMarket.Admin.Models
         public string BuyerMessage { get; set; }
         public string NegotiationStatus { get; set; }
         public string CentralOrderId { get; set; }
-        public string CouponCode { get; set; }
-        public decimal CouponDiscount { get; set; }
 
         public Order()
         {
@@ -159,7 +157,6 @@ namespace NexoMarket.Admin.Models
             BuyerMessage = "";
             NegotiationStatus = "Ninguna";
             CentralOrderId = "";
-            CouponCode = ""; CouponDiscount = 0m;
         }
     }
 

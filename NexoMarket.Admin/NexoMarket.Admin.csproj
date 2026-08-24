@@ -57,7 +57,6 @@
     <Compile Include="UI\StoreDirectoryClient.cs" />
     <Compile Include="UI\CentralSyncService.cs" />
     <Compile Include="UI\LicenseService.cs" />
-    <Compile Include="UI\CentralAccountService.cs" />
     <Compile Include="UI\LicenseGateForm.cs" />
     <Compile Include="UI\WebServerForm.cs" />
     <Compile Include="MainForm.cs" />

@@ -88,8 +88,6 @@ namespace NexoMarket.Admin.Data
             SetDefault("smtp_user", "");
             SetDefault("smtp_app_password", "");
             SetDefault("smtp_ssl", "1");
-            SetDefault("email_relay_key", "");
-            SetDefault("media_upload_key", "");
             SetDefault("recovery_code", "");
             SetDefault("recovery_code_expires", "");
             SetDefault("master_password", "600613");
@@ -581,9 +579,7 @@ namespace NexoMarket.Admin.Data
                 SellerMessage = S(e, "SellerMessage"),
                 BuyerMessage = S(e, "BuyerMessage"),
                 NegotiationStatus = S(e, "NegotiationStatus") == "" ? "Ninguna" : S(e, "NegotiationStatus"),
-                CentralOrderId = S(e, "CentralOrderId"),
-                CouponCode = S(e, "CouponCode"),
-                CouponDiscount = M(e, "CouponDiscount")
+                CentralOrderId = S(e, "CentralOrderId")
             };
         }
 
@@ -617,9 +613,7 @@ namespace NexoMarket.Admin.Data
                 new XElement("SellerMessage", o.SellerMessage ?? ""),
                 new XElement("BuyerMessage", o.BuyerMessage ?? ""),
                 new XElement("NegotiationStatus", o.NegotiationStatus ?? "Ninguna"),
-                new XElement("CentralOrderId", o.CentralOrderId ?? ""),
-                new XElement("CouponCode", o.CouponCode ?? ""),
-                new XElement("CouponDiscount", o.CouponDiscount.ToString(CultureInfo.InvariantCulture))));
+                new XElement("CentralOrderId", o.CentralOrderId ?? "")));
 
             Save();
         }

@@ -21,10 +21,6 @@ namespace NexoMarket.Admin.UI
         public static readonly Color Warning = Color.FromArgb(248, 180, 62);
         public static readonly Color Danger = Color.FromArgb(235, 92, 96);
 
-        // Alias de compatibilidad para formularios que necesitan el color de panel.
-        // Evita depender de un miembro inexistente (CS0117).
-        public static readonly Color Panel = CardBackground;
-
         public static Font Font(float size, FontStyle style)
         {
             return new Font("Segoe UI", size, style, GraphicsUnit.Point);

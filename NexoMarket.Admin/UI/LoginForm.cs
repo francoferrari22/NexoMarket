@@ -123,26 +123,16 @@ namespace NexoMarket.Admin.UI
                 WebUser existing = _store.FindWebUser(email);
                 if (existing != null)
                 {
-                    // REGISTRAR no debe convertirse en un segundo inicio de sesión.
-                    // Un correo identifica una única cuenta de NexoMarket para siempre.
-                    string role = string.Equals(existing.Role, "seller", StringComparison.OrdinalIgnoreCase) ? "vendedor" : "comprador";
-                    Fail("Este correo ya está registrado como cuenta de " + role + ". No se puede crear otra cuenta con el mismo correo. Volvé a 'Iniciar sesión' o usá '¿Olvidaste tu contraseña?'.");
-                    return;
+                    if (existing.Role != "seller") { Fail("Ese correo ya pertenece a una cuenta de comprador. Usá otro correo para la cuenta de vendedor."); return; }
+                    if (!string.IsNullOrWhiteSpace(existing.StoreId) && !string.Equals(existing.StoreId, _store.StoreId, StringComparison.OrdinalIgnoreCase)) { Fail("Ese vendedor está vinculado a otra tienda."); return; }
+                    _store.SetSetting("seller_account_email", email);
+                    _store.SetSetting("seller_account_name", existing.Name ?? "");
+                    if (!string.IsNullOrWhiteSpace(existing.StoreId) && _store.VerifyWebUser(email, password, out existing)) { DialogResult = DialogResult.OK; Close(); return; }
+                    Fail("El correo ya está registrado. Cambiá a 'Iniciar sesión' para entrar."); return;
                 }
 
                 string salt = AuthService.CreateSalt();
                 WebUser user = new WebUser { Name = (_name == null ? "" : _name.Text.Trim()), Email = email, Role = "seller", StoreId = _store.StoreId, Salt = salt, PasswordHash = AuthService.HashPassword(password, salt), CreatedAt = DateTime.Now };
-                CentralAccountService central = new CentralAccountService(_store.GetSetting("web_api_url", ""));
-                if (central.Enabled)
-                {
-                    string centralResult = central.Register(user);
-                    if (centralResult.StartsWith("ERROR|exists", StringComparison.OrdinalIgnoreCase))
-                    { Fail("Este correo ya está registrado en NexoMarket. No se puede crear otra cuenta con el mismo correo. Iniciá sesión o recuperá la contraseña."); return; }
-                    if (centralResult.StartsWith("ERROR|", StringComparison.OrdinalIgnoreCase))
-                    { Fail("No se pudo registrar la cuenta en el servidor central. No se creó una cuenta local para evitar duplicados."); return; }
-                    if (string.IsNullOrWhiteSpace(centralResult))
-                    { Fail("No se pudo contactar al servidor central. Conectá NexoMarket a Internet y volvé a intentar."); return; }
-                }
                 if (!_store.CreateWebUser(user)) { Fail("No se pudo crear la cuenta. Revisá los datos e intentá nuevamente."); return; }
                 _store.SetSetting("seller_account_email", email);
                 _store.SetSetting("seller_account_name", user.Name ?? "");
@@ -152,13 +142,6 @@ namespace NexoMarket.Admin.UI
             WebUser found;
             if (!_store.VerifyWebUser(email, password, out found) || found.Role != "seller") { Fail("Correo o contraseña incorrectos."); return; }
             if (!string.IsNullOrWhiteSpace(found.StoreId) && !string.Equals(found.StoreId, _store.StoreId, StringComparison.OrdinalIgnoreCase)) { Fail("Esta cuenta de vendedor está vinculada a otra tienda."); return; }
-            CentralAccountService centralLogin = new CentralAccountService(_store.GetSetting("web_api_url", ""));
-            if (centralLogin.Enabled)
-            {
-                string centralResult = centralLogin.Login(found.Email, found.PasswordHash, found.Salt, "seller", _store.StoreId);
-                if (centralResult.StartsWith("ERROR|", StringComparison.OrdinalIgnoreCase)) { Fail("La cuenta no pudo validarse contra NexoMarket Central: " + centralResult.Substring(6)); return; }
-                if (string.IsNullOrWhiteSpace(centralResult)) { Fail("No se pudo contactar al servidor central para validar la cuenta."); return; }
-            }
             _store.SetSetting("seller_account_email", found.Email);
             _store.SetSetting("seller_account_name", found.Name ?? "");
             DialogResult = DialogResult.OK; Close();

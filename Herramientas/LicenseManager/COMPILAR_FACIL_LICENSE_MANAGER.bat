@@ -14,7 +14,7 @@ if exist "NexoMarket.LicenseManager\bin\Release" rmdir /s /q "NexoMarket.License
 if exist "NexoMarket.LicenseManager\obj\Release" rmdir /s /q "NexoMarket.LicenseManager\obj\Release"
 if exist "NexoMarket.LicenseManager\SALIDA" rmdir /s /q "NexoMarket.LicenseManager\SALIDA"
 mkdir "NexoMarket.LicenseManager\SALIDA"
-"%MSBUILD%" "NexoMarket.LicenseManager\NexoMarket.LicenseManager.csproj" /t:Rebuild /p:Configuration=Release /p:Platform="AnyCPU" /v:minimal /nologo >"%LOG%" 2>&1
+"%MSBUILD%" "NexoMarket.LicenseManager\NexoMarket.LicenseManager.csproj" /t:Build /p:Configuration=Release /p:Platform="AnyCPU" /v:minimal /nologo >"%LOG%" 2>&1
 if errorlevel 1 (
   echo ERROR DE COMPILACION DEL LICENSE MANAGER.
   type "%LOG%"

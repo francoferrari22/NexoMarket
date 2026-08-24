@@ -1,14 +1,25 @@
-# NexoMarket Central 4.0 - servidor público permanente
+# NexoMarket Central Server 4.1.3 - Render / Docker
+# Build robusto: restaura dependencias despues de copiar el proyecto completo.
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
-COPY NexoMarket.CentralServer/NexoMarket.CentralServer.csproj NexoMarket.CentralServer/
-RUN dotnet restore NexoMarket.CentralServer/NexoMarket.CentralServer.csproj
-COPY NexoMarket.CentralServer/ NexoMarket.CentralServer/
-RUN dotnet publish NexoMarket.CentralServer/NexoMarket.CentralServer.csproj -c Release -o /app/publish --no-restore
 
-FROM mcr.microsoft.com/dotnet/runtime:8.0
+# Copiar el proyecto y sus fuentes antes de restaurar para que el contexto
+# de compilacion sea exactamente el mismo que usa publish.
+COPY NexoMarket.CentralServer/ ./NexoMarket.CentralServer/
+
+RUN dotnet restore ./NexoMarket.CentralServer/NexoMarket.CentralServer.csproj
+RUN dotnet publish ./NexoMarket.CentralServer/NexoMarket.CentralServer.csproj \
+    -c Release \
+    -o /app/publish \
+    --no-restore
+
+FROM mcr.microsoft.com/dotnet/runtime:8.0 AS runtime
 WORKDIR /app
-COPY --from=build /app/publish .
-ENV PORT=10000
-EXPOSE 10000
+
+COPY --from=build /app/publish ./
+
+# Render entrega PORT automaticamente. El programa NexoMarket lo lee.
+ENV PORT=8080
+EXPOSE 8080
+
 ENTRYPOINT ["dotnet", "NexoMarket.CentralServer.dll"]
