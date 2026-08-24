@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Release</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{A0D6E4F1-9A4A-4B1A-9F02-6D9B7E7A2C11}</ProjectGuid>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>NexoMarket.Admin</RootNamespace>
+    <AssemblyName>NexoMarket.Admin</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <Prefer32Bit>false</Prefer32Bit>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <!-- AnyCPU: evita forzar una arquitectura de CPU. No se usa System.Data. -->
+    <ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>Warning</ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>
+    <ApplicationIcon>Assets\NexoMarket.ico</ApplicationIcon>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
+    <OutputPath>bin\Debug\</OutputPath>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|AnyCPU'">
+    <OutputPath>bin\Release\</OutputPath>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <DefineConstants>TRACE</DefineConstants>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="Microsoft.CSharp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="LicenseCore.cs" />
+    <Compile Include="Models\Models.cs" />
+    <Compile Include="Data\AppDataStore.cs" />
+    <Compile Include="Data\WebCatalogExporter.cs" />
+    <Compile Include="UI\Theme.cs" />
+    <Compile Include="UI\LoginForm.cs" />
+    <Compile Include="UI\AuthService.cs" />
+    <Compile Include="UI\CameraCaptureForm.cs" />
+    <Compile Include="UI\ScanBarcodeForm.cs" />
+    <Compile Include="UI\AndroidScannerForm.cs" />
+    <Compile Include="UI\AndroidBridgeService.cs" />
+    <Compile Include="UI\ScannerTextBox.cs" />
+    <Compile Include="UI\LocalScannerServer.cs" />
+    <Compile Include="UI\WebServerService.cs" />
+    <Compile Include="UI\StoreDirectoryClient.cs" />
+    <Compile Include="UI\CentralSyncService.cs" />
+    <Compile Include="UI\LicenseService.cs" />
+    <Compile Include="UI\CentralAccountService.cs" />
+    <Compile Include="UI\LicenseGateForm.cs" />
+    <Compile Include="UI\WebServerForm.cs" />
+    <Compile Include="MainForm.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Assets\NexoMarket.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>

@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:orientation="vertical"
+    android:background="#12151C"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <TextView
+        android:id="@+id/title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="18dp"
+        android:text="NexoMarket · ESCÁNER"
+        android:textColor="#F1F4F9"
+        android:textSize="20sp"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingLeft="18dp"
+        android:paddingRight="18dp">
+
+        <EditText
+            android:id="@+id/serverUrl"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:hint="URL PC (ej. http://192.168.1.10:8787/scan)"
+            android:singleLine="true"
+            android:textColor="#F1F4F9"
+            android:textColorHint="#738096" />
+
+        <EditText
+            android:id="@+id/token"
+            android:layout_width="110dp"
+            android:layout_height="44dp"
+            android:hint="TOKEN"
+            android:singleLine="true"
+            android:textColor="#F1F4F9"
+            android:textColorHint="#738096" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingLeft="18dp"
+        android:paddingRight="18dp"
+        android:paddingBottom="12dp"
+        android:text="Apuntá al código de barras"
+        android:textColor="#26CB9D"
+        android:textSize="14sp" />
+
+    <androidx.camera.view.PreviewView
+        android:id="@+id/preview"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        app:implementationMode="compatible"
+        app:scaleType="fillCenter" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:padding="16dp"
+        android:text="Cada código leído se envía automáticamente a NexoMarket."
+        android:textColor="#9BA6B7"
+        android:textSize="13sp" />
+</LinearLayout>

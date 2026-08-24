@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: nexomarket-central
+    runtime: docker
+    plan: starter
+    numInstances: 1
+    autoDeployTrigger: commit
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: PUBLIC_BASE_URL
+        value: https://nexomarket-central.onrender.com
+      - key: LICENSE_ADMIN_KEY
+        sync: false
+      - key: LICENSE_PUBLIC_KEY_XML
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        value: nexomarket
+      - key: R2_PUBLIC_BASE_URL
+        sync: false
+      - key: EMAIL_RELAY_KEY
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_APP_PASSWORD
+        sync: false
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SSL
+        value: "1"
+      - key: MEDIA_UPLOAD_KEY
+        sync: false
