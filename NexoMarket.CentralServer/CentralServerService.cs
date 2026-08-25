@@ -184,7 +184,7 @@ namespace NexoMarket.CentralServer
                         string target = first.Length > 1 ? first[1] : "/";
                         string body = Body(request); string path = target; string query = ""; int q = path.IndexOf('?');
                         if (q >= 0) { query = path.Substring(q + 1); path = path.Substring(0, q); }
-                        if (path == "/health") { Write(stream, 200, "text/plain", "NexoMarket Central OK\n"); return; }
+                        if (path == "/health" || path == "/healt") { Write(stream, 200, "text/plain", "NexoMarket Central OK\n"); return; }
                         if (path.StartsWith("/media/", StringComparison.OrdinalIgnoreCase) && method == "GET") { ServeMedia(stream, path.Substring(7)); return; }
                         if (path == "/api/central/status" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", CentralDatabaseStatus()); return; }
                         if (path == "/api/accounts/upsert" && method == "POST") { Write(stream, 200, "text/plain", AccountUpsert(Form(body), true)); return; }
@@ -1455,7 +1455,11 @@ namespace NexoMarket.CentralServer
             string email=Get(f,"email").Trim().ToLowerInvariant(), password=Get(f,"password"), name=Get(f,"name").Trim(), storeId=NormalizeStoreId(Get(f,"storeId"));
             if(email.Length<3||email.IndexOf('@')<1||password.Length<6||name.Length<2)return "ERROR|invalid_data";
             if(string.IsNullOrWhiteSpace(storeId)) return "ERROR|store_required";
-            if(!StoreExists(storeId)) return "ERROR|store_not_found";
+            if(!StoreExists(storeId))
+            {
+                string boot=ClaimStore(new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){{"storeId",storeId},{"name",name},{"category","Comercio"},{"description","Tienda NexoMarket"},{"active","1"}});
+                if(!boot.StartsWith("OK|",StringComparison.OrdinalIgnoreCase)) return "ERROR|store_bootstrap_failed|"+Escape(boot);
+            }
             CentralUser existing=FindAccount(email);
             if(existing!=null) return "ERROR|account_exists";
             CentralUser sellerForStore=FindSellerByStore(storeId);
@@ -1486,7 +1490,7 @@ namespace NexoMarket.CentralServer
             string token=Get(f,"pairingToken"), deviceId=Get(f,"deviceId").Trim(), deviceName=Get(f,"deviceName").Trim();
             if(string.IsNullOrWhiteSpace(token)||string.IsNullOrWhiteSpace(deviceId))return "ERROR|missing";
             Dictionary<string,string> d=_database==null?null:_database.CompletePairing(token,deviceId,string.IsNullOrWhiteSpace(deviceName)?"Windows":deviceName);
-            if(d==null)return "ERROR|pairing_invalid_or_expired";
+            if(d==null)return "ERROR|pairing_invalid_or_expired|El código no existe, ya fue utilizado o venció.";
             return "OK|"+Escape(d["deviceId"])+"|"+Escape(d["deviceToken"])+"|"+Escape(d["storeId"])+"|"+Escape(d["email"]);
         }
         private string DeviceValidate(Dictionary<string,string> f)

@@ -451,8 +451,8 @@ namespace NexoMarket.Admin.UI
             try
             {
                 string baseUrl=ResolveCentralBaseUrl();
-                string cn,ce,cs;
-                if(!ConnectByStoreId(storeId,out cn,out ce,out cs)) return false;
+                // Alta Windows-first: registrar directamente en Central. El servidor crea/bootstrappea
+                // la tienda si todavía no existe, evitando depender de /api/stores/connect antes del alta.
                 string response=Request(baseUrl+"/api/auth/register-seller","POST",Form(new Dictionary<string,string>{{"name",name},{"email",email},{"password",password},{"storeId",storeId}}));
                 string[] p=(response??"").Split('|'); if(p.Length<10||!string.Equals(p[0],"OK",StringComparison.OrdinalIgnoreCase)) return false;
                 user=new WebUser{Name=Decode(p[2]),Email=Decode(p[3]),Phone=Decode(p[4]),Role=Decode(p[5])=="seller"?"seller":"buyer",StoreId=Decode(p[6]),Salt=Decode(p[7]),PasswordHash=Decode(p[8]),CreatedAt=ParseDate(Decode(p[9]))};
@@ -471,7 +471,7 @@ namespace NexoMarket.Admin.UI
                 if(raw.StartsWith("NEXOMARKETPAIR:",StringComparison.OrdinalIgnoreCase)) raw=raw.Substring("NEXOMARKETPAIR:".Length);
                 if(raw.IndexOf('|')>=0){string[] pair=raw.Split(new[]{'|'},2); if(pair.Length==2){_store.SetSetting("store_id",NormalizeStoreId(pair[0])); token=pair[1];}}
                 string baseUrl=ResolveCentralBaseUrl(); string response=Request(baseUrl+"/api/pair/complete","POST",Form(new Dictionary<string,string>{{"pairingToken",token},{"deviceId",deviceId},{"deviceName",deviceName}}));
-                string[] p=(response??"").Split('|'); if(p.Length<5||!string.Equals(p[0],"OK",StringComparison.OrdinalIgnoreCase)){error=p.Length>1?Decode(p[1]):"Código inválido o vencido.";return false;}
+                string[] p=(response??"").Split('|'); if(p.Length<5||!string.Equals(p[0],"OK",StringComparison.OrdinalIgnoreCase)){error=p.Length>2?Decode(p[1])+": "+Decode(p[2]):(p.Length>1?Decode(p[1]):"Código inválido o vencido.");return false;}
                 _store.SetSetting("central_device_id",Decode(p[1])); _store.SetSetting("central_device_token",Decode(p[2])); _store.SetSetting("store_id",NormalizeStoreId(Decode(p[3]))); _store.SetSetting("seller_account_email",Decode(p[4])); _store.SetSetting("seller_account_locked","1"); _store.SetSetting("web_sync_enabled","1"); _store.SetSetting("store_web_active","1"); error=""; return true;
             }
             catch(Exception ex){error="Error de conexión: "+ex.Message;return false;}

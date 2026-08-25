@@ -102,11 +102,13 @@ CREATE TABLE IF NOT EXISTS nexomarket_pairings(
     account_email TEXT NOT NULL,
     token_hash TEXT NOT NULL UNIQUE,
     pairing_code_hash TEXT,
+    pairing_code TEXT,
     expires_at TIMESTAMPTZ NOT NULL,
     used BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE nexomarket_pairings ADD COLUMN IF NOT EXISTS pairing_code_hash TEXT;
+ALTER TABLE nexomarket_pairings ADD COLUMN IF NOT EXISTS pairing_code TEXT;
 CREATE INDEX IF NOT EXISTS idx_nexomarket_pairings_code_hash ON nexomarket_pairings(pairing_code_hash);
 CREATE INDEX IF NOT EXISTS idx_nexomarket_pairings_expiry ON nexomarket_pairings(expires_at);
 ";
@@ -208,12 +210,13 @@ CREATE INDEX IF NOT EXISTS idx_nexomarket_pairings_expiry ON nexomarket_pairings
                     EnsureInitialized(c);
                     using(NpgsqlCommand cmd=c.CreateCommand())
                     {
-                        cmd.CommandText="UPDATE nexomarket_pairings SET used=TRUE WHERE store_id=@store AND account_email=@email AND used=FALSE; INSERT INTO nexomarket_pairings(pairing_id,store_id,account_email,token_hash,pairing_code_hash,expires_at,used) VALUES(@id,@store,@email,@hash,@codehash,@exp,FALSE);";
+                        cmd.CommandText="UPDATE nexomarket_pairings SET used=TRUE WHERE store_id=@store AND account_email=@email AND used=FALSE; INSERT INTO nexomarket_pairings(pairing_id,store_id,account_email,token_hash,pairing_code_hash,pairing_code,expires_at,used) VALUES(@id,@store,@email,@hash,@codehash,@plaincode,@exp,FALSE);";
                         cmd.Parameters.AddWithValue("id",id);
                         cmd.Parameters.AddWithValue("store",storeId.Trim());
                         cmd.Parameters.AddWithValue("email",email.Trim().ToLowerInvariant());
                         cmd.Parameters.AddWithValue("hash",HashToken(code));
                         cmd.Parameters.AddWithValue("codehash",HashToken(NormalizePairCode(code)));
+                        cmd.Parameters.AddWithValue("plaincode",NormalizePairCode(code));
                         cmd.Parameters.AddWithValue("exp",exp);
                         cmd.ExecuteNonQuery();
                     }
@@ -234,8 +237,9 @@ CREATE INDEX IF NOT EXISTS idx_nexomarket_pairings_expiry ON nexomarket_pairings
                     EnsureInitialized(c);
                     using(NpgsqlCommand tx=c.CreateCommand())
                     {
-                        tx.CommandText="BEGIN; SELECT pairing_id,store_id,account_email FROM nexomarket_pairings WHERE (token_hash=@hash OR pairing_code_hash=@hash) AND used=FALSE AND expires_at>NOW() LIMIT 1 FOR UPDATE;";
+                        tx.CommandText="BEGIN; SELECT pairing_id,store_id,account_email FROM nexomarket_pairings WHERE (token_hash=@hash OR pairing_code_hash=@hash OR pairing_code=@code) AND used=FALSE AND expires_at>NOW() ORDER BY created_at DESC LIMIT 1 FOR UPDATE;";
                         tx.Parameters.AddWithValue("hash",hash);
+                        tx.Parameters.AddWithValue("code",normalized);
                         using(NpgsqlDataReader r=tx.ExecuteReader())
                         {
                             if(!r.Read())
