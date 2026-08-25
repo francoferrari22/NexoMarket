@@ -18,13 +18,16 @@ namespace NexoMarket.Admin.UI
 
         public bool IsConfigured
         {
-            get { return _store.GetSetting("web_sync_enabled", "0") == "1" && !string.IsNullOrWhiteSpace(_store.GetSetting("web_api_url", "")); }
+            get { return !string.IsNullOrWhiteSpace(CentralUrl()); }
         }
 
         public bool PublishStore(string publicUrl)
         {
             if (!IsConfigured) return false;
-            string endpoint = Normalize(_store.GetSetting("web_api_url", "")) + "/api/stores/register";
+            string endpoint = Normalize(CentralUrl()) + "/api/stores/register";
+            string resolvedPublicUrl = (publicUrl ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(resolvedPublicUrl) || resolvedPublicUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0)
+                resolvedPublicUrl = Normalize(CentralUrl()) + "/store/" + Uri.EscapeDataString(_store.StoreId);
             string body = Form(new Dictionary<string, string>
             {
                 { "storeId", _store.StoreId },
@@ -37,7 +40,7 @@ namespace NexoMarket.Admin.UI
                 { "description", _store.GetSetting("store_description", "") },
                 { "logo", _store.GetSetting("store_logo", "") },
                 { "slug", _store.GetSetting("store_slug", "") },
-                { "publicUrl", publicUrl ?? _store.GetSetting("web_public_url", "") },
+                { "publicUrl", resolvedPublicUrl },
                 { "active", _store.GetSetting("store_web_active", "0") },
                 { "delivery", _store.GetSetting("delivery_enabled", "1") },
                 { "pickup", _store.GetSetting("pickup_enabled", "1") },
@@ -57,7 +60,7 @@ namespace NexoMarket.Admin.UI
             if (!IsConfigured) return result;
             try
             {
-                string endpoint = Normalize(_store.GetSetting("web_api_url", "")) + "/api/stores";
+                string endpoint = Normalize(CentralUrl()) + "/api/stores";
                 List<string> qs = new List<string>();
                 if (!string.IsNullOrWhiteSpace(search)) qs.Add("q=" + Uri.EscapeDataString(search));
                 if (hasCoordinates) { qs.Add("lat=" + latitude.ToString(System.Globalization.CultureInfo.InvariantCulture)); qs.Add("lon=" + longitude.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
@@ -97,7 +100,7 @@ namespace NexoMarket.Admin.UI
                 string response = null;
                 if (IsConfigured)
                 {
-                    string endpoint = Normalize(_store.GetSetting("web_api_url", "")) + "/api/geocode?q=" + Uri.EscapeDataString(location);
+                    string endpoint = Normalize(CentralUrl()) + "/api/geocode?q=" + Uri.EscapeDataString(location);
                     response = Request(endpoint, "GET", null);
                 }
                 if (string.IsNullOrEmpty(response))
@@ -145,6 +148,14 @@ namespace NexoMarket.Admin.UI
             int stop = start;
             while (stop < json.Length && json[stop] != ',' && json[stop] != '}') stop++;
             return json.Substring(start, stop - start).Trim();
+        }
+
+        private string CentralUrl()
+        {
+            string configured = (_store.GetSetting("web_api_url", "") ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(configured) || configured.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0)
+                return "https://nexomarket-central.onrender.com";
+            return configured;
         }
 
         private static string Normalize(string url)

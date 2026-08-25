@@ -34,7 +34,9 @@ namespace NexoMarket.Admin.UI
             _busy = true;
             try
             {
-                string baseUrl = Normalize(_store.GetSetting("web_api_url", ""));
+                string configuredUrl = (_store.GetSetting("web_api_url", "") ?? "").Trim();
+                if (string.IsNullOrWhiteSpace(configuredUrl) || configuredUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0) configuredUrl = "https://nexomarket-central.onrender.com";
+                string baseUrl = Normalize(configuredUrl);
                 if (baseUrl.Length > 0) _license.RefreshFromServer(baseUrl);
                 if (baseUrl.Length == 0) return;
                 PublishStore(baseUrl);
@@ -65,7 +67,7 @@ namespace NexoMarket.Admin.UI
             catch { }
             finally { _busy = false; }
         }
-        private bool Enabled() { return _store.GetSetting("web_sync_enabled","0")=="1" && !string.IsNullOrWhiteSpace(_store.GetSetting("web_api_url","")); }
+        private bool Enabled() { string u=(_store.GetSetting("web_api_url","")??"").Trim(); return !string.IsNullOrWhiteSpace(u); }
         private bool AlreadyImported(string id) { foreach (Order o in _store.GetOrders("")) if (string.Equals(o.CentralOrderId,id,StringComparison.OrdinalIgnoreCase)) return true; return false; }
         private void PublishStore(string baseUrl) { try { new StoreDirectoryClient(_store).PublishStore(_store.GetSetting("web_public_url","")); } catch { } }
         private void PublishProduct(string baseUrl, Product p)

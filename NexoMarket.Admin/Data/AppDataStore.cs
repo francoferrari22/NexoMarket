@@ -121,9 +121,9 @@ namespace NexoMarket.Admin.Data
 
             SetDefault("ticket_header", "NexoMarket");
             SetDefault("ticket_footer", "Gracias por su compra");
-            SetDefault("web_public_url", "https://tudominio.com");
-            SetDefault("web_api_url", "https://tudominio.com");
-            SetDefault("web_sync_enabled", "0");
+            SetDefault("web_public_url", "https://nexomarket-central.onrender.com");
+            SetDefault("web_api_url", "https://nexomarket-central.onrender.com");
+            SetDefault("web_sync_enabled", "1");
             SetDefault("store_id", Guid.NewGuid().ToString("N").ToUpperInvariant());
             SetDefault("web_server_port", "8090");
             SetDefault("web_server_enabled", "0");
