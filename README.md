@@ -35,3 +35,6 @@ El servidor central puede desplegarse en Render. El endpoint `/health` devuelve 
 - Corrige el error de sintaxis C# en `CentralServerService.cs` que impedía compilar Render (CS1002/CS1513 alrededor de Storefront).
 - Simplifica la generación de los atributos `onclick` del catálogo usando comillas simples HTML para evitar colisiones con strings C#.
 - Mantiene el acceso Seller Center por Store ID y el resto de la arquitectura de la versión 4.1.29.
+
+## 5.1.2 — Render build fix
+Se corrigió el error de compilación en CentralServerService.cs causado por HTML fuera de una cadena C#. El Dockerfile imprime hashes de fuentes para verificar que Render compile el contenido correcto.

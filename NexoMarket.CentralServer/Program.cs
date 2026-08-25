@@ -17,11 +17,12 @@ namespace NexoMarket.CentralServer
                 Console.ReadKey();
                 return;
             }
-            Console.WriteLine("NexoMarket Central Server 5.0.3");
+            Console.WriteLine("NexoMarket Central Server 5.1.2");
             string publicBase = Environment.GetEnvironmentVariable("PUBLIC_BASE_URL");
             Console.WriteLine("Marketplace: " + (string.IsNullOrWhiteSpace(publicBase) ? "http://localhost:" + port + "/" : publicBase.TrimEnd('/') + "/"));
             Console.WriteLine("API:         " + (string.IsNullOrWhiteSpace(publicBase) ? "http://localhost:" + port + "/api" : publicBase.TrimEnd('/') + "/api"));
             Console.WriteLine("Datos:       PostgreSQL central (XML/R2 solo como respaldo/migracion)");
+            Console.WriteLine("DB status:   " + server.DatabaseStatusForLog());
             Console.WriteLine("Servidor ejecutándose. Render mantiene el proceso activo.");
             System.Threading.Thread.Sleep(System.Threading.Timeout.Infinite);
         }
