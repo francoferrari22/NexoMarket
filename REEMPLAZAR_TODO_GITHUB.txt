@@ -1,0 +1,11 @@
+NexoMarket - reemplazo completo del repositorio
+
+Esta carpeta contiene la versión saneada para reemplazar el contenido actual de GitHub.
+No incluye READMEs ni carpetas bin/obj.
+
+Correcciones principales:
+- Eliminadas las expresiones JavaScript con backslashes que provocaban CS1009 en CentralServerService.cs.
+- Corregido el patrón Content-Length para C#.
+- La conversión Base64URL de imágenes ya no depende de regex con escapes C#.
+- La extensión de imagen se normaliza sin regex.
+- Se conserva render.yaml y Dockerfile.
