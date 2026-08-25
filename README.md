@@ -1,4 +1,4 @@
-# NexoMarket 4.1.25 — Store ID Pairing
+# NexoMarket 4.1.30 — Seller Web Store ID + Render Build Fix
 
 Windows y Web usan el mismo Store ID como identidad de la tienda. Windows puede crear la cuenta local y continuar sin esperar a Render; la cuenta Web se vincula posteriormente pegando el mismo Store ID. Central mantiene una sola tienda y una sola identidad vendedora canónica por Store ID.
 
@@ -21,3 +21,9 @@ Windows y Web usan el mismo Store ID como identidad de la tienda. Windows puede 
 
 ## Render
 El servidor central puede desplegarse en Render. El endpoint `/health` devuelve `NexoMarket Central OK`.
+
+
+## 4.1.30
+- Corrige el error de sintaxis C# en `CentralServerService.cs` que impedía compilar Render (CS1002/CS1513 alrededor de Storefront).
+- Simplifica la generación de los atributos `onclick` del catálogo usando comillas simples HTML para evitar colisiones con strings C#.
+- Mantiene el acceso Seller Center por Store ID y el resto de la arquitectura de la versión 4.1.29.

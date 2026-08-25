@@ -1,4 +1,4 @@
-# NexoMarket Central Server 4.1.28 - Render / Docker
+# NexoMarket Central Server 4.1.30 - Render / Docker
 # Build separado para que Render muestre el error real de compilación si existiera.
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
