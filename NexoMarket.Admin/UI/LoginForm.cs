@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Net;
 using System.Net.Mail;
 using System.Linq;
+using System.Diagnostics;
 using System.Windows.Forms;
 using NexoMarket.Admin.Data;
 using NexoMarket.Admin.Models;
@@ -44,13 +45,13 @@ namespace NexoMarket.Admin.UI
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false; MinimizeBox = false;
-            ClientSize = new Size(560, 650);
+            ClientSize = new Size(560, 700);
             BackColor = Theme.Background; ForeColor = Theme.Text;
             Build();
         }
         private void Build()
         {
-            Panel card=Theme.Card(); card.SetBounds(25,18,510,610); Controls.Add(card);
+            Panel card=Theme.Card(); card.SetBounds(25,18,510,660); Controls.Add(card);
             card.Controls.Add(new Label{Text="NEXO MARKET",Font=Theme.Font(24,FontStyle.Bold),ForeColor=Theme.Text,AutoSize=true,Location=new Point(30,22)});
             card.Controls.Add(new Label{Text="SELLER CENTER · CUENTA ÚNICA",Font=Theme.Font(9,FontStyle.Bold),ForeColor=Theme.Green,AutoSize=true,Location=new Point(33,62)});
             card.Controls.Add(MakeLabel("Nombre del vendedor",32,96)); _name=Input(_store.GetSetting("seller_account_name",""),32,120,420); card.Controls.Add(_name);
@@ -63,7 +64,8 @@ namespace NexoMarket.Admin.UI
             _action=Theme.Primary("CREAR / CONECTAR CUENTA CENTRAL"); _action.Width=420; _action.Location=new Point(32,425); _action.Click+=ConnectAccount; card.Controls.Add(_action);
             card.Controls.Add(MakeLabel("Código de vinculación / QR",32,475)); _pair=Input("",32,499,280); card.Controls.Add(_pair);
             _pairAction=Theme.Secondary("VINCULAR WINDOWS"); _pairAction.Width=130; _pairAction.Location=new Point(322,499); _pairAction.Click+=PairDevice; card.Controls.Add(_pairAction);
-            _status=new Label{Text="La primera conexión central requiere Internet. Después Windows puede continuar con su caché local y reintentar la sincronización.",AutoSize=false,Width=420,Height=60,ForeColor=Theme.Muted,Font=Theme.Font(8.3f,FontStyle.Regular),Location=new Point(32,550)}; card.Controls.Add(_status);
+            Button openWeb=Theme.Secondary("ABRIR SELLER CENTER / GENERAR CÓDIGO"); openWeb.Width=420; openWeb.Location=new Point(32,540); openWeb.Click+=delegate { try { Process.Start(new ProcessStartInfo("https://nexomarket-022.onrender.com/seller/devices"){UseShellExecute=true}); } catch { Process.Start("https://nexomarket-022.onrender.com/seller/devices"); } }; card.Controls.Add(openWeb);
+            _status=new Label{Text="La primera conexión central requiere Internet. Después Windows puede continuar con su caché local y reintentar la sincronización.",AutoSize=false,Width=420,Height=60,ForeColor=Theme.Muted,Font=Theme.Font(8.3f,FontStyle.Regular),Location=new Point(32,590)}; card.Controls.Add(_status);
             AcceptButton=_action;
             Shown+=delegate{ if(string.IsNullOrWhiteSpace(_email.Text))_email.Focus(); else _pass.Focus(); };
         }

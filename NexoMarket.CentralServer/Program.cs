@@ -17,7 +17,7 @@ namespace NexoMarket.CentralServer
                 Console.ReadKey();
                 return;
             }
-            Console.WriteLine("NexoMarket Central Server 5.0.0");
+            Console.WriteLine("NexoMarket Central Server 5.0.3");
             string publicBase = Environment.GetEnvironmentVariable("PUBLIC_BASE_URL");
             Console.WriteLine("Marketplace: " + (string.IsNullOrWhiteSpace(publicBase) ? "http://localhost:" + port + "/" : publicBase.TrimEnd('/') + "/"));
             Console.WriteLine("API:         " + (string.IsNullOrWhiteSpace(publicBase) ? "http://localhost:" + port + "/api" : publicBase.TrimEnd('/') + "/api"));
