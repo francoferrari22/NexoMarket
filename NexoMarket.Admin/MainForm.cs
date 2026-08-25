@@ -137,7 +137,7 @@ namespace NexoMarket.Admin
             brandLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
             Label brandNexo = new Label { Text = "NEXO", AutoSize = false, Dock = DockStyle.Fill, Font = Theme.Font(23, FontStyle.Bold), ForeColor = Theme.NeonGreen, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(4, 0, 0, 0) };
             Label brandMarket = new Label { Text = "MARKET", AutoSize = false, Dock = DockStyle.Fill, Font = Theme.Font(18, FontStyle.Bold), ForeColor = Theme.Text, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(4, 0, 0, 0) };
-            Label tag = new Label { Text = "ADMINISTRADOR", AutoSize = false, Dock = DockStyle.Fill, Font = Theme.Font(8.5f, FontStyle.Bold), ForeColor = Theme.Green, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(6, 0, 0, 0) };
+            Label tag = new Label { Text = "ADMINISTRADOR · " + _store.GetSetting("store_name", "SIN TIENDA"), AutoSize = false, Dock = DockStyle.Fill, Font = Theme.Font(8.5f, FontStyle.Bold), ForeColor = Theme.Green, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(6, 0, 0, 0) };
             brandLayout.Controls.Add(brandNexo, 0, 0);
             brandLayout.Controls.Add(brandMarket, 0, 1);
             brandLayout.Controls.Add(tag, 0, 2);
@@ -335,8 +335,8 @@ namespace NexoMarket.Admin
         {
             _storeStatusNavButton = Theme.NavButton("");
             _storeStatusNavButton.Tag = "Tienda online estado";
-            _storeStatusNavButton.Width = 205;
-            _storeStatusNavButton.Height = 48;
+            _storeStatusNavButton.Width = 214;
+            _storeStatusNavButton.Height = 54;
             _storeStatusNavButton.Margin = new Padding(0, 3, 0, 5);
             _storeStatusNavButton.Font = Theme.Font(9.5f, FontStyle.Bold);
             _storeStatusNavButton.TextAlign = ContentAlignment.MiddleLeft;
@@ -616,10 +616,11 @@ namespace NexoMarket.Admin
             hero.Dock = DockStyle.Top;
             hero.Height = 112;
             Label eyebrow = new Label { Text = "CENTRO DE COMERCIO · TIENDA", AutoSize = true, ForeColor = Theme.Accent, Font = Theme.Font(8.5f, FontStyle.Bold), Location = new Point(20, 14) };
-            Label greeting = new Label { Text = "Tu negocio, en una sola consola", AutoSize = false, Width = 650, Height = 32, ForeColor = Theme.Text, Font = Theme.Font(18, FontStyle.Bold), Location = new Point(20, 34) };
+            Label greeting = new Label { Text = "Hola, " + _store.GetSetting("seller_account_name", "Administrador") + " · " + _store.GetSetting("store_name", "Sin tienda"), AutoSize = false, Width = 650, Height = 32, ForeColor = Theme.Text, Font = Theme.Font(18, FontStyle.Bold), Location = new Point(20, 34) };
             Label hint = new Label { Text = "Ventas, pedidos, catálogo, stock y clientes con lectura inmediata y sin elementos superpuestos.", AutoSize = false, Width = 760, Height = 25, ForeColor = Theme.Muted, Font = Theme.Font(9, FontStyle.Regular), Location = new Point(20, 72) };
             hero.Controls.Add(hint); hero.Controls.Add(greeting); hero.Controls.Add(eyebrow);
-            Label storeBadge = new Label { Text = GetStoreIdShort(), AutoSize = false, Width = 170, Height = 32, TextAlign = ContentAlignment.MiddleCenter, ForeColor = Theme.Green, BackColor = Theme.Card2, Font = Theme.Font(8, FontStyle.Bold), Anchor = AnchorStyles.Top | AnchorStyles.Right };
+            bool storeOpen = _store.GetSetting("store_web_active", "1") == "1";
+            Label storeBadge = new Label { Text = (storeOpen ? "● ABIERTA · " : "● CERRADA · ") + _store.GetSetting("store_name", "SIN TIENDA"), AutoSize = false, Width = 260, Height = 32, TextAlign = ContentAlignment.MiddleCenter, ForeColor = storeOpen ? Theme.Green : Theme.Danger, BackColor = Theme.Card2, Font = Theme.Font(8, FontStyle.Bold), Anchor = AnchorStyles.Top | AnchorStyles.Right };
             hero.Controls.Add(storeBadge);
             hero.Resize += delegate { storeBadge.Left = Math.Max(400, hero.ClientSize.Width - storeBadge.Width - 20); storeBadge.Top = 38; };
             page.Controls.Add(hero);
