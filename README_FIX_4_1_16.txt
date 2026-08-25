@@ -20,3 +20,8 @@ COMPILACION
 - Admin: Herramientas\Admin\COMPILAR_FACIL_ADMIN.bat
 - License Manager: Herramientas\LicenseManager\COMPILAR_FACIL_LICENSE_MANAGER.bat
 - Central/Render: Dockerfile incluido.
+23. FIX RENDER CS0111:
+   - CentralServerService.cs tenía dos métodos WriteRedirect(NetworkStream, string).
+   - Se conserva la implementación segura que valida la URL y se elimina la copia duplicada.
+   - Esto corrige el error CS0111 durante `dotnet publish`.
+   - No se cambia el sistema de licencia por cuenta ni el período de prueba de 90 días.
