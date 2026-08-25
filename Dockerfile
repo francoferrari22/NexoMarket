@@ -1,4 +1,4 @@
-# NexoMarket Central Server 5.0.3 - Render / Docker
+# NexoMarket Central Server 5.1.1 - Render / Docker
 # Build separado para que Render muestre el error real de compilación si existiera.
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
@@ -7,6 +7,7 @@ COPY NexoMarket.CentralServer/NexoMarket.CentralServer.csproj ./NexoMarket.Centr
 RUN dotnet restore ./NexoMarket.CentralServer/NexoMarket.CentralServer.csproj --verbosity minimal
 
 COPY NexoMarket.CentralServer/ ./NexoMarket.CentralServer/
+RUN sha256sum ./NexoMarket.CentralServer/CentralServerService.cs ./NexoMarket.CentralServer/CentralDatabase.cs
 RUN dotnet build ./NexoMarket.CentralServer/NexoMarket.CentralServer.csproj -c Release --no-restore --verbosity normal
 RUN dotnet publish ./NexoMarket.CentralServer/NexoMarket.CentralServer.csproj -c Release --no-build -o /app/publish --no-restore
 

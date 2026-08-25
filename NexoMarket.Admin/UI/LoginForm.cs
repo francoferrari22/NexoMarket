@@ -88,7 +88,10 @@ namespace NexoMarket.Admin.UI
                     ok=_central.RegisterSellerCentral(name,email,pass,sid,out user);
                 }
                 if(!ok||user==null){Fail("No se pudo autenticar o registrar la cuenta en NexoMarket Central. Revisá Render/PostgreSQL y las credenciales.");return;}
-                if(!string.Equals(user.StoreId,sid,StringComparison.OrdinalIgnoreCase)){Fail("Esta cuenta pertenece a otra tienda. El correo debe quedar asociado a un único Store ID.");return;}
+                // Si la cuenta ya existe en la Web, su Store ID es la única fuente de verdad.
+                // Nunca rechazamos el acceso por un Store ID antiguo guardado localmente.
+                if(string.IsNullOrWhiteSpace(user.StoreId)){Fail("La cuenta fue autenticada, pero no tiene un Store ID de vendedor asociado.");return;}
+                _store.SetSetting("store_id",user.StoreId);
                 _store.UpsertWebUserFromCentral(user); _store.SetSetting("seller_account_email",user.Email); _store.SetSetting("seller_account_name",user.Name); _store.SetSetting("seller_account_locked","1"); _store.SetSetting("store_web_active","1"); _store.SetSetting("web_sync_enabled","1");
                 _status.ForeColor=Theme.Green; _status.Text="✓ CUENTA CENTRAL CONECTADA\r\n"+user.Email+"\r\nStore ID: "+user.StoreId+"\r\nAhora Windows y Web utilizan la misma identidad.";
                 DialogResult=DialogResult.OK; Close();
