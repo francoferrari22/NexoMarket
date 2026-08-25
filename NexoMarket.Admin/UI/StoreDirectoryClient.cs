@@ -94,7 +94,7 @@ namespace NexoMarket.Admin.UI
                         s.Active = Decode(p[9]) == "1"; s.Delivery = Decode(p[10]) == "1"; s.Pickup = Decode(p[11]) == "1";
                         s.UpdatedAt = Decode(p.Length > 12 ? p[12] : "");
                         s.DistanceKm = ParseDouble(Decode(p.Length > 13 ? p[13] : ""));
-                        if (s.Active) result.Add(s);
+                        result.Add(s);
                     }
                 }
             }

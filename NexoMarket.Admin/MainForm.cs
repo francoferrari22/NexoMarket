@@ -42,6 +42,7 @@ namespace NexoMarket.Admin
         private LocalScannerServer _localScannerServer;
         private WebServerService _webServer;
         private CentralSyncService _centralSync;
+        private Button _storeStatusNavButton;
 
         private sealed class CartLine
         {
@@ -168,6 +169,7 @@ namespace NexoMarket.Admin
             AddNav("◒   Analítica", "Estadísticas", BuildStats);
             AddNavShortcut("F12", "💳   COBRAR", OpenPaymentCenter);
             AddNavGroup("CANALES");
+            AddStoreStatusNav();
             AddNav("🌐   Tienda online", "Configuración", BuildSettings);
             AddNavAction("🌐   Servidor web", "Servidor web", OpenWebServer);
             AddNavAction("👤   Cuenta vendedor", "Cuenta vendedor", OpenSellerAccount);
@@ -182,17 +184,18 @@ namespace NexoMarket.Admin
             sidebarFooter.Controls.Add(logout);
             sidebarLayout.Controls.Add(sidebarFooter, 0, 2);
 
-            _mainHost = new Panel
+            _mainHost = new TexturedPanel
             {
                 Dock = DockStyle.Fill,
-                BackColor = Theme.Background,
-                Padding = new Padding(0)
+                BackColor = Color.Transparent,
+                Padding = new Padding(0),
+                TextureOpacity = 34
             };
 
             TableLayoutPanel mainLayout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
-                BackColor = Theme.Background, Margin = new Padding(0), Padding = new Padding(0)
+                BackColor = Color.Transparent, Margin = new Padding(0), Padding = new Padding(0)
             };
             mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 86f));
             mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
@@ -201,7 +204,7 @@ namespace NexoMarket.Admin
             Panel top = new Panel
             {
                 Dock = DockStyle.Fill,
-                BackColor = Theme.Background,
+                BackColor = Color.Transparent,
                 Padding = new Padding(28, 10, 28, 8)
             };
             _title = new Label
@@ -261,7 +264,7 @@ namespace NexoMarket.Admin
             {
                 Dock = DockStyle.Fill,
                 AutoScroll = true,
-                BackColor = Theme.Background,
+                BackColor = Color.Transparent,
                 Padding = new Padding(18, 8, 24, 18),
                 Margin = new Padding(0)
             };
@@ -325,6 +328,59 @@ namespace NexoMarket.Admin
                 {
                     MessageBox.Show("Cuenta de vendedor guardada y vinculada a esta tienda. La sincronización central se ejecutará automáticamente.", "NexoMarket", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
+            }
+        }
+
+        private void AddStoreStatusNav()
+        {
+            _storeStatusNavButton = Theme.NavButton("");
+            _storeStatusNavButton.Tag = "Tienda online estado";
+            _storeStatusNavButton.Width = 205;
+            _storeStatusNavButton.Height = 48;
+            _storeStatusNavButton.Margin = new Padding(0, 3, 0, 5);
+            _storeStatusNavButton.Font = Theme.Font(9.5f, FontStyle.Bold);
+            _storeStatusNavButton.TextAlign = ContentAlignment.MiddleLeft;
+            _storeStatusNavButton.Click += delegate { ToggleStoreFromWindows(); };
+            _navPanel.Controls.Add(_storeStatusNavButton);
+            UpdateStoreStatusNav();
+        }
+
+        private void UpdateStoreStatusNav()
+        {
+            if (_storeStatusNavButton == null) return;
+            bool open = _store.GetSetting("store_web_active", "1") == "1";
+            _storeStatusNavButton.Text = open ? "●  TIENDA ABIERTA   ·   CERRAR" : "●  TIENDA CERRADA   ·   ABRIR";
+            _storeStatusNavButton.ForeColor = open ? Theme.Green : Theme.Danger;
+            _storeStatusNavButton.BackColor = Theme.Sidebar;
+            _storeStatusNavButton.FlatAppearance.BorderColor = open ? Theme.Green : Theme.Danger;
+            _storeStatusNavButton.FlatAppearance.BorderSize = 1;
+        }
+
+        private void ToggleStoreFromWindows()
+        {
+            bool open = _store.GetSetting("store_web_active", "1") == "1";
+            bool next = !open;
+            _store.SetSetting("store_web_active", next ? "1" : "0");
+            try
+            {
+                string publicUrl = _store.GetSetting("web_public_url", "");
+                StoreDirectoryClient client = new StoreDirectoryClient(_store);
+                if (!client.PublishStore(publicUrl))
+                {
+                    _store.SetSetting("store_web_active", open ? "1" : "0");
+                    UpdateStoreStatusNav();
+                    MessageBox.Show("No se pudo actualizar el estado de la tienda en NexoMarket Central. Se mantuvo el estado anterior.", "NexoMarket", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+                try { if (_centralSync != null) _centralSync.SyncOnce(); } catch { }
+                UpdateStoreStatusNav();
+                MessageBox.Show(next ? "La tienda está ABIERTA y visible en el directorio." : "La tienda está CERRADA y seguirá visible en el directorio como cerrada.", "NexoMarket", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                _store.SetSetting("store_web_active", open ? "1" : "0");
+                UpdateStoreStatusNav();
+                MessageBox.Show("No se pudo cambiar el estado de la tienda.\r\n\r\n" + ex.Message, "NexoMarket", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 

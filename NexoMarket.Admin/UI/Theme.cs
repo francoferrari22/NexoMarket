@@ -62,7 +62,7 @@ namespace NexoMarket.Admin.UI
             b.FlatAppearance.BorderSize = 0;
             b.BackColor = Accent;
             b.NormalBackColor = Accent;
-            b.HoverBackColor = Color.FromArgb(77, 154, 255);
+            b.HoverBackColor = Color.FromArgb(255, 255, 255);
             b.PressedBackColor = AccentDark;
             b.ForeColor = Color.White;
             b.Font = Font(9f, FontStyle.Bold);
@@ -76,7 +76,7 @@ namespace NexoMarket.Admin.UI
             ModernButton b = (ModernButton)Primary(text);
             b.BackColor = Card2;
             b.NormalBackColor = Card2;
-            b.HoverBackColor = Color.FromArgb(49, 60, 78);
+            b.HoverBackColor = Color.FromArgb(24, 24, 28);
             b.PressedBackColor = Color.FromArgb(25, 39, 61);
             b.ForeColor = Text;
             return b;
@@ -135,7 +135,7 @@ namespace NexoMarket.Admin.UI
     internal sealed class ModernButton : Button
     {
         public Color NormalBackColor = Theme.Accent;
-        public Color HoverBackColor = Color.FromArgb(77, 154, 255);
+        public Color HoverBackColor = Color.FromArgb(255, 255, 255);
         public Color PressedBackColor = Theme.AccentDark;
         public string ShortcutText = "";
         private bool _hover;
@@ -161,7 +161,15 @@ namespace NexoMarket.Admin.UI
             using (LinearGradientBrush brush = new LinearGradientBrush(r, top, bottom, LinearGradientMode.Vertical))
             {
                 e.Graphics.FillPath(brush, path);
-                using (Pen pen = new Pen(Color.FromArgb(85, Color.White), 1)) e.Graphics.DrawPath(pen, path);
+                if (_hover)
+                {
+                    using (Pen glow1 = new Pen(Color.FromArgb(34, 255, 255, 255), 4)) e.Graphics.DrawPath(glow1, path);
+                    using (Pen glow2 = new Pen(Color.FromArgb(95, 255, 255, 255), 1)) e.Graphics.DrawPath(glow2, path);
+                }
+                else
+                {
+                    using (Pen pen = new Pen(Color.FromArgb(70, Color.White), 1)) e.Graphics.DrawPath(pen, path);
+                }
             }
             if (!string.IsNullOrWhiteSpace(ShortcutText))
             {
@@ -242,19 +250,30 @@ namespace NexoMarket.Admin.UI
         {
             Rectangle r = ClientRectangle;
             if (r.Width <= 0 || r.Height <= 0) return;
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             e.Graphics.Clear(Theme.Background);
             using (SolidBrush overlay = new SolidBrush(Color.FromArgb(Math.Max(0, Math.Min(255, TextureOpacity)), Theme.Sidebar)))
                 e.Graphics.FillRectangle(overlay, r);
 
-            using (Pen line = new Pen(Color.FromArgb(24, 255, 255, 255), 1))
+            using (GraphicsPath glowPath = new GraphicsPath())
             {
-                int step = 26;
-                for (int x = -r.Height; x < r.Width + r.Height; x += step)
-                    e.Graphics.DrawLine(line, x, 0, x + r.Height, r.Height);
-                for (int x = 0; x < r.Width + r.Height; x += step)
-                    e.Graphics.DrawLine(line, x, r.Height, x - r.Height, 0);
+                glowPath.AddBezier(new Point(-80, r.Height / 3), new Point(r.Width / 5, -20), new Point(r.Width / 2, r.Height + 20), new Point(r.Width + 100, r.Height / 3));
+                using (Pen glow = new Pen(Color.FromArgb(18, Theme.NeonGreen), 3)) e.Graphics.DrawPath(glow, glowPath);
+                using (Pen line = new Pen(Color.FromArgb(42, Theme.NeonGreen), 1)) e.Graphics.DrawPath(line, glowPath);
             }
-            using (LinearGradientBrush shade = new LinearGradientBrush(r, Color.FromArgb(80, 0, 0, 0), Color.FromArgb(20, 0, 0, 0), LinearGradientMode.Horizontal))
+            using (GraphicsPath curve = new GraphicsPath())
+            {
+                curve.AddBezier(new Point(-40, r.Height - 40), new Point(r.Width / 3, r.Height / 2), new Point(r.Width * 2 / 3, r.Height / 2), new Point(r.Width + 50, 80));
+                using (Pen glow = new Pen(Color.FromArgb(15, 167, 103, 255), 3)) e.Graphics.DrawPath(glow, curve);
+                using (Pen line = new Pen(Color.FromArgb(38, 167, 103, 255), 1)) e.Graphics.DrawPath(line, curve);
+            }
+            using (GraphicsPath whiteCurve = new GraphicsPath())
+            {
+                whiteCurve.AddBezier(new Point(r.Width + 30, r.Height - 80), new Point(r.Width * 3 / 4, r.Height / 2), new Point(r.Width / 2, r.Height / 3), new Point(-30, 70));
+                using (Pen glow = new Pen(Color.FromArgb(10, 255, 255, 255), 3)) e.Graphics.DrawPath(glow, whiteCurve);
+                using (Pen line = new Pen(Color.FromArgb(26, 255, 255, 255), 1)) e.Graphics.DrawPath(line, whiteCurve);
+            }
+            using (LinearGradientBrush shade = new LinearGradientBrush(r, Color.FromArgb(75, 0, 0, 0), Color.FromArgb(18, 0, 0, 0), LinearGradientMode.Horizontal))
                 e.Graphics.FillRectangle(shade, r);
         }
     }

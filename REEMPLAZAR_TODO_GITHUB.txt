@@ -1,17 +1,3 @@
-NEXOMARKET 5.1.8 - REEMPLAZAR TODO GITHUB
-
-1) Reemplazar el contenido completo del repositorio por el contenido de esta carpeta.
-2) No mezclar archivos de versiones anteriores.
-3) Render: ejecutar Clear build cache & deploy después del push.
-4) Variables de entorno de PostgreSQL/R2: conservar las actuales.
-5) Windows Admin: ejecutar Herramientas\Admin\COMPILAR_FACIL_ADMIN.bat.
-6) Si falta el Developer Pack de .NET Framework 4.8, instalarlo antes de compilar.
-
-CAMBIOS PRINCIPALES
-- Corregido el error de compilación del Admin causado por un archivo .url enlazado que no existía.
-- La compilación ahora detecta explícitamente la falta de las Reference Assemblies de .NET Framework 4.8.
-- Registro web: sin teléfono, sin Store ID y sin código de Windows.
-- Registro de vendedor Web-first: la tienda se crea automáticamente; el identificador de tienda queda interno.
-- Windows: inicio de sesión únicamente con correo y contraseña de la cuenta Seller Center.
-- Se eliminó de la interfaz web el flujo visible de código/Store ID para vincular Windows.
-- Se conserva compatibilidad interna de las APIs antiguas para no romper datos existentes.
+NEXOMARKET 5.2.1
+REEMPLAZAR TODO EL CONTENIDO DEL REPOSITORIO GITHUB POR EL CONTENIDO DE ESTA CARPETA.
+NO MODIFICAR VARIABLES DE RENDER, POSTGRESQL, R2 NI LA CONFIGURACION DE LOGIN.

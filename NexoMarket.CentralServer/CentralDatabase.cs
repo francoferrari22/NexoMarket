@@ -185,6 +185,22 @@ CREATE INDEX IF NOT EXISTS idx_nexomarket_pairings_expiry ON nexomarket_pairings
                 }
             }catch{return false;}
         }
+        public void DeleteAccountsForStore(string storeId)
+        {
+            if (!Enabled || string.IsNullOrWhiteSpace(storeId)) return;
+            try
+            {
+                using (NpgsqlConnection c = Open()) using (NpgsqlCommand cmd = c.CreateCommand())
+                {
+                    EnsureInitialized(c);
+                    cmd.CommandText = "DELETE FROM nexomarket_accounts WHERE store_id=@storeId";
+                    cmd.Parameters.AddWithValue("storeId", storeId);
+                    cmd.ExecuteNonQuery();
+                }
+            }
+            catch { }
+        }
+
         public Dictionary<string,string> GetAccount(string email)
         {
             if(!Enabled||string.IsNullOrWhiteSpace(email))return null;
