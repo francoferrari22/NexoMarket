@@ -410,6 +410,15 @@ namespace NexoMarket.Admin.Data
             parent.Add(ProductElement(p));
         }
 
+        public void UpsertProductFromCentral(Product p)
+        {
+            if (p == null || p.Id <= 0) return;
+            XElement parent = _doc.Root.Element("Products");
+            XElement old = parent.Elements("Product").FirstOrDefault(x => (long)x.Attribute("Id") == p.Id);
+            if (old != null) old.ReplaceWith(ProductElement(p)); else parent.Add(ProductElement(p));
+            Save();
+        }
+
         public void SaveProduct(Product p)
         {
             XElement parent = _doc.Root.Element("Products");
@@ -424,6 +433,7 @@ namespace NexoMarket.Admin.Data
             if (GetSetting("web_sync_enabled", "0") == "1")
             {
                 try { new WebCatalogExporter(this).Export(); } catch { }
+                try { using (CentralSyncService sync = new CentralSyncService(this)) sync.PublishProductNow(p); } catch { }
             }
         }
 
@@ -462,6 +472,10 @@ namespace NexoMarket.Admin.Data
             XElement old = parent.Elements("Promotion").FirstOrDefault(x => (long)x.Attribute("Id") == p.Id);
             if (old != null) old.ReplaceWith(element); else parent.Add(element);
             Save();
+            if (GetSetting("web_sync_enabled", "0") == "1")
+            {
+                try { using (CentralSyncService sync = new CentralSyncService(this)) sync.PublishPromotionNow(p); } catch { }
+            }
         }
 
         public void DeletePromotion(long id)

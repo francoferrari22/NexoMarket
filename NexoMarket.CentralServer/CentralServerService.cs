@@ -159,12 +159,14 @@ namespace NexoMarket.CentralServer
                         if (path == "/api/storage/status" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", StorageStatus()); return; }
                         if (path == "/api/media/upload" && method == "POST") { Write(stream, 200, "text/plain; charset=utf-8", UploadMedia(Form(body))); return; }
                         if (path == "/api/stores" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", StoreLines(query)); return; }
+                        if (path == "/api/stores/connect" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", StoreConnect(QueryValue(query, "storeId"))); return; }
                         if (path == "/api/stores/json" && method == "GET") { Write(stream, 200, "application/json; charset=utf-8", StoreJson(query)); return; }
                         if (path == "/api/geocode" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", Geocode(QueryValue(query, "q"))); return; }
                         if (path == "/api/stores/register" && method == "POST") { Write(stream, 200, "text/plain", Register(Form(body))); return; }
                         if (path == "/api/products/publish" && method == "POST") { Write(stream, 200, "text/plain", PublishProduct(Form(body))); return; }
                         if (path == "/api/promotions/publish" && method == "POST") { Write(stream, 200, "text/plain", PublishPromotion(Form(body))); return; }
                         if (path == "/api/catalog" && method == "GET") { Write(stream, 200, "application/json; charset=utf-8", CatalogJson(QueryValue(query, "storeId"))); return; }
+                        if (path == "/api/catalog/lines" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", CatalogLines(QueryValue(query, "storeId"), QueryValue(query, "syncKey"))); return; }
                         if (path == "/api/orders/create" && method == "POST") { Write(stream, 200, "text/plain; charset=utf-8", CreateOrder(Form(body))); return; }
                         if (path == "/api/orders/pending" && method == "GET") { Write(stream, 200, "application/json; charset=utf-8", PendingOrders(QueryValue(query, "storeId"))); return; }
                         if (path == "/api/orders/ack" && method == "POST") { Write(stream, 200, "text/plain", AckOrder(Form(body))); return; }
@@ -580,6 +582,48 @@ namespace NexoMarket.CentralServer
             return "OK|"+storeId+"|"+DateTime.UtcNow.ToString("o");
         }
 
+        private string StoreConnect(string storeId)
+        {
+            storeId = (storeId ?? "").Trim();
+            if (storeId.Length == 0) return "ERROR|store_id_required";
+            lock (_sync)
+            {
+                XElement store = _doc.Root.Element("Stores").Elements("Store").FirstOrDefault(x => string.Equals(S(x, "StoreId"), storeId, StringComparison.OrdinalIgnoreCase));
+                if (store == null) return "ERROR|store_not_found";
+                if (S(store, "Active") != "1") return "ERROR|store_inactive";
+                string syncKey = S(store, "SyncKey");
+                if (string.IsNullOrWhiteSpace(syncKey)) return "ERROR|store_sync_key_missing";
+                string sellerEmail = ""; string sellerName = "";
+                XDocument accounts = LoadFile(_accountsFile, "NexoMarketAccounts", "Users");
+                XElement users = accounts.Root.Element("Users");
+                if (users != null)
+                {
+                    XElement seller = users.Elements("User").FirstOrDefault(x => string.Equals(S(x, "StoreId"), storeId, StringComparison.OrdinalIgnoreCase) && string.Equals(S(x, "Role"), "seller", StringComparison.OrdinalIgnoreCase));
+                    if (seller != null) { sellerEmail = S(seller, "Email"); sellerName = S(seller, "Name"); }
+                }
+                if (string.IsNullOrWhiteSpace(sellerEmail)) return "ERROR|seller_account_not_found";
+                return "OK|" + Escape(storeId) + "|" + Escape(S(store, "Name")) + "|1|" + Escape(syncKey) + "|" + Escape(sellerEmail) + "|" + Escape(sellerName) + "|" + Escape(A(store, "UpdatedAt")) + "|" + Escape(S(store, "LegalName")) + "|" + Escape(S(store, "Category")) + "|" + Escape(S(store, "Address")) + "|" + Escape(S(store, "City")) + "|" + Escape(S(store, "Province")) + "|" + Escape(S(store, "Description")) + "|" + Escape(S(store, "Logo")) + "|" + Escape(S(store, "Slug")) + "|" + Escape(S(store, "PublicUrl")) + "|1|" + Escape(S(store, "Delivery")) + "|" + Escape(S(store, "Pickup")) + "|" + Escape(S(store, "Latitude")) + "|" + Escape(S(store, "Longitude"));
+            }
+        }
+
+        private string CatalogLines(string storeId, string syncKey)
+        {
+            storeId = (storeId ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(storeId) || !ValidateStoreSyncKey(storeId, syncKey)) return "";
+            StringBuilder b = new StringBuilder();
+            lock (_sync)
+            {
+                XDocument d = LoadFile(_catalogFile, "NexoMarketCatalog", "Products");
+                XElement products = d.Root.Element("Products");
+                if (products == null) return "";
+                foreach (XElement x in products.Elements("Product").Where(x => string.Equals(S(x, "StoreId"), storeId, StringComparison.OrdinalIgnoreCase)))
+                {
+                    b.Append("PRODUCT|").Append(Escape(S(x,"ProductId"))).Append('|').Append(Escape(S(x,"Name"))).Append('|').Append(Escape(S(x,"Category"))).Append('|').Append(Escape(S(x,"Description"))).Append('|').Append(Escape(S(x,"Price"))).Append('|').Append(Escape(S(x,"SalePrice"))).Append('|').Append(Escape(S(x,"Stock"))).Append('|').Append(Escape(S(x,"MinimumStock"))).Append('|').Append(Escape(S(x,"SKU"))).Append('|').Append(Escape(S(x,"Brand"))).Append('|').Append(Escape(S(x,"Size"))).Append('|').Append(Escape(S(x,"Color"))).Append('|').Append(Escape(S(x,"Active"))).Append('|').Append(Escape(S(x,"OnlineEnabled"))).Append('|').Append(Escape(S(x,"ImagePath"))).Append('|').Append(Escape(S(x,"Slug"))).Append('|').Append(Escape(S(x,"PublicDescription"))).Append('|').Append(Escape(S(x,"VideoUrl"))).Append('|').Append(Escape(S(x,"BarcodeImagePath"))).Append('|').Append(Escape(S(x,"UpdatedAt"))).Append('\n');
+                }
+            }
+            return b.ToString();
+        }
+
         private string StoreLines(string query)
         {
             double lat = 0d, lon = 0d;
@@ -971,7 +1015,7 @@ namespace NexoMarket.CentralServer
             b.Append("<aside class='sc-side'><div class='account-box'><div class='avatar'>"+E((u.Name??"V").Length>0?(u.Name??"V").Substring(0,1).ToUpperInvariant():"V")+"</div><b>"+E(u.Name)+"</b><small>"+E(u.Email)+"</small><small>Store ID: "+E(u.StoreId)+"</small></div>");
             b.Append(SellerLink("Resumen","",view)+SellerLink("Pedidos","orders",view)+SellerLink("Productos e inventario","products",view)+SellerLink("Clientes","customers",view)+SellerLink("Analítica","analytics",view)+SellerLink("Finanzas y caja","finance",view)+SellerLink("Marketing","marketing",view)+SellerLink("Reputación","reputation",view)+SellerLink("Herramientas","tools",view)+"</aside>");
             b.Append("<main class='sc-main'>");
-            b.Append("<div class='welcome'><div><span class='eyebrow'>CENTRAL DE VENTAS</span><h1>Hola, "+E(u.Name)+" 👋</h1><p>Tu Seller Center reúne la información sincronizada desde NexoMarket Windows: ventas, pedidos, productos, clientes, analítica, finanzas y marketing.</p></div><div class='account-mini'><b>CUENTA</b><strong>Vendedor</strong><small>"+E(u.Email)+"</small></div></div>");
+            b.Append("<div class='welcome'><div><span class='eyebrow'>CENTRAL DE VENTAS</span><h1>Hola, "+E(u.Name)+" 👋</h1><p>Tu Seller Center está conectado por Store ID con NexoMarket Windows. Los cambios se sincronizan automáticamente.</p></div><div class='account-mini'><b>STORE ID</b><strong>"+E(u.StoreId)+"</strong><small>"+E(u.Email)+"</small></div></div>");
             int pending=orders.Count(x=>S(x,"Status")=="Pendiente"); int delivery=orders.Count(x=>(S(x,"Fulfillment")=="Delivery"||S(x,"Fulfillment")=="En reparto")&&S(x,"Status")!="Entregado"&&S(x,"Status")!="Cancelado");
             decimal sales=orders.Where(x=>S(x,"Status")!="Cancelado").Sum(x=>Money(S(x,"Total"))); int low=products.Count(x=>Money(S(x,"Stock"))<=Money(S(x,"MinimumStock"))); int customers=orders.Select(x=>S(x,"CustomerEmail").Trim().ToLowerInvariant()).Where(x=>x.Length>0).Distinct().Count();
             b.Append("<div class='kpis'>"+KpiC("Ventas", "$ "+sales.ToString("N2"), "operaciones válidas", "green")+KpiC("Pedidos pendientes", pending.ToString(), "requieren atención", pending>0?"yellow":"green")+KpiC("Productos", products.Count.ToString(), low+" con stock bajo", low>0?"red":"green")+KpiC("Clientes", customers.ToString(), "compradores únicos", "green")+KpiC("Delivery", delivery.ToString(), "entregas abiertas", delivery>0?"yellow":"green")+"</div>");
