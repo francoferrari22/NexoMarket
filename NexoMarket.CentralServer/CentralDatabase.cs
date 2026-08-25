@@ -69,6 +69,22 @@ CREATE TABLE IF NOT EXISTS nexomarket_accounts(
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_nexomarket_accounts_store ON nexomarket_accounts(store_id);
+-- Migración de identidad: una tienda vendedora solo puede tener una cuenta canónica.
+DO $$
+BEGIN
+    DELETE FROM nexomarket_accounts a
+    WHERE a.role='seller' AND a.store_id<>''
+      AND EXISTS (
+        SELECT 1 FROM nexomarket_accounts b
+        WHERE b.role='seller' AND b.store_id=a.store_id
+          AND (b.updated_at > a.updated_at OR (b.updated_at=a.updated_at AND b.account_id>a.account_id))
+      );
+    BEGIN
+        CREATE UNIQUE INDEX IF NOT EXISTS ux_nexomarket_seller_store
+        ON nexomarket_accounts(store_id) WHERE role='seller' AND store_id<>'';
+    EXCEPTION WHEN duplicate_table THEN NULL;
+    END;
+END $$;
 CREATE TABLE IF NOT EXISTS nexomarket_devices(
     device_id TEXT PRIMARY KEY,
     store_id TEXT NOT NULL,
@@ -116,12 +132,53 @@ CREATE INDEX IF NOT EXISTS idx_nexomarket_pairings_expiry ON nexomarket_pairings
         public bool UpsertAccount(string id,string name,string email,string phone,string role,string storeId,string salt,string passwordHash,string createdAt)
         {
             if(!Enabled||string.IsNullOrWhiteSpace(email))return false;
-            try{using(NpgsqlConnection c=Open()){EnsureInitialized(c);using(NpgsqlCommand cmd=c.CreateCommand()){
-                cmd.CommandText=@"INSERT INTO nexomarket_accounts(account_id,email,name,phone,role,store_id,salt,password_hash,created_at,updated_at)
-VALUES(@id,@email,@name,@phone,@role,@store,@salt,@hash,COALESCE(NULLIF(@created,'')::timestamptz,NOW()),NOW())
-ON CONFLICT(email) DO UPDATE SET account_id=EXCLUDED.account_id,name=EXCLUDED.name,phone=EXCLUDED.phone,role=EXCLUDED.role,store_id=EXCLUDED.store_id,salt=EXCLUDED.salt,password_hash=EXCLUDED.password_hash,updated_at=NOW();";
-                cmd.Parameters.AddWithValue("id",string.IsNullOrWhiteSpace(id)?Guid.NewGuid().ToString("N"):id);cmd.Parameters.AddWithValue("email",email.Trim().ToLowerInvariant());cmd.Parameters.AddWithValue("name",name??"");cmd.Parameters.AddWithValue("phone",phone??"");cmd.Parameters.AddWithValue("role",role??"seller");cmd.Parameters.AddWithValue("store",storeId??"");cmd.Parameters.AddWithValue("salt",salt??"");cmd.Parameters.AddWithValue("hash",passwordHash??"");cmd.Parameters.AddWithValue("created",createdAt??"");cmd.ExecuteNonQuery();}}
-                return true;}catch{return false;}
+            try
+            {
+                using(NpgsqlConnection c=Open())
+                {
+                    EnsureInitialized(c);
+                    email=email.Trim().ToLowerInvariant();
+                    role=(role??"seller").Trim().ToLowerInvariant();
+                    storeId=(storeId??"").Trim();
+                    using(NpgsqlCommand tx=c.CreateCommand())
+                    {
+                        tx.CommandText="BEGIN"; tx.ExecuteNonQuery();
+                        try
+                        {
+                            // La identidad de vendedor es la tienda, no el correo enviado por una versión.
+                            // Si ya existe un vendedor para ese Store ID, se actualiza ESA cuenta y nunca se crea otra.
+                            string existingId="";
+                            if(role=="seller" && storeId.Length>0)
+                            {
+                                using(NpgsqlCommand q=c.CreateCommand())
+                                { q.CommandText="SELECT account_id,email FROM nexomarket_accounts WHERE role='seller' AND store_id=@store ORDER BY updated_at DESC LIMIT 1"; q.Parameters.AddWithValue("store",storeId); using(NpgsqlDataReader r=q.ExecuteReader()){ if(r.Read()) existingId=r.GetString(0); } }
+                            }
+                            // El correo tampoco puede pertenecer a una identidad diferente.
+                            using(NpgsqlCommand q2=c.CreateCommand())
+                            { q2.CommandText="SELECT account_id FROM nexomarket_accounts WHERE lower(email)=lower(@email) LIMIT 1"; q2.Parameters.AddWithValue("email",email); object v=q2.ExecuteScalar(); if(v!=null && existingId.Length>0 && !string.Equals(Convert.ToString(v),existingId,StringComparison.OrdinalIgnoreCase)){ tx.Dispose(); return false; } if(v!=null && existingId.Length==0) existingId=Convert.ToString(v); }
+                            if(existingId.Length>0)
+                            {
+                                using(NpgsqlCommand up=c.CreateCommand())
+                                {
+                                    up.CommandText=@"UPDATE nexomarket_accounts SET email=@email,name=@name,phone=@phone,role=@role,store_id=@store,salt=@salt,password_hash=@hash,updated_at=NOW() WHERE account_id=@id";
+                                    up.Parameters.AddWithValue("id",existingId); up.Parameters.AddWithValue("email",email); up.Parameters.AddWithValue("name",name??""); up.Parameters.AddWithValue("phone",phone??""); up.Parameters.AddWithValue("role",role); up.Parameters.AddWithValue("store",storeId); up.Parameters.AddWithValue("salt",salt??""); up.Parameters.AddWithValue("hash",passwordHash??""); up.ExecuteNonQuery();
+                                }
+                            }
+                            else
+                            {
+                                using(NpgsqlCommand ins=c.CreateCommand())
+                                {
+                                    ins.CommandText=@"INSERT INTO nexomarket_accounts(account_id,email,name,phone,role,store_id,salt,password_hash,created_at,updated_at) VALUES(@id,@email,@name,@phone,@role,@store,@salt,@hash,COALESCE(NULLIF(@created,'')::timestamptz,NOW()),NOW())";
+                                    ins.Parameters.AddWithValue("id",string.IsNullOrWhiteSpace(id)?Guid.NewGuid().ToString("N"):id); ins.Parameters.AddWithValue("email",email); ins.Parameters.AddWithValue("name",name??""); ins.Parameters.AddWithValue("phone",phone??""); ins.Parameters.AddWithValue("role",role); ins.Parameters.AddWithValue("store",storeId); ins.Parameters.AddWithValue("salt",salt??""); ins.Parameters.AddWithValue("hash",passwordHash??""); ins.Parameters.AddWithValue("created",createdAt??""); ins.ExecuteNonQuery();
+                                }
+                            }
+                            using(NpgsqlCommand commit=c.CreateCommand()){commit.CommandText="COMMIT";commit.ExecuteNonQuery();}
+                            return true;
+                        }
+                        catch { try{using(NpgsqlCommand rb=c.CreateCommand()){rb.CommandText="ROLLBACK";rb.ExecuteNonQuery();}}catch{} return false; }
+                    }
+                }
+            }catch{return false;}
         }
         public Dictionary<string,string> GetAccount(string email)
         {

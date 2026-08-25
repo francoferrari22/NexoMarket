@@ -6,7 +6,7 @@ services:
     healthCheckPath: /health
     envVars:
       - key: PUBLIC_BASE_URL
-        value: https://nexomarket-0k22.onrender.com
+        value: https://nexomarket-022.onrender.com
       - key: R2_ACCOUNT_ID
         sync: false
       - key: R2_ACCESS_KEY_ID

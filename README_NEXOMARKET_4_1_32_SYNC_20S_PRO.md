@@ -12,7 +12,7 @@ Windows y Seller Center Web trabajan sobre el mismo Store ID y la misma fuente c
 - Las publicaciones de productos desde Windows se limitan a productos modificados desde el último cursor.
 - La configuración de la tienda ya no se publica ciegamente en cada ciclo.
 - Windows primero adopta cambios de tienda realizados desde la Web y luego publica solo cambios locales reales.
-- Se mantiene el endpoint central `https://nexomarket-0k22.onrender.com`.
+- Se mantiene el endpoint central `https://nexomarket-022.onrender.com`.
 - Se conserva compatibilidad con el proyecto WinForms/.NET Framework existente y AnyCPU.
 - Se conserva R2 como almacenamiento persistente central del proyecto actual.
 

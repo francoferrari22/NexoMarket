@@ -16,7 +16,7 @@ namespace NexoMarket.Admin.UI
     public sealed class StoreDirectoryClient
     {
         private readonly AppDataStore _store;
-        private const string DefaultCentralUrl = "https://nexomarket-0k22.onrender.com";
+        private const string DefaultCentralUrl = "https://nexomarket-022.onrender.com";
         public StoreDirectoryClient(AppDataStore store) { _store = store; }
 
         public bool IsConfigured
