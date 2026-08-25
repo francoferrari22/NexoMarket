@@ -8,6 +8,13 @@ if not defined MSBUILD if exist "%WINDIR%\Microsoft.NET\Framework\v4.0.30319\MSB
 if not defined MSBUILD for /f "delims=" %%A in ('where msbuild.exe 2^>nul') do if not defined MSBUILD set "MSBUILD=%%A"
 if not defined MSBUILD (
   echo ERROR: No se encontro MSBuild de .NET Framework 4.8.
+  echo Instala Visual Studio Build Tools con el componente .NET Framework 4.8 Developer Pack.
+  exit /b 1
+)
+if not exist "%WINDIR%\Microsoft.NET\Framework\v4.0.30319\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8" if not exist "%ProgramFiles(x86)%\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8" (
+  echo ERROR: Falta el Developer Pack / Reference Assemblies de .NET Framework 4.8.
+  echo El proyecto no requiere PostgreSQL ni Render para compilar el administrador.
+  echo Instala ".NET Framework 4.8 Developer Pack" y vuelve a ejecutar este archivo.
   exit /b 1
 )
 if exist "NexoMarket.Admin\bin\Release" rmdir /s /q "NexoMarket.Admin\bin\Release"

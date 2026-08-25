@@ -1,11 +1,17 @@
-NexoMarket - reemplazo completo del repositorio
+NEXOMARKET 5.1.8 - REEMPLAZAR TODO GITHUB
 
-Esta carpeta contiene la versión saneada para reemplazar el contenido actual de GitHub.
-No incluye READMEs ni carpetas bin/obj.
+1) Reemplazar el contenido completo del repositorio por el contenido de esta carpeta.
+2) No mezclar archivos de versiones anteriores.
+3) Render: ejecutar Clear build cache & deploy después del push.
+4) Variables de entorno de PostgreSQL/R2: conservar las actuales.
+5) Windows Admin: ejecutar Herramientas\Admin\COMPILAR_FACIL_ADMIN.bat.
+6) Si falta el Developer Pack de .NET Framework 4.8, instalarlo antes de compilar.
 
-Correcciones principales:
-- Eliminadas las expresiones JavaScript con backslashes que provocaban CS1009 en CentralServerService.cs.
-- Corregido el patrón Content-Length para C#.
-- La conversión Base64URL de imágenes ya no depende de regex con escapes C#.
-- La extensión de imagen se normaliza sin regex.
-- Se conserva render.yaml y Dockerfile.
+CAMBIOS PRINCIPALES
+- Corregido el error de compilación del Admin causado por un archivo .url enlazado que no existía.
+- La compilación ahora detecta explícitamente la falta de las Reference Assemblies de .NET Framework 4.8.
+- Registro web: sin teléfono, sin Store ID y sin código de Windows.
+- Registro de vendedor Web-first: la tienda se crea automáticamente; el identificador de tienda queda interno.
+- Windows: inicio de sesión únicamente con correo y contraseña de la cuenta Seller Center.
+- Se eliminó de la interfaz web el flujo visible de código/Store ID para vincular Windows.
+- Se conserva compatibilidad interna de las APIs antiguas para no romper datos existentes.

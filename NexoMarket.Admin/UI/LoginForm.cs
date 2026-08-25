@@ -63,7 +63,7 @@ namespace NexoMarket.Admin.UI
             _login=Theme.Primary("INICIAR SESIÓN"); _login.Width=400; _login.Location=new Point(42,264); _login.Click+=Login; card.Controls.Add(_login);
             _createWeb=Theme.Secondary("CREAR CUENTA DE VENDEDOR EN LA WEB"); _createWeb.Width=400; _createWeb.Location=new Point(42,314); _createWeb.Click+=CreateWebAccount; card.Controls.Add(_createWeb);
 
-            _status=new Label{Text="Usá exactamente el mismo correo y contraseña del Seller Center Web.\r\nEl Store ID se obtiene automáticamente de la cuenta.\r\nNo se pide Store ID ni código para iniciar sesión.",AutoSize=false,Width=400,Height=80,ForeColor=Theme.Muted,Font=Theme.Font(8.5f),Location=new Point(42,365)}; card.Controls.Add(_status);
+            _status=new Label{Text="Usá el mismo correo y contraseña del Seller Center Web.\r\nNo se pide Store ID, código de vinculación ni teléfono.",AutoSize=false,Width=400,Height=80,ForeColor=Theme.Muted,Font=Theme.Font(8.5f),Location=new Point(42,365)}; card.Controls.Add(_status);
             AcceptButton=_login;
             Shown+=delegate{ if(string.IsNullOrWhiteSpace(_email.Text))_email.Focus(); else _pass.Focus(); };
         }
@@ -100,7 +100,7 @@ namespace NexoMarket.Admin.UI
                 _store.SetSetting("central_sync_status","account_authenticated");
                 _store.SetSetting("central_sync_last_error","");
                 _status.ForeColor=Theme.NeonWhite;
-                _status.Text="✓ CUENTA CONECTADA\r\n"+user.Email+"\r\nStore ID: "+user.StoreId+"\r\nWindows y Web utilizan la misma cuenta.";
+                _status.Text="✓ CUENTA CONECTADA\r\n"+user.Email+"\r\nWindows y Web utilizan la misma cuenta.";
                 DialogResult=DialogResult.OK; Close();
             }
             finally { Cursor=Cursors.Default; _login.Enabled=true; }
@@ -123,7 +123,7 @@ namespace NexoMarket.Admin.UI
 
     /// <summary>
     /// Ventana independiente para "Ya tengo cuenta".
-    /// Solamente pide correo y contraseña. El Store ID se obtiene de la cuenta central.
+    /// Solamente pide correo y contraseña. La identidad de tienda llega internamente desde la cuenta central.
     /// </summary>
     internal sealed class SellerSignInForm : Form
     {
@@ -170,7 +170,7 @@ namespace NexoMarket.Admin.UI
             _login.Click+=Login;
             card.Controls.Add(_login);
 
-            _status = new Label { Text="El Store ID no se pide aquí: NexoMarket lo obtiene automáticamente de tu cuenta web.", AutoSize=false, Width=355, Height=58, ForeColor=Theme.Muted, Font=Theme.Font(8.5f), Location=new Point(37,300) };
+            _status = new Label { Text="Solo necesitás el correo y la contraseña de tu cuenta Seller Center Web.", AutoSize=false, Width=355, Height=58, ForeColor=Theme.Muted, Font=Theme.Font(8.5f), Location=new Point(37,300) };
             card.Controls.Add(_status);
             AcceptButton=_login;
             Shown+=delegate { if(string.IsNullOrWhiteSpace(_email.Text)) _email.Focus(); else _pass.Focus(); };
@@ -223,7 +223,7 @@ namespace NexoMarket.Admin.UI
                 _store.SetSetting("central_sync_status","account_authenticated");
 
                 _status.ForeColor=Theme.Green;
-                _status.Text="✓ SESIÓN INICIADA\r\n"+user.Email+"\r\nStore ID: "+user.StoreId+"\r\nWindows quedó conectado a la misma cuenta del Seller Center.";
+                _status.Text="✓ SESIÓN INICIADA\r\n"+user.Email+"\r\nWindows quedó conectado a la misma cuenta del Seller Center.";
                 DialogResult=DialogResult.OK;
                 Close();
             }
