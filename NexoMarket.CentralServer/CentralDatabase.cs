@@ -101,10 +101,13 @@ CREATE TABLE IF NOT EXISTS nexomarket_pairings(
     store_id TEXT NOT NULL,
     account_email TEXT NOT NULL,
     token_hash TEXT NOT NULL UNIQUE,
+    pairing_code_hash TEXT,
     expires_at TIMESTAMPTZ NOT NULL,
     used BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE nexomarket_pairings ADD COLUMN IF NOT EXISTS pairing_code_hash TEXT;
+CREATE INDEX IF NOT EXISTS idx_nexomarket_pairings_code_hash ON nexomarket_pairings(pairing_code_hash);
 CREATE INDEX IF NOT EXISTS idx_nexomarket_pairings_expiry ON nexomarket_pairings(expires_at);
 ";
                     cmd.ExecuteNonQuery();
@@ -193,12 +196,77 @@ CREATE INDEX IF NOT EXISTS idx_nexomarket_pairings_expiry ON nexomarket_pairings
         public string CreatePairing(string storeId,string email,int minutes)
         {
             if(!Enabled||string.IsNullOrWhiteSpace(storeId)||string.IsNullOrWhiteSpace(email))return null;
-            try{string raw=Convert.ToBase64String(RandomBytes(32)).Replace("+","-").Replace("/","_").TrimEnd('=');string id=Guid.NewGuid().ToString("N");DateTime exp=DateTime.UtcNow.AddMinutes(minutes<1?5:minutes);using(NpgsqlConnection c=Open()){EnsureInitialized(c);using(NpgsqlCommand cmd=c.CreateCommand()){cmd.CommandText="UPDATE nexomarket_pairings SET used=TRUE WHERE store_id=@store AND account_email=@email AND used=FALSE; INSERT INTO nexomarket_pairings(pairing_id,store_id,account_email,token_hash,expires_at,used) VALUES(@id,@store,@email,@hash,@exp,FALSE);";cmd.Parameters.AddWithValue("id",id);cmd.Parameters.AddWithValue("store",storeId.Trim());cmd.Parameters.AddWithValue("email",email.Trim().ToLowerInvariant());cmd.Parameters.AddWithValue("hash",HashToken(raw));cmd.Parameters.AddWithValue("exp",exp);cmd.ExecuteNonQuery();}}return raw;}catch{return null;}
+            try
+            {
+                // Código corto para copiar desde el teléfono al programa Windows.
+                // Se guarda únicamente su hash y expira; nunca se guarda el código en claro.
+                string code=GeneratePairCode();
+                string id=Guid.NewGuid().ToString("N");
+                DateTime exp=DateTime.UtcNow.AddMinutes(minutes<1?5:minutes);
+                using(NpgsqlConnection c=Open())
+                {
+                    EnsureInitialized(c);
+                    using(NpgsqlCommand cmd=c.CreateCommand())
+                    {
+                        cmd.CommandText="UPDATE nexomarket_pairings SET used=TRUE WHERE store_id=@store AND account_email=@email AND used=FALSE; INSERT INTO nexomarket_pairings(pairing_id,store_id,account_email,token_hash,pairing_code_hash,expires_at,used) VALUES(@id,@store,@email,@hash,@codehash,@exp,FALSE);";
+                        cmd.Parameters.AddWithValue("id",id);
+                        cmd.Parameters.AddWithValue("store",storeId.Trim());
+                        cmd.Parameters.AddWithValue("email",email.Trim().ToLowerInvariant());
+                        cmd.Parameters.AddWithValue("hash",HashToken(code));
+                        cmd.Parameters.AddWithValue("codehash",HashToken(NormalizePairCode(code)));
+                        cmd.Parameters.AddWithValue("exp",exp);
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+                return code;
+            }
+            catch{return null;}
         }
         public Dictionary<string,string> CompletePairing(string token,string deviceId,string deviceName)
         {
             if(!Enabled||string.IsNullOrWhiteSpace(token)||string.IsNullOrWhiteSpace(deviceId))return null;
-            try{using(NpgsqlConnection c=Open()){EnsureInitialized(c);using(NpgsqlCommand tx=c.CreateCommand()){tx.CommandText="BEGIN; SELECT pairing_id,store_id,account_email FROM nexomarket_pairings WHERE token_hash=@hash AND used=FALSE AND expires_at>NOW() LIMIT 1 FOR UPDATE;";tx.Parameters.AddWithValue("hash",HashToken(token));using(NpgsqlDataReader r=tx.ExecuteReader()){if(!r.Read()){r.Close();using(NpgsqlCommand rb=c.CreateCommand()){rb.CommandText="ROLLBACK";rb.ExecuteNonQuery();}return null;}string pairingId=r.GetString(0),storeId=r.GetString(1),email=r.GetString(2);r.Close();string rawDeviceToken=Convert.ToBase64String(RandomBytes(32)).Replace("+","-").Replace("/","_").TrimEnd('=');using(NpgsqlCommand up=c.CreateCommand()){up.CommandText="INSERT INTO nexomarket_devices(device_id,store_id,account_email,device_name,device_token_hash,created_at,last_seen_at,active) VALUES(@id,@store,@email,@name,@hash,NOW(),NOW(),TRUE) ON CONFLICT(device_id) DO UPDATE SET store_id=EXCLUDED.store_id,account_email=EXCLUDED.account_email,device_name=EXCLUDED.device_name,device_token_hash=EXCLUDED.device_token_hash,last_seen_at=NOW(),active=TRUE; UPDATE nexomarket_pairings SET used=TRUE WHERE pairing_id=@pair;";up.Parameters.AddWithValue("id",deviceId);up.Parameters.AddWithValue("store",storeId);up.Parameters.AddWithValue("email",email);up.Parameters.AddWithValue("name",deviceName??"Windows");up.Parameters.AddWithValue("hash",HashToken(rawDeviceToken));up.Parameters.AddWithValue("pair",pairingId);up.ExecuteNonQuery();}using(NpgsqlCommand commit=c.CreateCommand()){commit.CommandText="COMMIT";commit.ExecuteNonQuery();}return new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){{"deviceId",deviceId},{"deviceToken",rawDeviceToken},{"storeId",storeId},{"email",email}};}}}}catch{return null;}
+            try
+            {
+                string normalized=NormalizePairCode(token);
+                string hash=HashToken(normalized);
+                using(NpgsqlConnection c=Open())
+                {
+                    EnsureInitialized(c);
+                    using(NpgsqlCommand tx=c.CreateCommand())
+                    {
+                        tx.CommandText="BEGIN; SELECT pairing_id,store_id,account_email FROM nexomarket_pairings WHERE (token_hash=@hash OR pairing_code_hash=@hash) AND used=FALSE AND expires_at>NOW() LIMIT 1 FOR UPDATE;";
+                        tx.Parameters.AddWithValue("hash",hash);
+                        using(NpgsqlDataReader r=tx.ExecuteReader())
+                        {
+                            if(!r.Read())
+                            {
+                                r.Close();
+                                using(NpgsqlCommand rb=c.CreateCommand()){rb.CommandText="ROLLBACK";rb.ExecuteNonQuery();}
+                                return null;
+                            }
+                            string pairingId=r.GetString(0),storeId=r.GetString(1),email=r.GetString(2);
+                            r.Close();
+                            string rawDeviceToken=Convert.ToBase64String(RandomBytes(32)).Replace("+","-").Replace("/","_").TrimEnd('=');
+                            using(NpgsqlCommand up=c.CreateCommand())
+                            {
+                                up.CommandText="INSERT INTO nexomarket_devices(device_id,store_id,account_email,device_name,device_token_hash,created_at,last_seen_at,active) VALUES(@id,@store,@email,@name,@hash,NOW(),NOW(),TRUE) ON CONFLICT(device_id) DO UPDATE SET store_id=EXCLUDED.store_id,account_email=EXCLUDED.account_email,device_name=EXCLUDED.device_name,device_token_hash=EXCLUDED.device_token_hash,last_seen_at=NOW(),active=TRUE; UPDATE nexomarket_pairings SET used=TRUE WHERE pairing_id=@pair;";
+                                up.Parameters.AddWithValue("id",deviceId); up.Parameters.AddWithValue("store",storeId); up.Parameters.AddWithValue("email",email); up.Parameters.AddWithValue("name",deviceName??"Windows"); up.Parameters.AddWithValue("hash",HashToken(rawDeviceToken)); up.Parameters.AddWithValue("pair",pairingId); up.ExecuteNonQuery();
+                            }
+                            using(NpgsqlCommand commit=c.CreateCommand()){commit.CommandText="COMMIT";commit.ExecuteNonQuery();}
+                            return new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){{"deviceId",deviceId},{"deviceToken",rawDeviceToken},{"storeId",storeId},{"email",email}};
+                        }
+                    }
+                }
+            }
+            catch{return null;}
+        }
+        private static string NormalizePairCode(string value)
+        {
+            return (value??"").Trim().Replace("-","").Replace(" ","").Replace("\r","").Replace("\n","");
+        }
+        private static string GeneratePairCode()
+        {
+            byte[] b=RandomBytes(4); uint n=BitConverter.ToUInt32(b,0)%1000000U; return n.ToString("D6",System.Globalization.CultureInfo.InvariantCulture);
         }
         public bool ValidateDevice(string deviceId,string deviceToken,string storeId)
         {

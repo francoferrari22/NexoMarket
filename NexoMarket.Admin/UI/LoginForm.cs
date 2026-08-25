@@ -45,13 +45,13 @@ namespace NexoMarket.Admin.UI
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false; MinimizeBox = false;
-            ClientSize = new Size(560, 700);
+            ClientSize = new Size(560, 740);
             BackColor = Theme.Background; ForeColor = Theme.Text;
             Build();
         }
         private void Build()
         {
-            Panel card=Theme.Card(); card.SetBounds(25,18,510,660); Controls.Add(card);
+            Panel card=Theme.Card(); card.SetBounds(25,18,510,700); Controls.Add(card);
             card.Controls.Add(new Label{Text="NEXO MARKET",Font=Theme.Font(24,FontStyle.Bold),ForeColor=Theme.Text,AutoSize=true,Location=new Point(30,22)});
             card.Controls.Add(new Label{Text="SELLER CENTER · CUENTA ÚNICA",Font=Theme.Font(9,FontStyle.Bold),ForeColor=Theme.Green,AutoSize=true,Location=new Point(33,62)});
             card.Controls.Add(MakeLabel("Nombre del vendedor",32,96)); _name=Input(_store.GetSetting("seller_account_name",""),32,120,420); card.Controls.Add(_name);
@@ -62,10 +62,11 @@ namespace NexoMarket.Admin.UI
             card.Controls.Add(new Label{Text="Device ID: "+DeviceIdentity.GetDeviceId(),AutoSize=false,Width=420,Height=22,ForeColor=Theme.Muted,Font=Theme.Font(8),Location=new Point(32,340)});
             Label info=new Label{Text="La cuenta, el Store ID y los productos pertenecen a una única identidad central en PostgreSQL. Windows es otra herramienta del mismo Seller Center; no crea una cuenta paralela.",AutoSize=false,Width=420,Height=58,ForeColor=Theme.Muted,Font=Theme.Font(8.5f,FontStyle.Regular),Location=new Point(32,365)}; card.Controls.Add(info);
             _action=Theme.Primary("CREAR / CONECTAR CUENTA CENTRAL"); _action.Width=420; _action.Location=new Point(32,425); _action.Click+=ConnectAccount; card.Controls.Add(_action);
-            card.Controls.Add(MakeLabel("Código de vinculación / QR",32,475)); _pair=Input("",32,499,280); card.Controls.Add(_pair);
-            _pairAction=Theme.Secondary("VINCULAR WINDOWS"); _pairAction.Width=130; _pairAction.Location=new Point(322,499); _pairAction.Click+=PairDevice; card.Controls.Add(_pairAction);
-            Button openWeb=Theme.Secondary("ABRIR SELLER CENTER / GENERAR CÓDIGO"); openWeb.Width=420; openWeb.Location=new Point(32,540); openWeb.Click+=delegate { try { Process.Start(new ProcessStartInfo("https://nexomarket-022.onrender.com/seller/devices"){UseShellExecute=true}); } catch { Process.Start("https://nexomarket-022.onrender.com/seller/devices"); } }; card.Controls.Add(openWeb);
-            _status=new Label{Text="La primera conexión central requiere Internet. Después Windows puede continuar con su caché local y reintentar la sincronización.",AutoSize=false,Width=420,Height=60,ForeColor=Theme.Muted,Font=Theme.Font(8.3f,FontStyle.Regular),Location=new Point(32,590)}; card.Controls.Add(_status);
+            Button existing=Theme.Secondary("YA TENGO CUENTA · INICIAR SESIÓN"); existing.Width=420; existing.Location=new Point(32,470); existing.Click+=SignInExistingAccount; card.Controls.Add(existing);
+            card.Controls.Add(MakeLabel("Código de vinculación / QR",32,515)); _pair=Input("",32,539,280); card.Controls.Add(_pair);
+            _pairAction=Theme.Secondary("VINCULAR WINDOWS"); _pairAction.Width=130; _pairAction.Location=new Point(322,539); _pairAction.Click+=PairDevice; card.Controls.Add(_pairAction);
+            Button openWeb=Theme.Secondary("ABRIR SELLER CENTER / GENERAR CÓDIGO"); openWeb.Width=420; openWeb.Location=new Point(32,580); openWeb.Click+=delegate { try { Process.Start(new ProcessStartInfo("https://nexomarket-022.onrender.com/seller/devices"){UseShellExecute=true}); } catch { Process.Start("https://nexomarket-022.onrender.com/seller/devices"); } }; card.Controls.Add(openWeb);
+            _status=new Label{Text="La primera conexión central requiere Internet. Después Windows puede continuar con su caché local y reintentar la sincronización.",AutoSize=false,Width=420,Height=60,ForeColor=Theme.Muted,Font=Theme.Font(8.3f,FontStyle.Regular),Location=new Point(32,630)}; card.Controls.Add(_status);
             AcceptButton=_action;
             Shown+=delegate{ if(string.IsNullOrWhiteSpace(_email.Text))_email.Focus(); else _pass.Focus(); };
         }
@@ -94,6 +95,23 @@ namespace NexoMarket.Admin.UI
             }
             finally { Cursor=Cursors.Default; _action.Enabled=true; }
         }
+        private void SignInExistingAccount(object sender, EventArgs e)
+        {
+            using (SellerSignInForm login = new SellerSignInForm(_store))
+            {
+                if (login.ShowDialog(this) == DialogResult.OK)
+                {
+                    _email.Text = _store.GetSetting("seller_account_email", "");
+                    _name.Text = _store.GetSetting("seller_account_name", "");
+                    _pass.Clear();
+                    _status.ForeColor = Theme.Green;
+                    _status.Text = "✓ SESIÓN INICIADA\r\n" + _store.GetSetting("seller_account_email", "") + "\r\nStore ID: " + _store.StoreId + "\r\nLa cuenta web quedó conectada a Windows.";
+                    DialogResult = DialogResult.OK;
+                    Close();
+                }
+            }
+        }
+
         private void PairDevice(object sender,EventArgs e)
         {
             string code=(_pair.Text??"").Trim(); if(code.Length==0){Fail("Pegá el código generado en Seller Center → Dispositivos.");return;}
@@ -105,6 +123,126 @@ namespace NexoMarket.Admin.UI
             finally { Cursor=Cursors.Default; _pairAction.Enabled=true; }
         }
         private void Fail(string text){_status.Text=text;_status.ForeColor=Theme.Danger;}
+    }
+
+    /// <summary>
+    /// Ventana independiente para "Ya tengo cuenta".
+    /// Solamente pide correo y contraseña. El Store ID se obtiene de la cuenta central.
+    /// </summary>
+    internal sealed class SellerSignInForm : Form
+    {
+        private readonly AppDataStore _store;
+        private readonly CentralSyncService _central;
+        private TextBox _email, _pass;
+        private Button _login;
+        private Label _status;
+
+        public SellerSignInForm(AppDataStore store)
+        {
+            _store = store;
+            _central = new CentralSyncService(_store);
+            Text = "NexoMarket · Iniciar sesión";
+            StartPosition = FormStartPosition.CenterParent;
+            FormBorderStyle = FormBorderStyle.FixedSingle;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            ClientSize = new Size(500, 430);
+            BackColor = Theme.Background;
+            ForeColor = Theme.Text;
+            Build();
+        }
+
+        private void Build()
+        {
+            Panel card = Theme.Card();
+            card.SetBounds(35, 22, 430, 370);
+            Controls.Add(card);
+
+            card.Controls.Add(new Label { Text="NEXO MARKET", Font=Theme.Font(24,FontStyle.Bold), ForeColor=Theme.Text, AutoSize=true, Location=new Point(34,26) });
+            card.Controls.Add(new Label { Text="INICIAR SESIÓN · CUENTA DE VENDEDOR", Font=Theme.Font(9,FontStyle.Bold), ForeColor=Theme.Green, AutoSize=true, Location=new Point(37,66) });
+            card.Controls.Add(Label("Correo electrónico",37,110));
+            _email = Input(_store.GetSetting("seller_account_email",""),37,134,355);
+            card.Controls.Add(_email);
+            card.Controls.Add(Label("Contraseña",37,178));
+            _pass = Input("",37,202,355);
+            _pass.PasswordChar='●';
+            card.Controls.Add(_pass);
+
+            _login = Theme.Primary("INICIAR SESIÓN");
+            _login.Width=355;
+            _login.Location=new Point(37,250);
+            _login.Click+=Login;
+            card.Controls.Add(_login);
+
+            _status = new Label { Text="El Store ID no se pide aquí: NexoMarket lo obtiene automáticamente de tu cuenta web.", AutoSize=false, Width=355, Height=58, ForeColor=Theme.Muted, Font=Theme.Font(8.5f), Location=new Point(37,300) };
+            card.Controls.Add(_status);
+            AcceptButton=_login;
+            Shown+=delegate { if(string.IsNullOrWhiteSpace(_email.Text)) _email.Focus(); else _pass.Focus(); };
+        }
+
+        private Label Label(string text,int x,int y)
+        {
+            return new Label { Text=text, AutoSize=true, ForeColor=Theme.Muted, Font=Theme.Font(9,FontStyle.Bold), Location=new Point(x,y) };
+        }
+
+        private TextBox Input(string text,int x,int y,int width)
+        {
+            return new TextBox { Text=text??"", Width=width, Height=30, Font=Theme.Font(10), BackColor=Theme.Card2, ForeColor=Theme.Text, BorderStyle=BorderStyle.FixedSingle, Location=new Point(x,y) };
+        }
+
+        private void Login(object sender,EventArgs e)
+        {
+            string email=(_email.Text??"").Trim().ToLowerInvariant();
+            string pass=_pass.Text??"";
+            if(email.Length<3 || email.IndexOf('@')<1) { Fail("Ingresá un correo válido."); _email.Focus(); return; }
+            if(pass.Length<1) { Fail("Ingresá la contraseña de tu cuenta web."); _pass.Focus(); return; }
+
+            Cursor=Cursors.WaitCursor;
+            _login.Enabled=false;
+            try
+            {
+                WebUser user;
+                if(!_central.AuthenticateCentral(email,pass,out user) || user==null)
+                {
+                    Fail("No se pudo iniciar sesión. Verificá el correo y la contraseña de tu cuenta Seller Center.");
+                    return;
+                }
+                if(!string.Equals(user.Role,"seller",StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(user.StoreId))
+                {
+                    Fail("El correo y la contraseña son correctos, pero esa cuenta no tiene una tienda de vendedor asociada.");
+                    return;
+                }
+
+                // La cuenta web es la fuente de verdad. Nunca usamos el Store ID local para decidir a qué tienda pertenece.
+                _store.UpsertWebUserFromCentral(user);
+                _store.SetSetting("seller_account_email",user.Email??email);
+                _store.SetSetting("seller_account_name",user.Name??"");
+                _store.SetSetting("seller_account_locked","1");
+                _store.SetSetting("store_id",user.StoreId);
+                _store.SetSetting("web_sync_enabled","1");
+                _store.SetSetting("store_web_active","1");
+                _store.SetSetting("central_device_token","");
+                _store.SetSetting("central_device_id",DeviceIdentity.GetDeviceId());
+                _store.SetSetting("central_sync_last_error","");
+                _store.SetSetting("central_sync_status","account_authenticated");
+
+                _status.ForeColor=Theme.Green;
+                _status.Text="✓ SESIÓN INICIADA\r\n"+user.Email+"\r\nStore ID: "+user.StoreId+"\r\nWindows quedó conectado a la misma cuenta del Seller Center.";
+                DialogResult=DialogResult.OK;
+                Close();
+            }
+            finally
+            {
+                Cursor=Cursors.Default;
+                _login.Enabled=true;
+            }
+        }
+
+        private void Fail(string text)
+        {
+            _status.Text=text;
+            _status.ForeColor=Theme.Danger;
+        }
     }
 
     public sealed class LoginForm : Form

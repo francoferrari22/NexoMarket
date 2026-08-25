@@ -94,6 +94,7 @@ namespace NexoMarket.Admin
                     case "Ventas": ShowPage("Ventas", BuildSalesHistory); break;
                     case "Clientes": ShowPage("Clientes", BuildCustomers); break;
                     case "Promociones": ShowPage("Promociones", BuildPromotions); break;
+                    case "Cupones": ShowPage("Cupones", BuildCoupons); break;
                     case "Estadísticas": ShowPage("Estadísticas", BuildStats); break;
                     case "Inicio": ShowPage("Inicio", BuildDashboard); break;
                 }
@@ -159,6 +160,7 @@ namespace NexoMarket.Admin
             AddNav("▤   Productos", "Productos", BuildProducts);
             AddNav("▥   Inventario", "Inventario", BuildInventory);
             AddNav("★   Promociones", "Promociones", BuildPromotions);
+            AddNav("🎟   Cupones", "Cupones", BuildCoupons);
             AddNav("▧   Multimedia", "Multimedia", BuildMedia);
             AddNavGroup("CLIENTES Y FINANZAS");
             AddNav("♙   Clientes", "Clientes", BuildCustomers);
@@ -1107,6 +1109,45 @@ namespace NexoMarket.Admin
             config.Controls.Add(status);
             page.Controls.Add(config);
             return page;
+        }
+
+        private Control BuildCoupons()
+        {
+            Panel page=Page();
+            Panel head=Theme.Card(); head.Dock=DockStyle.Top; head.Height=105; head.Padding=new Padding(18);
+            Label h=H2("CUPONES Y CÓDIGOS DE PROMOCIÓN"); h.Dock=DockStyle.Top; h.Height=30; head.Controls.Add(h);
+            Label info=new Label{Text="Creá códigos con descuento porcentual o fijo y definí un límite de usos. Se sincronizan con el Seller Center web.",AutoSize=false,Dock=DockStyle.Fill,ForeColor=Theme.Muted,Font=Theme.Font(9)}; head.Controls.Add(info); page.Controls.Add(head);
+            DataGridView grid=Theme.Grid(); grid.Dock=DockStyle.Top; grid.Height=330;
+            grid.DataSource=_store.GetCoupons().Select(c=>new {Id=c.Id,Código=c.Code,Descripción=c.Description,Descuento=c.DiscountPercent>0?c.DiscountPercent.ToString("0.##")+"%":"$ "+c.DiscountAmount.ToString("N2"),Usos=c.Used+" / "+(c.MaxUses==0?"∞":c.MaxUses.ToString()),Estado=c.Active?"ACTIVO":"PAUSADO",Desde=c.From.ToString("dd/MM/yyyy"),Hasta=c.To.ToString("dd/MM/yyyy")}).ToList();
+            if(grid.Columns.Contains("Id"))grid.Columns["Id"].Visible=false;
+            page.Controls.Add(grid);
+            FlowLayoutPanel actions=new FlowLayoutPanel{Dock=DockStyle.Top,Height=60,WrapContents=false,Padding=new Padding(0,10,0,0)};
+            Button add=Theme.Primary("+ NUEVO CUPÓN"); add.Click+=delegate{using(Form f=CouponDialog())if(f.ShowDialog(this)==DialogResult.OK)ShowPage("Cupones",BuildCoupons);}; actions.Controls.Add(add);
+            Button del=Theme.Secondary("ELIMINAR"); del.Click+=delegate{if(grid.SelectedRows.Count==0)return;long id=Convert.ToInt64(grid.SelectedRows[0].Cells["Id"].Value);_store.DeleteCoupon(id);ShowPage("Cupones",BuildCoupons);}; actions.Controls.Add(del);
+            page.Controls.Add(actions); return page;
+        }
+
+        private Form CouponDialog()
+        {
+            Form f=Dialog("Nuevo cupón"); f.ClientSize=new Size(620,430);
+            TextBox code=Field(f,"Código","VERANO10",20);
+            TextBox desc=Field(f,"Descripción","10% de descuento",82);
+            TextBox percent=Field(f,"Descuento %","10",144);
+            TextBox amount=Field(f,"Descuento fijo $","0",206);
+            TextBox maxUses=Field(f,"Usos máximos (0 = sin límite)","100",268);
+            Label hint=new Label{Text="Usá porcentaje o importe fijo, no ambos. El límite se aplica al usar el código.",AutoSize=false,Width=540,Height=40,Location=new Point(20,330),ForeColor=Theme.Muted,Font=Theme.Font(8.5f)};f.Controls.Add(hint);
+            Button save=Theme.Primary("GENERAR CUPÓN");save.Location=new Point(400,365);save.Width=160;f.Controls.Add(save);
+            save.Click+=delegate{
+                string c=(code.Text??"").Trim().ToUpperInvariant();decimal p=0,a=0;int max=0;
+                decimal.TryParse(percent.Text.Replace(",","."),NumberStyles.Any,CultureInfo.InvariantCulture,out p);
+                decimal.TryParse(amount.Text.Replace(",","."),NumberStyles.Any,CultureInfo.InvariantCulture,out a);
+                int.TryParse(maxUses.Text,out max);
+                if(c.Length<3|| (p<=0&&a<=0)||(p>100)||(p>0&&a>0)){MessageBox.Show("Ingresá un código y un descuento válido: porcentaje o importe fijo.","NexoMarket",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
+                if(_store.GetCoupons().Any(x=>string.Equals(x.Code,c,StringComparison.OrdinalIgnoreCase))){MessageBox.Show("Ese cupón ya existe.");return;}
+                _store.SaveCoupon(new Coupon{Code=c,Description=desc.Text,DiscountPercent=p,DiscountAmount=a,MaxUses=Math.Max(0,max),Used=0,Active=true,From=DateTime.Today,To=DateTime.Today.AddDays(30)});
+                f.DialogResult=DialogResult.OK;f.Close();
+            };
+            return f;
         }
 
         private Control BuildPromotions()

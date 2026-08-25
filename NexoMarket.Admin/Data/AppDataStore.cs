@@ -479,6 +479,16 @@ namespace NexoMarket.Admin.Data
             catch { return ""; }
         }
 
+        public void UpdateProductWebImageUrl(long id, string url)
+        {
+            if(id<=0 || string.IsNullOrWhiteSpace(url)) return;
+            XElement parent=_doc.Root.Element("Products");
+            XElement old=parent==null?null:parent.Elements("Product").FirstOrDefault(x=>(long)x.Attribute("Id")==id);
+            if(old==null) return;
+            old.SetElementValue("WebImageUrl",url);
+            Save();
+        }
+
         public void SaveProduct(Product p)
         {
             if (p == null) return;
