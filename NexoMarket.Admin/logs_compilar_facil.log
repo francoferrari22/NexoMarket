@@ -1,3 +1,10 @@
-C:\Windows\Microsoft.NET\Framework64\v4.0.30319\Microsoft.Common.targets(983,5): warning MSB3644: No se encuentran los ensamblados de referencia de la versi¢n de .NET Framework ".NETFramework,Version=v4.8". Para resolver este problema, instale el SDK o el Paquete de compatibilidad de esta versi¢n de .NET Framework o establezca el destino de la aplicaci¢n en una versi¢n de .NET Framework para la que haya instalado el SDK o Paquete de compatibilidad. Tenga en cuenta que los ensamblados se resolver n desde la memoria cach‚ global de ensamblados (GAC) y se usar n esos ensamblados en lugar de los de referencia. Por tanto, es posible que el ensamblado no est‚ establecido en la versi¢n de .NET Framework de destino que ten¡a prevista. [C:\Users\FRANCO\Desktop\NEXI IMPORTANTE\REEMPLAZAR_TODO_GITHUB\NexoMarket.Admin\NexoMarket.Admin.csproj]
-C:\Windows\Microsoft.NET\Framework64\v4.0.30319\Microsoft.Common.targets(1605,5): warning MSB3270: La arquitectura del procesador del proyecto que se va a compilar "MSIL" y la arquitectura del procesador de la referencia "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\mscorlib.dll", "AMD64", no coinciden. Esta falta de coincidencia puede causar errores en tiempo de ejecuci¢n. Cambie la arquitectura del procesador de destino del proyecto mediante el Administrador de configuraci¢n para alinear las arquitecturas de procesador entre el proyecto y las referencias, o tome una dependencia de las referencias con una arquitectura de procesador que coincida con la arquitectura del procesador de destino del proyecto. [C:\Users\FRANCO\Desktop\NEXI IMPORTANTE\REEMPLAZAR_TODO_GITHUB\NexoMarket.Admin\NexoMarket.Admin.csproj]
-C:\Windows\Microsoft.NET\Framework64\v4.0.30319\Microsoft.Common.targets(3683,5): error MSB3030: No se pudo copiar el archivo "C:\Users\FRANCO\Desktop\NEXI IMPORTANTE\REEMPLAZAR_TODO_GITHUB\NexoMarketCentral.url" porque no se encontr¢. [C:\Users\FRANCO\Desktop\NEXI IMPORTANTE\REEMPLAZAR_TODO_GITHUB\NexoMarket.Admin\NexoMarket.Admin.csproj]
+================================================================
+NexoMarket Admin - diagnostico de compilacion
+Fecha: 25/08/2026 19:24:26,30
+================================================================
+MSBuild: C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe
+  NexoMarket.Admin -> C:\Users\FRANCO\Desktop\NEXI IMPORTANTE\REEMPLAZAR_TODO_GITHUB\NexoMarket.Admin\bin\Release\NexoMarket.Admin.exe
+NexoMarket.Admin\bin\Release\NexoMarket.Admin.exe
+NexoMarket.Admin\bin\Release\NexoMarket.Admin.pdb
+NexoMarket.Admin\bin\Release\Assets\NexoMarket.ico
+3 archivo(s) copiado(s)

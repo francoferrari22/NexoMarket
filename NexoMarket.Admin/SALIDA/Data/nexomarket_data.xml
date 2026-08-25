@@ -6,8 +6,8 @@
     <Setting Key="pickup_enabled" Value="1" />
     <Setting Key="delivery_cost" Value="0" />
     <Setting Key="admin_username" Value="admin" />
-    <Setting Key="admin_password_salt" Value="So+xKx9vLoN+mYYS74/R/A==" />
-    <Setting Key="admin_password_hash" Value="BhhisIEvWNpxartFS4YWfMbOGGqxZy7HfovCHPNS6eo=" />
+    <Setting Key="admin_password_salt" Value="x4ohSnjn12MdKX8JMDOnGw==" />
+    <Setting Key="admin_password_hash" Value="c9xw9CTg/+DfoHvITAfT52K4bc0gdJgxP+xDgJbQJM4=" />
     <Setting Key="admin_must_change_password" Value="1" />
     <Setting Key="admin_recovery_email" Value="" />
     <Setting Key="smtp_host" Value="smtp.gmail.com" />
@@ -22,14 +22,14 @@
     <Setting Key="master_password_legacy" Value="" />
     <Setting Key="ticket_header" Value="NexoMarket" />
     <Setting Key="ticket_footer" Value="Gracias por su compra" />
-    <Setting Key="web_public_url" Value="https://nexomarket-022.onrender.com" />
-    <Setting Key="web_api_url" Value="https://nexomarket-022.onrender.com" />
+    <Setting Key="web_public_url" Value="https://nexomarket-0k22.onrender.com" />
+    <Setting Key="web_api_url" Value="https://nexomarket-0k22.onrender.com" />
     <Setting Key="web_sync_enabled" Value="1" />
     <Setting Key="store_web_active" Value="1" />
     <Setting Key="central_endpoint_migrated_4120" Value="1" />
     <Setting Key="central_store_activation_migrated_4119" Value="1" />
-    <Setting Key="store_id" Value="8B4B28D7B0CE46828899799B263A8C4C" />
-    <Setting Key="central_sync_key" Value="062ffd21fdb22b1093663e2f11e5f86fec69077efc9af10aedc29800fd887629" />
+    <Setting Key="store_id" Value="DFF5D548C17F472FAE69D25A87BEDD11" />
+    <Setting Key="central_sync_key" Value="c74df9931afaa397b4ba3491eac2363e223c0d7459ea52cdb83edcf03f8d0ecf" />
     <Setting Key="web_server_port" Value="8090" />
     <Setting Key="web_server_enabled" Value="0" />
     <Setting Key="seller_account_email" Value="" />
@@ -76,7 +76,7 @@
       <VideoUrl></VideoUrl>
       <BarcodeImagePath></BarcodeImagePath>
       <WebImageUrl></WebImageUrl>
-      <UpdatedAt>2026-08-25T16:33:17.1360588Z</UpdatedAt>
+      <UpdatedAt>2026-08-25T22:25:53.3368713Z</UpdatedAt>
       <Deleted>0</Deleted>
     </Product>
     <Product Id="2">
@@ -103,7 +103,7 @@
       <VideoUrl></VideoUrl>
       <BarcodeImagePath></BarcodeImagePath>
       <WebImageUrl></WebImageUrl>
-      <UpdatedAt>2026-08-25T16:33:17.1672710Z</UpdatedAt>
+      <UpdatedAt>2026-08-25T22:26:04.5369584Z</UpdatedAt>
       <Deleted>0</Deleted>
     </Product>
     <Product Id="3">
@@ -130,7 +130,7 @@
       <VideoUrl></VideoUrl>
       <BarcodeImagePath></BarcodeImagePath>
       <WebImageUrl></WebImageUrl>
-      <UpdatedAt>2026-08-25T16:33:17.1672710Z</UpdatedAt>
+      <UpdatedAt>2026-08-25T22:26:04.6307572Z</UpdatedAt>
       <Deleted>0</Deleted>
     </Product>
   </Products>
@@ -154,7 +154,7 @@
       <Notes></Notes>
       <Status>Pendiente</Status>
       <Total>47700</Total>
-      <CreatedAt>2026-08-25T13:15:17.1672710-03:00</CreatedAt>
+      <CreatedAt>2026-08-25T19:08:04.6463944-03:00</CreatedAt>
       <PaymentMethod>Mercado Pago</PaymentMethod>
       <Source>Web</Source>
       <ItemsJson>[]</ItemsJson>
@@ -181,7 +181,7 @@
       <Notes></Notes>
       <Status>Preparando</Status>
       <Total>15900</Total>
-      <CreatedAt>2026-08-25T11:33:17.1828966-03:00</CreatedAt>
+      <CreatedAt>2026-08-25T17:26:04.6619637-03:00</CreatedAt>
       <PaymentMethod>Débito</PaymentMethod>
       <Source>Mostrador</Source>
       <ItemsJson>[]</ItemsJson>
@@ -208,7 +208,7 @@
       <Notes></Notes>
       <Status>Listo</Status>
       <Total>32000</Total>
-      <CreatedAt>2026-08-25T09:33:17.1828966-03:00</CreatedAt>
+      <CreatedAt>2026-08-25T15:26:04.6619637-03:00</CreatedAt>
       <PaymentMethod>Efectivo</PaymentMethod>
       <Source>Web</Source>
       <ItemsJson>[]</ItemsJson>
