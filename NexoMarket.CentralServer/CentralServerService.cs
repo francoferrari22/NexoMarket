@@ -23,7 +23,6 @@ namespace NexoMarket.CentralServer
         private readonly string _file;
         private readonly string _catalogFile;
         private readonly string _ordersFile;
-        private readonly string _licensesFile;
         private readonly string _accountsFile;
         private readonly object _sync = new object();
         private readonly Dictionary<string, CentralUser> _sessions = new Dictionary<string, CentralUser>(StringComparer.OrdinalIgnoreCase);
@@ -32,7 +31,6 @@ namespace NexoMarket.CentralServer
         private volatile bool _running;
         private XDocument _doc;
         private readonly R2ObjectStore _r2;
-        private const int SellerTrialDays = 90;
 
         public CentralServerService(int port)
         {
@@ -41,7 +39,6 @@ namespace NexoMarket.CentralServer
             _file = Path.Combine(_root, "nexomarket_stores.xml");
             _catalogFile = Path.Combine(_root, "nexomarket_catalog.xml");
             _ordersFile = Path.Combine(_root, "nexomarket_orders.xml");
-            _licensesFile = Path.Combine(_root, "nexomarket_licenses.xml");
             _accountsFile = Path.Combine(_root, "nexomarket_accounts.xml");
             Directory.CreateDirectory(_root);
             _r2 = new R2ObjectStore();
@@ -141,15 +138,13 @@ namespace NexoMarket.CentralServer
                         string body = Body(request); string path = target; string query = ""; int q = path.IndexOf('?');
                         if (q >= 0) { query = path.Substring(q + 1); path = path.Substring(0, q); }
                         if (path == "/health") { Write(stream, 200, "text/plain", "NexoMarket Central OK\n"); return; }
-                        if (path == "/api/licenses/public-key" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", LicensePublicKey()); return; }
                         if (path == "/api/accounts/upsert" && method == "POST") { Write(stream, 200, "text/plain", AccountUpsert(Form(body))); return; }
-                        if (path == "/api/accounts/ensure-trial" && method == "POST") { Write(stream, 200, "text/plain; charset=utf-8", EnsureSellerTrial(Form(body))); return; }
                         if (path == "/login") { CentralLogin(stream, method, body, HeaderCookie(request, "NexoCentralSession")); return; }
                         if (path == "/register") { CentralRegister(stream, method, body); return; }
                         if (path == "/logout") { CentralLogout(stream); return; }
-                        if (path == "/seller") { CentralSeller(stream, HeaderCookie(request, "NexoCentralSession")); return; }
-                        if (path == "/seller/license" && method == "POST") { CentralSellerLicense(stream, HeaderCookie(request, "NexoCentralSession"), Form(body)); return; }
-                        if (path == "/buyer") { CentralBuyer(stream, HeaderCookie(request, "NexoCentralSession")); return; }
+                        if (path == "/seller") { CentralSeller(stream, HeaderCookie(request, "NexoCentralSession"), query); return; }
+                        if (path == "/seller/order-status" && method == "POST") { CentralSellerOrderStatus(stream, HeaderCookie(request, "NexoCentralSession"), Form(body)); return; }
+                        if (path == "/buyer") { CentralBuyer(stream, HeaderCookie(request, "NexoCentralSession"), query); return; }
                         if (path == "/api/storage/status" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", StorageStatus()); return; }
                         if (path == "/api/media/upload" && method == "POST") { Write(stream, 200, "text/plain; charset=utf-8", UploadMedia(Form(body))); return; }
                         if (path == "/api/stores" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", StoreLines(query)); return; }
@@ -168,11 +163,6 @@ namespace NexoMarket.CentralServer
                         if (path == "/api/orders/history" && method == "GET") { Write(stream, 200, "application/json; charset=utf-8", HistoryOrders(QueryValue(query, "storeId"), QueryValue(query, "email"))); return; }
                         if (path == "/api/sync/heartbeat" && method == "POST") { Write(stream, 200, "text/plain", Heartbeat(Form(body))); return; }
                         if (path == "/api/accounts/lookup" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", AccountLookup(QueryValue(query, "email"), QueryValue(query, "accountId"))); return; }
-                        if (path == "/api/licenses/status" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", LicenseStatus(QueryValue(query, "email"), QueryValue(query, "accountId"))); return; }
-                        if (path == "/api/licenses/search" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", LicenseSearch(QueryValue(query, "email"), QueryValue(query, "accountId"))); return; }
-                        if (path == "/api/licenses/upsert-account" && method == "POST") { Write(stream, 200, "text/plain", LicenseUpsertAccount(Form(body))); return; }
-                        if (path == "/api/licenses/activate-account" && method == "POST") { Write(stream, 200, "text/plain; charset=utf-8", ActivateAccountLicense(Form(body))); return; }
-                        if (path == "/api/licenses/revoke" && method == "POST") { Write(stream, 200, "text/plain", LicenseRevoke(Form(body))); return; }
                         if (path == "/" || path == "/stores") { Write(stream, 200, "text/html; charset=utf-8", Marketplace(query)); return; }
                         if (path.StartsWith("/store/", StringComparison.OrdinalIgnoreCase) && method == "GET") { string slug = path.Substring(7).Trim('/'); Write(stream, 200, "text/html; charset=utf-8", Storefront(slug)); return; }
                         Write(stream, 404, "text/plain", "Not found\n");
@@ -194,11 +184,6 @@ namespace NexoMarket.CentralServer
             if (values == null || key == null) return "";
             string value;
             return values.TryGetValue(key, out value) ? value : "";
-        }
-
-        private static string LicenseAccountId(string email)
-        {
-            string normalized=(email??"").Trim().ToLowerInvariant(); using(SHA256 sha=SHA256.Create()){byte[] b=sha.ComputeHash(Encoding.UTF8.GetBytes("NEXOMARKET-ACCOUNT|"+normalized));StringBuilder sb=new StringBuilder();foreach(byte x in b)sb.Append(x.ToString("X2"));return sb.ToString();}
         }
 
         private static string Escape(string value)
@@ -307,12 +292,10 @@ namespace NexoMarket.CentralServer
             {
                 RestoreIfMissing(_catalogFile, "data/nexomarket_catalog.xml");
                 RestoreIfMissing(_ordersFile, "data/nexomarket_orders.xml");
-                RestoreIfMissing(_licensesFile, "data/nexomarket_licenses.xml");
                 RestoreIfMissing(_accountsFile, "data/nexomarket_accounts.xml");
                 if (!File.Exists(_accountsFile)) File.WriteAllText(_accountsFile, new XDocument(new XElement("NexoMarketAccounts", new XElement("Users"))).ToString(SaveOptions.None), Encoding.UTF8);
                 if (!File.Exists(_catalogFile)) File.WriteAllText(_catalogFile, new XDocument(new XElement("NexoMarketCatalog", new XElement("Products"), new XElement("Promotions"))).ToString(SaveOptions.None), Encoding.UTF8);
                 if (!File.Exists(_ordersFile)) File.WriteAllText(_ordersFile, new XDocument(new XElement("NexoMarketOrders", new XElement("Orders"))).ToString(SaveOptions.None), Encoding.UTF8);
-                if (!File.Exists(_licensesFile)) File.WriteAllText(_licensesFile, new XDocument(new XElement("NexoMarketLicenses", new XElement("Licenses"))).ToString(SaveOptions.None), Encoding.UTF8);
             }
         }
 
@@ -364,46 +347,21 @@ namespace NexoMarket.CentralServer
             catch { return "ERROR|invalid_base64"; }
         }
 
-        private string LicenseAdminKey()
-        {
-            return Environment.GetEnvironmentVariable("LICENSE_ADMIN_KEY") ?? "";
-        }
-
-        private string LicensePublicKey()
-        {
-            return Environment.GetEnvironmentVariable("LICENSE_PUBLIC_KEY_XML") ?? "";
-        }
-
-        private bool IsLicenseAdmin(Dictionary<string,string> f)
-        {
-            string configured = LicenseAdminKey();
-            return configured.Length > 0 && string.Equals(configured, Get(f, "adminKey"), StringComparison.Ordinal);
-        }
-
         private string AccountLookup(string email,string accountId)
         {
-            CentralUser u=null; if(!string.IsNullOrWhiteSpace(email))u=FindAccount(email); else if(!string.IsNullOrWhiteSpace(accountId)){lock(_sync){XDocument d=LoadFile(_accountsFile,"NexoMarketAccounts","Users");XElement e=d.Root.Element("Users").Elements("User").FirstOrDefault(x=>string.Equals(S(x,"LicenseAccountId"),accountId,StringComparison.OrdinalIgnoreCase)||string.Equals(S(x,"Id"),accountId,StringComparison.OrdinalIgnoreCase));u=e==null?null:CentralUser.From(e);}}
-            if(u==null)return "ERROR|notfound"; return "OK|"+Escape(LicenseAccountId(u.Email))+"|"+Escape(u.Email)+"|"+Escape(u.Name)+"|"+Escape(u.StoreId)+"|"+Escape(u.Role);
-        }
-
-        private string LicenseStatus(string email,string accountId)
-        {
-            CentralUser u=FindAccount(email); if(u==null&&!string.IsNullOrWhiteSpace(accountId)){string lookup=AccountLookup("",accountId);if(lookup.StartsWith("OK|")){string[] p=lookup.Split('|');if(p.Length>2)u=FindAccount(Uri.UnescapeDataString(p[2]));}} if(u==null||u.Role!="seller")return "ERROR|notfound"; return SellerTrialResponse(u);
-        }
-
-        private string LicenseSearch(string email,string accountId)
-        { return LicenseStatus(email,accountId); }
-
-        private string LicenseUpsertAccount(Dictionary<string,string> f)
-        {
-            if(!IsLicenseAdmin(f))return "ERROR|unauthorized"; string token=Get(f,"license"); NexoMarket.Licensing.LicenseRecord r; if(!NexoMarket.Licensing.LicenseCore.TryParse(token,out r))return "ERROR|license"; string pub=LicensePublicKey(); if(string.IsNullOrWhiteSpace(pub)||!NexoMarket.Licensing.LicenseCore.Verify(r,pub))return "ERROR|signature"; if(r.ExpiresUtc<=DateTime.UtcNow)return "ERROR|expired";
-            CentralUser u=FindAccount(r.AccountEmail); if(u==null||u.Role!="seller")return "ERROR|seller_account"; if(!string.Equals(LicenseAccountId(u.Email),r.AccountId,StringComparison.OrdinalIgnoreCase))return "ERROR|account_id"; // Store ID ignorado: la licencia pertenece a la cuenta.
-            return ActivateAccountLicense(new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){{"email",r.AccountEmail},{"accountId",r.AccountId},{"storeId",r.StoreId},{"license",token}});
-        }
-
-        private string LicenseRevoke(Dictionary<string,string> f)
-        {
-            if(!IsLicenseAdmin(f))return "ERROR|unauthorized"; string email=Get(f,"email").Trim().ToLowerInvariant(), accountId=Get(f,"accountId").Trim(); CentralUser u=FindAccount(email); if(u==null||!string.Equals(LicenseAccountId(u.Email),accountId,StringComparison.OrdinalIgnoreCase))return "ERROR|notfound"; lock(_sync){XDocument d=LoadFile(_accountsFile,"NexoMarketAccounts","Users");XElement e=d.Root.Element("Users").Elements("User").FirstOrDefault(x=>string.Equals(S(x,"LicenseAccountId"),accountId,StringComparison.OrdinalIgnoreCase));if(e==null)return "ERROR|notfound";e.SetElementValue("PaidLicenseStatus","Revoked");e.SetElementValue("UpdatedAt",DateTime.UtcNow.ToString("o"));SaveDoc(_accountsFile,d);} return "OK|revoked";
+            CentralUser u=null;
+            if(!string.IsNullOrWhiteSpace(email)) u=FindAccount(email);
+            else if(!string.IsNullOrWhiteSpace(accountId))
+            {
+                lock(_sync)
+                {
+                    XDocument d=LoadFile(_accountsFile,"NexoMarketAccounts","Users");
+                    XElement e=d.Root.Element("Users").Elements("User").FirstOrDefault(x=>string.Equals(S(x,"Id"),accountId,StringComparison.OrdinalIgnoreCase));
+                    u=e==null?null:CentralUser.From(e);
+                }
+            }
+            if(u==null)return "ERROR|notfound";
+            return "OK|"+Escape(u.Id)+"|"+Escape(u.Email)+"|"+Escape(u.Name)+"|"+Escape(u.StoreId)+"|"+Escape(u.Role);
         }
 
         private void PublishProduct(Dictionary<string,string> f)
@@ -814,105 +772,16 @@ namespace NexoMarket.CentralServer
                 XDocument d = LoadFile(_accountsFile,"NexoMarketAccounts","Users");
                 XElement root=d.Root.Element("Users");
                 XElement old=root.Elements("User").FirstOrDefault(x=>string.Equals(S(x,"Email"),email,StringComparison.OrdinalIgnoreCase));
-                XElement e=new XElement("User",new XElement("Id",Get(f,"id")),new XElement("Name",Get(f,"name")),new XElement("Email",email),new XElement("Phone",Get(f,"phone")),new XElement("Role",role),new XElement("StoreId",Get(f,"storeId")),new XElement("Salt",salt),new XElement("PasswordHash",hash),new XElement("CreatedAt",Get(f,"createdAt")),new XElement("LicenseAccountId",LicenseAccountId(email)));
+                XElement e=new XElement("User",new XElement("Id",Get(f,"id")),new XElement("Name",Get(f,"name")),new XElement("Email",email),new XElement("Phone",Get(f,"phone")),new XElement("Role",role),new XElement("StoreId",Get(f,"storeId")),new XElement("Salt",salt),new XElement("PasswordHash",hash),new XElement("CreatedAt",Get(f,"createdAt")));
                 if (old != null)
                 {
-                    string oldId=S(old,"Id"); if(!string.IsNullOrWhiteSpace(oldId))e.SetElementValue("Id",oldId); string oldLicenseId=S(old,"LicenseAccountId"); if(!string.IsNullOrWhiteSpace(oldLicenseId))e.SetElementValue("LicenseAccountId",oldLicenseId);
+                    string oldId=S(old,"Id"); if(!string.IsNullOrWhiteSpace(oldId))e.SetElementValue("Id",oldId);
                     string oldStore=S(old,"StoreId"); if(role=="seller" && !string.IsNullOrWhiteSpace(oldStore))e.SetElementValue("StoreId",oldStore);
-                    string[] keep={"TrialStartedUtc","TrialExpiresUtc","TrialDays","LicenseStatus","PaidLicenseIssuedUtc","PaidLicenseExpiresUtc","PaidLicenseStatus","PaidLicenseToken"};
-                    foreach(string k in keep){string v=S(old,k);if(!string.IsNullOrWhiteSpace(v))e.Add(new XElement(k,v));}
                 }
                 if(old!=null) old.ReplaceWith(e); else root.Add(e);
                 SaveDoc(_accountsFile,d);
             }
             return "OK|account";
-        }
-
-        private string EnsureSellerTrial(Dictionary<string,string> f)
-        {
-            string email=Get(f,"email").Trim().ToLowerInvariant();
-            string storeId=Get(f,"storeId").Trim();
-            CentralUser user=FindAccount(email);
-            if(user==null || user.Role!="seller") return "ERROR|seller_account";
-            // Store ID es informativo. La prueba y la licencia pertenecen a la cuenta, no a la tienda ni a la PC.
-            EnsureSellerTrialForUser(user);
-            user=FindAccount(email);
-            return SellerTrialResponse(user);
-        }
-
-        private void EnsureSellerTrialForUser(CentralUser user)
-        {
-            if(user==null || user.Role!="seller" || string.IsNullOrWhiteSpace(user.Email)) return;
-            lock(_sync)
-            {
-                XDocument d=LoadFile(_accountsFile,"NexoMarketAccounts","Users");
-                XElement e=d.Root.Element("Users").Elements("User").FirstOrDefault(x=>string.Equals(S(x,"Email"),user.Email,StringComparison.OrdinalIgnoreCase));
-                if(e==null)return;
-                DateTime started,expires;
-                bool hasStarted=DateTime.TryParse(S(e,"TrialStartedUtc"),null,System.Globalization.DateTimeStyles.RoundtripKind,out started);
-                bool hasExpires=DateTime.TryParse(S(e,"TrialExpiresUtc"),null,System.Globalization.DateTimeStyles.RoundtripKind,out expires);
-                bool changed=false;
-
-                if(!hasStarted || !hasExpires)
-                {
-                    started=DateTime.UtcNow;
-                    expires=started.AddDays(SellerTrialDays);
-                    e.SetElementValue("TrialStartedUtc",started.ToString("o"));
-                    e.SetElementValue("TrialExpiresUtc",expires.ToString("o"));
-                    e.SetElementValue("TrialDays",SellerTrialDays.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                    if(string.IsNullOrWhiteSpace(S(e,"LicenseStatus")))
-                        e.SetElementValue("LicenseStatus","Active");
-                    changed=true;
-                }
-                else
-                {
-                    // Migración de cuentas creadas con la versión anterior de 60 días:
-                    // si la fecha de vencimiento era exactamente inicio + 60 días,
-                    // se corrige a inicio + 90 días. No se reinicia el reloj de la cuenta.
-                    DateTime oldSixty=started.AddDays(60);
-                    if(string.IsNullOrWhiteSpace(S(e,"TrialDays")) &&
-                       Math.Abs((expires-oldSixty).TotalMinutes) <= 2 &&
-                       !string.Equals(S(e,"PaidLicenseStatus"),"Active",StringComparison.OrdinalIgnoreCase))
-                    {
-                        expires=started.AddDays(SellerTrialDays);
-                        e.SetElementValue("TrialExpiresUtc",expires.ToString("o"));
-                        e.SetElementValue("TrialDays",SellerTrialDays.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                        if(string.IsNullOrWhiteSpace(S(e,"LicenseStatus")) ||
-                           string.Equals(S(e,"LicenseStatus"),"Active",StringComparison.OrdinalIgnoreCase))
-                            e.SetElementValue("LicenseStatus","Active");
-                        changed=true;
-                    }
-                }
-
-                if(expires<=DateTime.UtcNow && string.Equals(S(e,"LicenseStatus"),"Active",StringComparison.OrdinalIgnoreCase))
-                {
-                    e.SetElementValue("LicenseStatus","Expired");
-                    changed=true;
-                }
-
-                if(changed) SaveDoc(_accountsFile,d);
-            }
-        }
-
-        private string SellerTrialResponse(CentralUser user)
-        {
-            if(user==null || user.Role!="seller")return "ERROR|seller_account";
-            lock(_sync)
-            {
-                XDocument d=LoadFile(_accountsFile,"NexoMarketAccounts","Users"); XElement e=d.Root.Element("Users").Elements("User").FirstOrDefault(x=>string.Equals(S(x,"Email"),user.Email,StringComparison.OrdinalIgnoreCase)); if(e==null)return "ERROR|seller_account";
-                DateTime paidExp; string paidStatus=S(e,"PaidLicenseStatus"); if(DateTime.TryParse(S(e,"PaidLicenseExpiresUtc"),null,System.Globalization.DateTimeStyles.RoundtripKind,out paidExp) && string.Equals(paidStatus,"Active",StringComparison.OrdinalIgnoreCase) && paidExp>DateTime.UtcNow) { int pd=Math.Max(0,(int)(paidExp.Date-DateTime.UtcNow.Date).TotalDays); return "OK|Activa|"+pd.ToString(System.Globalization.CultureInfo.InvariantCulture)+"|"+S(e,"PaidLicenseIssuedUtc")+"|"+paidExp.ToString("o")+"|paid|"+Escape(user.Email)+"|"+Escape(LicenseAccountId(user.Email))+"|"+Escape(user.StoreId); }
-                DateTime expires; DateTime started; DateTime.TryParse(S(e,"TrialExpiresUtc"),null,System.Globalization.DateTimeStyles.RoundtripKind,out expires); DateTime.TryParse(S(e,"TrialStartedUtc"),null,System.Globalization.DateTimeStyles.RoundtripKind,out started); string status=S(e,"LicenseStatus"); if(string.IsNullOrWhiteSpace(status))status=expires>DateTime.UtcNow?"Active":"Expired"; int days=expires>DateTime.UtcNow?Math.Max(0,(int)(expires.Date-DateTime.UtcNow.Date).TotalDays):0; if(expires<=DateTime.UtcNow && string.Equals(status,"Active",StringComparison.OrdinalIgnoreCase))status="Expired"; return "OK|"+(status=="Active"?"Activa":"Vencida")+"|"+days.ToString(System.Globalization.CultureInfo.InvariantCulture)+"|"+started.ToString("o")+"|"+expires.ToString("o")+"|trial|"+Escape(user.Email)+"|"+Escape(LicenseAccountId(user.Email))+"|"+Escape(user.StoreId);
-            }
-        }
-
-        private string ActivateAccountLicense(Dictionary<string,string> f)
-        {
-            string email=Get(f,"email").Trim().ToLowerInvariant(), accountId=Get(f,"accountId").Trim(), storeId=Get(f,"storeId").Trim(), token=Get(f,"license").Trim();
-            CentralUser user=FindAccount(email); if(user==null || user.Role!="seller")return "ERROR|seller_account"; if(!string.Equals(LicenseAccountId(user.Email),accountId,StringComparison.OrdinalIgnoreCase))return "ERROR|account_id";
-            NexoMarket.Licensing.LicenseRecord r; if(!NexoMarket.Licensing.LicenseCore.TryParse(token,out r))return "ERROR|license"; string pub=LicensePublicKey(); if(string.IsNullOrWhiteSpace(pub)||!NexoMarket.Licensing.LicenseCore.Verify(r,pub))return "ERROR|signature";
-            if(!string.Equals(r.AccountId,LicenseAccountId(email),StringComparison.OrdinalIgnoreCase)||!string.Equals(r.AccountEmail,email,StringComparison.OrdinalIgnoreCase))return "ERROR|license_account"; if(!string.Equals(r.Status,"Active",StringComparison.OrdinalIgnoreCase)||r.ExpiresUtc<=DateTime.UtcNow)return "ERROR|expired";
-            lock(_sync){XDocument d=LoadFile(_accountsFile,"NexoMarketAccounts","Users");XElement e=d.Root.Element("Users").Elements("User").FirstOrDefault(x=>string.Equals(S(x,"Email"),email,StringComparison.OrdinalIgnoreCase));if(e==null)return "ERROR|seller_account";e.SetElementValue("PaidLicenseIssuedUtc",r.IssuedUtc.ToString("o"));e.SetElementValue("PaidLicenseExpiresUtc",r.ExpiresUtc.ToString("o"));e.SetElementValue("PaidLicenseStatus","Active");e.SetElementValue("PaidLicenseToken",token);SaveDoc(_accountsFile,d);}
-            return SellerTrialResponse(FindAccount(email));
         }
 
         private CentralUser FindAccount(string email)
@@ -944,8 +813,6 @@ namespace NexoMarket.CentralServer
             if(method=="GET") { Write(stream,200,"text/html; charset=utf-8",AuthPage("Ingresar", "<form method='post' action='/login'><input name='email' type='email' placeholder='Correo electrónico' required/><input name='password' type='password' placeholder='Contraseña' required/><button class='btn' type='submit'>INGRESAR</button></form><p class='muted'>¿No tenés cuenta? <a href='/register'>Crear cuenta</a></p>")); return; }
             CentralUser u; Dictionary<string,string> f=Form(body);
             if(!VerifyAccount(Get(f,"email"),Get(f,"password"),out u)) { Write(stream,200,"text/html; charset=utf-8",AuthPage("Ingreso", "<div class='error'>Correo o contraseña incorrectos.</div><a class='btn' href='/login'>Volver a intentar</a>")); return; }
-            if (u.Role == "seller") EnsureSellerTrialForUser(u);
-            u = FindAccount(u.Email);
             string token=Guid.NewGuid().ToString("N"); lock(_sync)_sessions[token]=u;
             string dest=u.Role=="seller"?"/seller":"/buyer"; WriteRedirectCookie(stream,dest,"NexoCentralSession="+token+"; Path=/; HttpOnly; SameSite=Lax");
         }
@@ -958,7 +825,7 @@ namespace NexoMarket.CentralServer
             if(FindAccount(email)!=null) { Write(stream,200,"text/html; charset=utf-8",AuthPage("Crear cuenta","<div class='error'>Ese correo ya está registrado.</div><a class='btn' href='/login'>Ingresar</a>")); return; }
             byte[] salt=new byte[16]; using(var rng=RandomNumberGenerator.Create())rng.GetBytes(salt); string salt64=Convert.ToBase64String(salt); byte[] hash; using(var kdf=new Rfc2898DeriveBytes(password,salt,50000))hash=kdf.GetBytes(32);
             Dictionary<string,string> v=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){{"id",Guid.NewGuid().ToString("N")},{"name",Get(f,"name")},{"email",email},{"phone",Get(f,"phone")},{"role",role},{"storeId",Get(f,"storeId")},{"salt",salt64},{"passwordHash",Convert.ToBase64String(hash)},{"createdAt",DateTime.UtcNow.ToString("o")}};
-            AccountUpsert(v); CentralUser u=FindAccount(email); if (u != null && u.Role == "seller") EnsureSellerTrialForUser(u); u=FindAccount(email); string token=Guid.NewGuid().ToString("N"); lock(_sync)_sessions[token]=u; WriteRedirectCookie(stream,u.Role=="seller"?"/seller":"/buyer","NexoCentralSession="+token+"; Path=/; HttpOnly; SameSite=Lax");
+            AccountUpsert(v); CentralUser u=FindAccount(email); string token=Guid.NewGuid().ToString("N"); lock(_sync)_sessions[token]=u; WriteRedirectCookie(stream,u.Role=="seller"?"/seller":"/buyer","NexoCentralSession="+token+"; Path=/; HttpOnly; SameSite=Lax");
         }
 
         private void CentralLogout(NetworkStream stream)
@@ -967,32 +834,99 @@ namespace NexoMarket.CentralServer
         private CentralUser SessionUser(string cookie)
         { if(string.IsNullOrWhiteSpace(cookie))return null; lock(_sync){CentralUser u; return _sessions.TryGetValue(cookie,out u)?u:null;} }
 
-        private void CentralSeller(NetworkStream stream,string cookie)
+        private void CentralSeller(NetworkStream stream,string cookie,string query)
         {
             CentralUser u=SessionUser(cookie); if(u==null||u.Role!="seller"){WriteRedirect(stream,"/login");return;}
-            EnsureSellerTrialForUser(u);
-            u=FindAccount(u.Email);
-            List<XElement> products=new List<XElement>(); lock(_sync){XDocument d=LoadFile(_catalogFile,"NexoMarketCatalog","Products"); products=d.Root.Element("Products").Elements("Product").Where(x=>S(x,"StoreId")==u.StoreId && S(x,"Active")!="0").OrderBy(x=>S(x,"Name")).ToList();}
-            string trial=SellerTrialResponse(u);
-            string[] tp=trial.Split('|');
-            string trialStatus=tp.Length>1?tp[1]:"Sin licencia";
-            string trialDays=tp.Length>2?tp[2]:"0";
-            string trialExpires=tp.Length>4?tp[4]:"";
-            StringBuilder b=new StringBuilder(AuthShellStart("Panel vendedor")); b.Append("<h1>Panel de vendedor</h1><p>Cuenta: <b>").Append(E(u.Email)).Append("</b> · ID de cuenta: <b>").Append(E(LicenseAccountId(u.Email))).Append("</b></p><p><a class='btn alt' href='/'>TIENDAS</a> <a class='btn alt' href='/logout'>SALIR</a></p>");
-            StringBuilder lic=new StringBuilder(); lic.Append("<div class='card'><h2>Mi licencia</h2><p><b>Estado:</b> ").Append(E(trialStatus)).Append(" · <b>Días restantes:</b> ").Append(E(trialDays)).Append("</p><p>La prueba inicial del vendedor es de 90 días y pertenece a esta cuenta. No depende de la computadora, Machine ID ni Store ID.</p><p><b>Vencimiento:</b> ").Append(E(trialExpires)).Append("</p><p><b>ID de cuenta para solicitar licencia:</b> ").Append(E(LicenseAccountId(u.Email))).Append("</p><form method='post' action='/seller/license'><textarea name='license' placeholder='Pegá aquí tu código/token'></textarea><button class='btn' type='submit'>ACTIVAR CÓDIGO</button></form></div>"); b.Append(lic.ToString()); b.Append("<h2>Mis productos sincronizados</h2><div class='grid'>");
-            foreach(XElement x in products)b.Append("<div class='card'><h3>").Append(E(S(x,"Name"))).Append("</h3><p>").Append(E(S(x,"PublicDescription"))).Append("</p><strong>$ ").Append(E(S(x,"SalePrice")=="0"?S(x,"Price"):S(x,"SalePrice"))).Append("</strong><p>Stock: ").Append(E(S(x,"Stock"))).Append("</p></div>");
-            if(products.Count==0)b.Append("<div class='empty'>Todavía no hay productos sincronizados para esta tienda. Abrí el panel de Windows con esta misma cuenta y esperá la sincronización.</div>"); b.Append("</div>").Append(AuthShellEnd()); Write(stream,200,"text/html; charset=utf-8",b.ToString());
+            string view=(QueryValue(query,"view")??"").Trim().ToLowerInvariant();
+            List<XElement> products; List<XElement> orders; List<XElement> promotions;
+            lock(_sync)
+            {
+                XDocument cd=LoadFile(_catalogFile,"NexoMarketCatalog","Products");
+                products=cd.Root.Element("Products")==null?new List<XElement>():cd.Root.Element("Products").Elements("Product").Where(x=>S(x,"StoreId")==u.StoreId).OrderBy(x=>S(x,"Name")).ToList();
+                promotions=cd.Root.Element("Promotions")==null?new List<XElement>():cd.Root.Element("Promotions").Elements("Promotion").Where(x=>S(x,"StoreId")==u.StoreId).OrderByDescending(x=>S(x,"From")).ToList();
+                XDocument od=LoadFile(_ordersFile,"NexoMarketOrders","Orders");
+                orders=od.Root.Element("Orders")==null?new List<XElement>():od.Root.Element("Orders").Elements("Order").Where(x=>S(x,"StoreId")==u.StoreId).OrderByDescending(x=>S(x,"CreatedAt")).ToList();
+            }
+            StringBuilder b=new StringBuilder(AuthShellStart("Seller Center · NexoMarket"));
+            b.Append(SellerCenterCss());
+            b.Append("<header class='sc-top'><div class='brand'><span>NEXO</span>MARKET <small>SELLER CENTER</small></div><div class='top-actions'><a href='/' class='btn ghost'>Tiendas</a><a href='/store/"+Uri.EscapeDataString(u.StoreId??"")+"' class='btn ghost'>Mi tienda</a><a href='/logout' class='btn ghost'>Salir</a></div></header>");
+            b.Append("<aside class='sc-side'><div class='account-box'><div class='avatar'>"+E((u.Name??"V").Length>0?(u.Name??"V").Substring(0,1).ToUpperInvariant():"V")+"</div><b>"+E(u.Name)+"</b><small>"+E(u.Email)+"</small><small>Store ID: "+E(u.StoreId)+"</small></div>");
+            b.Append(SellerLink("Resumen","",view)+SellerLink("Pedidos","orders",view)+SellerLink("Productos e inventario","products",view)+SellerLink("Clientes","customers",view)+SellerLink("Analítica","analytics",view)+SellerLink("Finanzas y caja","finance",view)+SellerLink("Marketing","marketing",view)+SellerLink("Reputación","reputation",view)+SellerLink("Herramientas","tools",view)+"</aside>");
+            b.Append("<main class='sc-main'>");
+            b.Append("<div class='welcome'><div><span class='eyebrow'>CENTRAL DE VENTAS</span><h1>Hola, "+E(u.Name)+" 👋</h1><p>Tu Seller Center reúne la información sincronizada desde NexoMarket Windows: ventas, pedidos, productos, clientes, analítica, finanzas y marketing.</p></div><div class='account-mini'><b>CUENTA</b><strong>Vendedor</strong><small>"+E(u.Email)+"</small></div></div>");
+            int pending=orders.Count(x=>S(x,"Status")=="Pendiente"); int delivery=orders.Count(x=>(S(x,"Fulfillment")=="Delivery"||S(x,"Fulfillment")=="En reparto")&&S(x,"Status")!="Entregado"&&S(x,"Status")!="Cancelado");
+            decimal sales=orders.Where(x=>S(x,"Status")!="Cancelado").Sum(x=>Money(S(x,"Total"))); int low=products.Count(x=>Money(S(x,"Stock"))<=Money(S(x,"MinimumStock"))); int customers=orders.Select(x=>S(x,"CustomerEmail").Trim().ToLowerInvariant()).Where(x=>x.Length>0).Distinct().Count();
+            b.Append("<div class='kpis'>"+KpiC("Ventas", "$ "+sales.ToString("N2"), "operaciones válidas", "green")+KpiC("Pedidos pendientes", pending.ToString(), "requieren atención", pending>0?"yellow":"green")+KpiC("Productos", products.Count.ToString(), low+" con stock bajo", low>0?"red":"green")+KpiC("Clientes", customers.ToString(), "compradores únicos", "green")+KpiC("Delivery", delivery.ToString(), "entregas abiertas", delivery>0?"yellow":"green")+"</div>");
+            if(view=="orders") b.Append(SellerOrdersView(orders));
+            else if(view=="products") b.Append(SellerProductsView(products));
+            else if(view=="customers") b.Append(SellerCustomersView(orders));
+            else if(view=="analytics") b.Append(SellerAnalyticsView(orders,products));
+            else if(view=="finance") b.Append(SellerFinanceView(orders));
+            else if(view=="marketing") b.Append(SellerMarketingView(promotions));
+            else if(view=="reputation") b.Append(SellerReputationView(orders));
+            else if(view=="tools") b.Append(SellerToolsView(u,products,orders));
+            else b.Append(SellerSummaryView(orders,products));
+            b.Append("</main>").Append(AuthShellEnd()); Write(stream,200,"text/html; charset=utf-8",b.ToString());
         }
 
-        private void CentralSellerLicense(NetworkStream stream,string cookie,Dictionary<string,string> f)
+        private string SellerLink(string label,string target,string active){return "<a class='sc-link "+(string.Equals(active,target,StringComparison.OrdinalIgnoreCase)?"active":"")+"' href='/seller"+(string.IsNullOrEmpty(target)?"":"?view="+Uri.EscapeDataString(target))+"'>"+label+"</a>";}
+        private string KpiC(string title,string value,string hint,string cls){return "<div class='kpi "+cls+"'><span>"+E(title)+"</span><strong>"+E(value)+"</strong><small>"+E(hint)+"</small></div>";}
+        private decimal Money(string s){decimal v;return decimal.TryParse((s??"").Replace(",","."),System.Globalization.NumberStyles.Any,System.Globalization.CultureInfo.InvariantCulture,out v)?v:0m;}
+        private string SellerSummaryView(List<XElement> orders,List<XElement> products)
         {
-            CentralUser u=SessionUser(cookie); if(u==null||u.Role!="seller"){WriteRedirect(stream,"/login");return;} string token=Get(f,"license").Trim(); string msg=""; if(token.Length==0)msg="Pegá el código/token recibido."; else {Dictionary<string,string> a=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){{"email",u.Email},{"accountId",LicenseAccountId(u.Email)},{"storeId",u.StoreId},{"license",token}};string r=ActivateAccountLicense(a);msg=r.StartsWith("OK|",StringComparison.OrdinalIgnoreCase)?"Licencia activada correctamente.<br>"+E(r):"No se pudo activar: "+E(r);} Write(stream,200,"text/html; charset=utf-8",AuthPage("Licencia", "<h1>Licencia de vendedor</h1><div class='card'>"+msg+"</div><p><a class='btn' href='/seller'>VOLVER AL PANEL</a></p>"));
+            StringBuilder b=new StringBuilder(); b.Append("<div class='section-title'><div><span class='eyebrow'>RESUMEN</span><h2>Actividad del negocio</h2></div><a class='btn ghost' href='/seller?view=orders'>Ver pedidos</a></div><div class='two-col'><section class='card'><h3>Últimos pedidos</h3><table class='table'><tr><th>Pedido</th><th>Cliente</th><th>Total</th><th>Estado</th></tr>");
+            foreach(XElement o in orders.Take(8)) b.Append(OrderRow(o));
+            if(orders.Count==0)b.Append("<tr><td colspan='4' class='muted'>Todavía no hay pedidos web.</td></tr>");
+            b.Append("</table></section><section class='card'><h3>Productos destacados</h3><div class='mini-list'>"); foreach(XElement p in products.Take(8)) b.Append("<div class='mini-row'><div><b>"+E(S(p,"Name"))+"</b><small>SKU "+E(S(p,"SKU"))+" · Stock "+E(S(p,"Stock"))+"</small></div><strong>$ "+Money(S(p,"SalePrice")=="0"?S(p,"Price"):S(p,"SalePrice")).ToString("N0")+"</strong></div>"); if(products.Count==0)b.Append("<p class='muted'>Sin productos sincronizados.</p>"); b.Append("</div></section></div><section class='card'><h3>Acciones rápidas</h3><div class='quick-grid'><a href='/seller?view=products'>📦 Gestionar catálogo e inventario</a><a href='/seller?view=orders'>🧾 Atender pedidos</a><a href='/seller?view=customers'>👥 Ver clientes</a><a href='/seller?view=analytics'>📊 Analizar ventas</a><a href='/seller?view=finance'>💰 Revisar finanzas</a><a href='/seller?view=marketing'>🎯 Marketing y promociones</a></div></section>"); return b.ToString();
+        }
+        private string OrderRow(XElement o){return "<tr><td><b>#"+E(S(o,"CentralOrderId").Length>8?S(o,"CentralOrderId").Substring(0,8):S(o,"CentralOrderId"))+"</b></td><td>"+E(S(o,"CustomerName"))+"<small>"+E(S(o,"CustomerEmail"))+"</small></td><td><b>$ "+Money(S(o,"Total")).ToString("N2")+"</b></td><td>"+BadgeC(S(o,"Status"))+"</td></tr>";}
+        private string BadgeC(string s){string c=(s??"").IndexOf("rech",StringComparison.OrdinalIgnoreCase)>=0||(s??"")=="Cancelado"?"red":(s??"")=="Pendiente"?"yellow":"green";return "<span class='badge "+c+"'>"+E(s)+"</span>";}
+        private string SellerOrdersView(List<XElement> orders)
+        {
+            StringBuilder b=new StringBuilder(); b.Append("<div class='section-title'><div><span class='eyebrow'>OPERACIONES</span><h2>Pedidos y estados</h2><p>Los pedidos hechos desde el marketplace llegan al mismo comercio y pueden actualizarse desde este panel.</p></div></div><section class='card table-wrap'><table class='table'><tr><th>Pedido</th><th>Cliente</th><th>Fecha</th><th>Pago</th><th>Total</th><th>Estado</th><th>Acción</th></tr>");
+            foreach(XElement o in orders){string id=S(o,"CentralOrderId");b.Append("<tr><td><b>#"+E(id.Length>8?id.Substring(0,8):id)+"</b><small>"+E(S(o,"Fulfillment"))+"</small></td><td>"+E(S(o,"CustomerName"))+"<small>"+E(S(o,"CustomerEmail"))+"</small></td><td>"+E(S(o,"CreatedAt"))+"</td><td>"+BadgeC(S(o,"PaymentStatus"))+"</td><td><b>$ "+Money(S(o,"Total")).ToString("N2")+"</b></td><td>"+BadgeC(S(o,"Status"))+"</td><td><form method='post' action='/seller/order-status' class='inline-form'><input type='hidden' name='id' value='"+E(id)+"'/><select name='status'><option>Pendiente</option><option>Preparando</option><option>Listo</option><option>Enviado</option><option>En reparto</option><option>Entregado</option><option>Rechazado</option><option>Cancelado</option></select><button class='btn small' type='submit'>Actualizar</button></form></td></tr>");}
+            if(orders.Count==0)b.Append("<tr><td colspan='7' class='muted'>No hay pedidos sincronizados.</td></tr>"); b.Append("</table></section>"); return b.ToString();
+        }
+        private string SellerProductsView(List<XElement> products)
+        {
+            StringBuilder b=new StringBuilder(); b.Append("<div class='section-title'><div><span class='eyebrow'>CATÁLOGO</span><h2>Productos e inventario</h2><p>Estos datos vienen de NexoMarket Windows y se actualizan automáticamente.</p></div><span class='sync-pill'>● SINCRONIZADO</span></div><section class='card table-wrap'><table class='table'><tr><th>Producto</th><th>SKU</th><th>Precio</th><th>Stock</th><th>Mínimo</th><th>Publicación</th></tr>"); foreach(XElement p in products){decimal stock=Money(S(p,"Stock")),min=Money(S(p,"MinimumStock"));b.Append("<tr><td><b>"+E(S(p,"Name"))+"</b><small>"+E(S(p,"Category"))+" · "+E(S(p,"Brand"))+"</small></td><td>"+E(S(p,"SKU"))+"</td><td>$ "+Money(S(p,"SalePrice")=="0"?S(p,"Price"):S(p,"SalePrice")).ToString("N2")+"</td><td><span class='stock "+(stock<=min?"low":"")+"'>"+stock.ToString("N0")+"</span></td><td>"+min.ToString("N0")+"</td><td>"+(S(p,"OnlineEnabled")=="0"?"Pausado":"Publicado")+"</td></tr>");} if(products.Count==0)b.Append("<tr><td colspan='6' class='muted'>No hay productos sincronizados. Verificá que NexoMarket Windows tenga activada la sincronización central.</td></tr>"); b.Append("</table></section><section class='card'><h3>Inventario</h3><p>La fuente principal de stock sigue siendo el panel de Windows. Cada cambio realizado allí se publica al Seller Center sin cambiar el Store ID.</p></section>"); return b.ToString();
+        }
+        private string SellerCustomersView(List<XElement> orders)
+        {
+            var groups=orders.Where(x=>!string.IsNullOrWhiteSpace(S(x,"CustomerEmail"))).GroupBy(x=>S(x,"CustomerEmail").Trim().ToLowerInvariant()).OrderByDescending(g=>g.Count()).ToList(); StringBuilder b=new StringBuilder(); b.Append("<div class='section-title'><div><span class='eyebrow'>CRM</span><h2>Clientes</h2><p>Compradores que interactuaron con tu tienda online.</p></div></div><section class='card table-wrap'><table class='table'><tr><th>Cliente</th><th>Correo</th><th>Pedidos</th><th>Total comprado</th><th>Última compra</th></tr>"); foreach(var g in groups){XElement last=g.OrderByDescending(x=>S(x,"CreatedAt")).First();b.Append("<tr><td><b>"+E(S(last,"CustomerName"))+"</b></td><td>"+E(g.Key)+"</td><td>"+g.Count()+"</td><td><b>$ "+g.Sum(x=>Money(S(x,"Total"))).ToString("N2")+"</b></td><td>"+E(S(last,"CreatedAt"))+"</td></tr>");} if(groups.Count==0)b.Append("<tr><td colspan='5' class='muted'>Todavía no hay clientes web.</td></tr>"); b.Append("</table></section>"); return b.ToString();
+        }
+        private string SellerAnalyticsView(List<XElement> orders,List<XElement> products){decimal sales=orders.Where(x=>S(x,"Status")!="Cancelado").Sum(x=>Money(S(x,"Total")));decimal avg=orders.Count==0?0:orders.Average(x=>Money(S(x,"Total")));var by=orders.Where(x=>S(x,"Status")!="Cancelado").GroupBy(x=>S(x,"PaymentMethod")).OrderByDescending(g=>g.Sum(z=>Money(S(z,"Total"))));StringBuilder b=new StringBuilder();b.Append("<div class='section-title'><div><span class='eyebrow'>MÉTRICAS</span><h2>Rendimiento del negocio</h2></div></div><div class='two-col'><section class='card'><h3>Indicadores</h3><div class='metric-list'><div>Ventas acumuladas <b>$ "+sales.ToString("N2")+"</b></div><div>Ticket medio <b>$ "+avg.ToString("N2")+"</b></div><div>Operaciones <b>"+orders.Count+"</b></div><div>Productos publicados <b>"+products.Count(x=>S(x,"OnlineEnabled")!="0")+"</b></div></div></section><section class='card'><h3>Medios de pago</h3><table class='table'><tr><th>Medio</th><th>Operaciones</th><th>Total</th></tr>");foreach(var g in by)b.Append("<tr><td>"+E(g.Key)+"</td><td>"+g.Count()+"</td><td><b>$ "+g.Sum(x=>Money(S(x,"Total"))).ToString("N2")+"</b></td></tr>");b.Append("</table></section></div><section class='card'><h3>Oportunidades</h3><div class='insights'><div>📦 Revisá productos con stock bajo antes de que se agoten.</div><div>🎯 Usá promociones para productos con mucho stock y baja rotación.</div><div>👥 Trabajá recompra sobre clientes con más de un pedido.</div></div></section>");return b.ToString();}
+        private string SellerFinanceView(List<XElement> orders){decimal total=orders.Where(x=>S(x,"Status")!="Cancelado").Sum(x=>Money(S(x,"Total")));decimal cash=orders.Where(x=>S(x,"PaymentMethod")=="Efectivo"&&S(x,"Status")!="Cancelado").Sum(x=>Money(S(x,"Total")));decimal mp=orders.Where(x=>S(x,"PaymentMethod")=="Mercado Pago"&&S(x,"Status")!="Cancelado").Sum(x=>Money(S(x,"Total")));decimal tr=orders.Where(x=>S(x,"PaymentMethod")=="Transferencia"&&S(x,"Status")!="Cancelado").Sum(x=>Money(S(x,"Total")));return "<div class='section-title'><div><span class='eyebrow'>FINANZAS</span><h2>Ventas y medios de cobro</h2><p>Resumen central de las operaciones web. La apertura/cierre física de caja continúa en Windows.</p></div></div><div class='kpis mini-kpis'>"+KpiC("Total vendido","$ "+total.ToString("N2"),"operaciones web","green")+KpiC("Efectivo","$ "+cash.ToString("N2"),"ventas","green")+KpiC("Mercado Pago","$ "+mp.ToString("N2"),"ventas","green")+KpiC("Transferencias","$ "+tr.ToString("N2"),"ventas","green")+"</div><section class='card'><h3>Conciliación</h3><p>Los números del Seller Center se alimentan de los pedidos centralizados. La caja de mostrador, apertura, arqueo y retenciones se mantienen sincronizados desde NexoMarket Windows.</p></section>";}
+        private string SellerMarketingView(List<XElement> promotions){StringBuilder b=new StringBuilder();b.Append("<div class='section-title'><div><span class='eyebrow'>CRECIMIENTO</span><h2>Marketing y promociones</h2><p>Promociones publicadas desde NexoMarket Windows.</p></div></div><section class='card table-wrap'><table class='table'><tr><th>Promoción</th><th>Precio</th><th>Estado</th><th>Vigencia</th></tr>");foreach(XElement p in promotions)b.Append("<tr><td><b>"+E(S(p,"Name"))+"</b></td><td>$ "+Money(S(p,"PromotionalPrice")).ToString("N2")+"</td><td>"+BadgeC(S(p,"Active")=="0"?"Pausada":"Activa")+"</td><td>"+E(S(p,"From"))+" → "+E(S(p,"To"))+"</td></tr>");if(promotions.Count==0)b.Append("<tr><td colspan='4' class='muted'>No hay promociones sincronizadas.</td></tr>");b.Append("</table></section>");return b.ToString();}
+        private string SellerReputationView(List<XElement> orders){int delivered=orders.Count(x=>S(x,"Status")=="Entregado"),cancel=orders.Count(x=>S(x,"Status")=="Cancelado"||S(x,"Status")=="Rechazado");return "<div class='section-title'><div><span class='eyebrow'>REPUTACIÓN</span><h2>Salud de la operación</h2><p>Indicadores construidos con pedidos centralizados.</p></div></div><div class='kpis mini-kpis'>"+KpiC("Entregados",delivered.ToString(),"pedidos finalizados","green")+KpiC("Cancelados/Rechazados",cancel.ToString(),"incidencias","red")+KpiC("Pendientes",orders.Count(x=>S(x,"Status")=="Pendiente").ToString(),"atención","yellow")+"</div><section class='card'><h3>Buenas prácticas</h3><div class='insights'><div>🟢 Actualizá estados rápidamente para que el comprador vea el seguimiento.</div><div>🟡 Mantené stock y precios sincronizados con Windows.</div><div>🔴 Revisá pedidos rechazados o cancelados para detectar problemas.</div></div></section>";}
+        private string SellerToolsView(CentralUser u,List<XElement> products,List<XElement> orders){return "<div class='section-title'><div><span class='eyebrow'>HERRAMIENTAS</span><h2>Herramientas del vendedor</h2><p>Accesos rápidos para operar tu cuenta centralizada.</p></div></div><div class='quick-grid'><a href='/store/"+Uri.EscapeDataString(u.StoreId??"")+"'>🌐 Ver escaparate público</a><a href='/seller?view=products'>📦 Catálogo ("+products.Count+")</a><a href='/seller?view=orders'>🧾 Pedidos ("+orders.Count+")</a><a href='/seller?view=customers'>👥 Clientes</a><a href='/seller?view=analytics'>📊 Analítica</a><a href='/seller?view=finance'>💰 Finanzas</a></div><section class='card'><h3>Sincronización</h3><p>La PC con NexoMarket Windows publica productos, promociones, cuentas y recibe pedidos del marketplace cada 30 segundos. El Store ID identifica al comercio y evita cambiar IP por cliente.</p><div class='sync-pill'>● CUENTA: "+E(u.Email)+"</div></section>";}
+        private string SellerCenterCss(){return "<style>body{font-family:'Segoe UI',Arial,sans-serif;background:#070b10;color:#fff;margin:0}.wrap{max-width:1500px;margin:auto;padding:18px}.sc-top{display:flex;justify-content:space-between;align-items:center;padding:8px 0 18px}.brand{font-weight:900;font-size:23px}.brand span{color:#39ff66}.brand small{color:#8292a3;font-size:10px;letter-spacing:2px;margin-left:8px}.top-actions{display:flex;gap:8px}.sc-side{position:fixed;width:230px;top:78px;bottom:18px;background:#0c131c;border:1px solid #23364b;border-radius:18px;padding:14px;box-sizing:border-box}.account-box{border-bottom:1px solid #223246;padding:8px 5px 15px;margin-bottom:10px}.avatar{width:42px;height:42px;border-radius:12px;background:#39ff66;color:#061009;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:20px;margin-bottom:8px}.account-box b,.account-box small{display:block}.account-box small{color:#788b9e;margin-top:4px;font-size:11px;word-break:break-word}.sc-link{display:block;color:#a8b8c8;text-decoration:none;padding:11px 12px;border-radius:10px;margin:3px 0;font-weight:700;font-size:13px}.sc-link:hover,.sc-link.active{background:#13221b;color:#39ff66}.sc-main{margin-left:248px}.welcome{display:flex;justify-content:space-between;gap:15px;align-items:center;padding:24px;border:1px solid #26384e;border-radius:20px;background:linear-gradient(135deg,#101923,#0b1118)}.welcome h1{margin:6px 0;font-size:31px}.welcome p,.section-title p,.card p{color:#899bac;line-height:1.5}.account-mini{min-width:180px;padding:14px;border:1px solid #2c445c;border-radius:14px;background:#0b141d}.account-mini b,.account-mini strong,.account-mini small{display:block}.account-mini strong{color:#39ff66;margin:5px 0}.account-mini small{color:#8292a3;word-break:break-word}.eyebrow{color:#39ff66;font-size:10px;letter-spacing:2px;font-weight:900}.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:15px 0}.kpi{padding:17px;border:1px solid #26384e;border-radius:16px;background:#0e1721}.kpi span,.kpi small{display:block;color:#8293a5;font-size:11px}.kpi strong{display:block;font-size:25px;margin:8px 0}.kpi.green{border-top:2px solid #39ff66}.kpi.yellow{border-top:2px solid #ffd34d}.kpi.red{border-top:2px solid #ff5967}.section-title{display:flex;justify-content:space-between;align-items:end;margin:22px 2px 12px}.section-title h2{margin:4px 0}.two-col{display:grid;grid-template-columns:1.3fr .7fr;gap:14px}.card{background:#0e1721;border:1px solid #26384e;border-radius:18px;padding:18px;margin-bottom:14px}.table-wrap{overflow:auto}.table{width:100%;border-collapse:collapse}.table th,.table td{padding:12px 10px;border-bottom:1px solid #223144;text-align:left;font-size:12px;vertical-align:middle}.table th{color:#7f92a6;font-size:10px;text-transform:uppercase;letter-spacing:1px}.table td small{display:block;color:#718397;margin-top:4px}.badge{display:inline-block;padding:5px 8px;border-radius:999px;font-size:10px;font-weight:900}.badge.green{background:#153a22;color:#69ff91}.badge.yellow{background:#403816;color:#ffe36b}.badge.red{background:#401b22;color:#ff7380}.stock.low{color:#ff6572;font-weight:900}.mini-list{display:grid;gap:4px}.mini-row{display:flex;justify-content:space-between;gap:10px;padding:11px;border-bottom:1px solid #223144}.mini-row small{display:block;color:#718397;margin-top:4px}.quick-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.quick-grid a{display:block;text-decoration:none;color:#dce8f2;background:#0a121a;border:1px solid #273b50;border-radius:12px;padding:14px;font-weight:800}.quick-grid a:hover{border-color:#39ff66}.sync-pill{color:#39ff66;font-size:11px;font-weight:900}.inline-form{display:flex;gap:5px}.inline-form select{min-width:115px;background:#0a121a;color:#fff;border:1px solid #2b4056;border-radius:8px;padding:7px}.btn{display:inline-block;background:#39ff66;color:#061009;border:0;border-radius:9px;padding:9px 13px;font-weight:900;text-decoration:none;cursor:pointer}.btn.small{padding:7px 9px;font-size:10px}.btn.ghost{background:#101a24;color:#d9e5ef;border:1px solid #2a4056}.metric-list{display:grid;gap:10px}.metric-list div{padding:12px;border:1px solid #24374b;border-radius:10px;color:#91a1b0}.metric-list b{float:right;color:#fff}.insights{display:grid;gap:8px}.insights div{padding:12px;border-radius:10px;background:#0a121a;border:1px solid #223448}@media(max-width:1050px){.kpis{grid-template-columns:repeat(2,1fr)}.sc-side{position:static;width:auto;margin-bottom:14px}.sc-main{margin-left:0}.two-col{grid-template-columns:1fr}}@media(max-width:650px){.wrap{padding:10px}.welcome,.sc-top{align-items:flex-start;flex-direction:column}.kpis,.quick-grid{grid-template-columns:1fr}.top-actions{flex-wrap:wrap}}</style>";}
+
+        private void CentralSellerOrderStatus(NetworkStream stream,string cookie,Dictionary<string,string> f)
+        {
+            CentralUser u=SessionUser(cookie); if(u==null||u.Role!="seller"){WriteRedirect(stream,"/login");return;}
+            string id=Get(f,"id"), status=Get(f,"status"); string msg="";
+            if(string.IsNullOrWhiteSpace(id)||string.IsNullOrWhiteSpace(status)) msg="Faltan datos del pedido.";
+            else
+            {
+                string result=UpdateOrderStatus(new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){{"storeId",u.StoreId},{"centralOrderId",id},{"status",status}});
+                msg=result.StartsWith("OK|",StringComparison.OrdinalIgnoreCase)?"Estado actualizado correctamente.":"No se pudo actualizar el pedido: "+result;
+            }
+            WriteRedirect(stream,"/seller?view=orders");
         }
 
-        private void CentralBuyer(NetworkStream stream,string cookie)
+        private void CentralBuyer(NetworkStream stream,string cookie,string query)
         {
             CentralUser u=SessionUser(cookie); if(u==null||u.Role!="buyer"){WriteRedirect(stream,"/login");return;}
-            StringBuilder b=new StringBuilder(AuthShellStart("Mi cuenta")); b.Append("<h1>Mi cuenta de comprador</h1><p>Hola, <b>").Append(E(u.Name)).Append("</b>.</p><p>Correo: ").Append(E(u.Email)).Append("</p><p><a class='btn' href='/'>VER TIENDAS</a> <a class='btn alt' href='/logout'>SALIR</a></p><div class='empty'>Tu cuenta de comprador no requiere licencia. Tus compras se asocian a este correo.</div>").Append(AuthShellEnd()); Write(stream,200,"text/html; charset=utf-8",b.ToString());
+            List<CentralStore> stores=new List<CentralStore>(); string lines=StoreLines(query); using(StringReader reader=new StringReader(lines)){string line;while((line=reader.ReadLine())!=null){string[] p=line.Split('|');if(p.Length<12)continue;CentralStore cs=new CentralStore();cs.StoreId=Uri.UnescapeDataString(p[1]);cs.Name=Uri.UnescapeDataString(p[2]);cs.PublicUrl=Uri.UnescapeDataString(p[3]);cs.City=Uri.UnescapeDataString(p[4]);cs.Province=Uri.UnescapeDataString(p[5]);cs.Category=Uri.UnescapeDataString(p[6]);cs.Delivery=Uri.UnescapeDataString(p[10])=="1";cs.Pickup=Uri.UnescapeDataString(p[11])=="1";stores.Add(cs);}}
+            List<XElement> orders=new List<XElement>();lock(_sync){XDocument d=LoadFile(_ordersFile,"NexoMarketOrders","Orders");orders=d.Root.Element("Orders")==null?new List<XElement>():d.Root.Element("Orders").Elements("Order").Where(x=>string.Equals(S(x,"CustomerEmail"),u.Email,StringComparison.OrdinalIgnoreCase)).OrderByDescending(x=>S(x,"CreatedAt")).Take(20).ToList();}
+            StringBuilder b=new StringBuilder(AuthShellStart("Mi cuenta · NexoMarket"));b.Append(SellerCenterCss());b.Append("<header class='sc-top'><div class='brand'><span>NEXO</span>MARKET <small>BUYER CENTER</small></div><div class='top-actions'><a href='/' class='btn ghost'>Explorar tiendas</a><a href='/logout' class='btn ghost'>Salir</a></div></header><main class='buyer-main'><div class='welcome'><div><span class='eyebrow'>CUENTA DE COMPRADOR</span><h1>Hola, "+E(u.Name)+" 👋</h1><p>Encontrá tiendas, comprá y seguí tus pedidos desde una sola cuenta.</p></div><div class='account-mini'><b>Cuenta</b><strong>Activa</strong><small>"+E(u.Email)+"</small></div></div><div class='kpis'>"+KpiC("Pedidos",orders.Count.ToString(),"historial central","green")+KpiC("En proceso",orders.Count(x=>S(x,"Status")!="Entregado"&&S(x,"Status")!="Cancelado").ToString(),"compras abiertas","yellow")+KpiC("Entregados",orders.Count(x=>S(x,"Status")=="Entregado").ToString(),"compras finalizadas","green")+"</div><div class='section-title'><div><span class='eyebrow'>MARKETPLACE</span><h2>Tiendas disponibles</h2><p>Elegí una tienda para ver productos y comprar.</p></div></div><div class='store-grid'>");
+            foreach(CentralStore st in stores)b.Append("<a class='store-card' href='/store/"+Uri.EscapeDataString(st.StoreId)+"'><div class='store-logo'>N</div><div><b>"+E(st.Name)+"</b><small>"+E(st.Category)+" · "+E(st.City)+"</small><span>● Disponible · "+(st.Delivery?"Delivery":"Retiro")+"</span></div></a>");
+            if(stores.Count==0)b.Append("<div class='card'><b>No hay tiendas disponibles todavía.</b><p>Volvé a explorar más tarde.</p></div>");
+            b.Append("</div><div class='section-title'><div><span class='eyebrow'>MIS COMPRAS</span><h2>Últimos pedidos</h2></div></div><section class='card table-wrap'><table class='table'><tr><th>Pedido</th><th>Tienda</th><th>Fecha</th><th>Estado</th><th>Total</th></tr>");
+            foreach(XElement o in orders)b.Append("<tr><td><b>#"+E(S(o,"CentralOrderId").Length>8?S(o,"CentralOrderId").Substring(0,8):S(o,"CentralOrderId"))+"</b></td><td>"+E(S(o,"StoreId"))+"</td><td>"+E(S(o,"CreatedAt"))+"</td><td>"+BadgeC(S(o,"Status"))+"</td><td><b>$ "+Money(S(o,"Total")).ToString("N2")+"</b></td></tr>");
+            if(orders.Count==0)b.Append("<tr><td colspan='5' class='muted'>Todavía no realizaste compras. Entrá a una tienda para comenzar.</td></tr>");
+            b.Append("</table></section></main>");b.Append("<style>.buyer-main{max-width:1200px;margin:auto}.store-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.store-card{display:flex;gap:12px;align-items:center;background:#0e1721;border:1px solid #26384e;border-radius:16px;padding:15px;color:#fff;text-decoration:none}.store-card:hover{border-color:#39ff66}.store-logo{width:48px;height:48px;border-radius:12px;background:#07110a;border:1px solid #2d7042;color:#39ff66;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:23px}.store-card b,.store-card small,.store-card span{display:block}.store-card small{color:#8193a5;margin-top:4px}.store-card span{color:#39ff66;font-size:10px;margin-top:6px}@media(max-width:800px){.store-grid{grid-template-columns:1fr}}</style>");b.Append(AuthShellEnd());Write(stream,200,"text/html; charset=utf-8",b.ToString());
         }
 
         private string AuthPage(string title,string content){return "<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>"+E(title)+" · NexoMarket</title><style>"+AuthCss()+"</style></head><body><div class='wrap'>"+content+"</div></body></html>";}
@@ -1008,8 +942,8 @@ namespace NexoMarket.CentralServer
 
         private sealed class CentralUser
         {
-            public string Id="",Name="",Email="",Phone="",Role="buyer",StoreId="",Salt="",PasswordHash="",TrialStartedUtc="",TrialExpiresUtc="",LicenseStatus="";
-            public static CentralUser From(XElement e){return new CentralUser{Id=S(e,"Id"),Name=S(e,"Name"),Email=S(e,"Email"),Phone=S(e,"Phone"),Role=S(e,"Role")=="seller"?"seller":"buyer",StoreId=S(e,"StoreId"),Salt=S(e,"Salt"),PasswordHash=S(e,"PasswordHash"),TrialStartedUtc=S(e,"TrialStartedUtc"),TrialExpiresUtc=S(e,"TrialExpiresUtc"),LicenseStatus=S(e,"LicenseStatus")};}
+            public string Id="",Name="",Email="",Phone="",Role="buyer",StoreId="",Salt="",PasswordHash="";
+            public static CentralUser From(XElement e){return new CentralUser{Id=S(e,"Id"),Name=S(e,"Name"),Email=S(e,"Email"),Phone=S(e,"Phone"),Role=S(e,"Role")=="seller"?"seller":"buyer",StoreId=S(e,"StoreId"),Salt=S(e,"Salt"),PasswordHash=S(e,"PasswordHash")};}
         }
         private sealed class CentralStore
         {

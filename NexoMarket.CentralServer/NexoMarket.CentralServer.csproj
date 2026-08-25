@@ -11,7 +11,6 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="CentralServerService.cs" />
-    <Compile Include="LicenseCore.cs" />
     <Compile Include="R2ObjectStore.cs" />
   </ItemGroup>
   <ItemGroup>

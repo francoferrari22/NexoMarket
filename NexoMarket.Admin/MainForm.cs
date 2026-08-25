@@ -145,6 +145,7 @@ namespace NexoMarket.Admin
             AddNavGroup("CANALES");
             AddNav("🌐   Tienda online", "Configuración", BuildSettings);
             AddNavAction("🌐   Servidor web", "Servidor web", OpenWebServer);
+            AddNavAction("👤   Cuenta vendedor", "Cuenta vendedor", OpenSellerAccount);
             AddNav("📱  Android", "Android", BuildAndroid);
             AddNavGroup("SISTEMA");
             AddNav("⚙   Configuración", "Configuración", BuildSettings);
@@ -289,6 +290,17 @@ namespace NexoMarket.Admin
                 Padding = new Padding(12, 8, 0, 0), Margin = new Padding(0, 8, 0, 1)
             };
             _navPanel.Controls.Add(label);
+        }
+
+        private void OpenSellerAccount()
+        {
+            using (SellerAccountForm form = new SellerAccountForm(_store))
+            {
+                if (form.ShowDialog(this) == DialogResult.OK)
+                {
+                    MessageBox.Show("Cuenta de vendedor guardada y vinculada a esta tienda. La sincronización central se ejecutará automáticamente.", "NexoMarket", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
         }
 
         private void AddNavAction(string text, string title, Action action)
@@ -1986,12 +1998,14 @@ namespace NexoMarket.Admin
             TextBox apiUrl=FieldInPanel(web,"URL de API / sincronización",_store.GetSetting("web_api_url","https://nexomarket-central.onrender.com"),88);
             string linkedSellerEmail = _store.GetSetting("seller_account_email","");
             TextBox sellerEmail=FieldInPanel(web,"Correo de cuenta de vendedor vinculada",linkedSellerEmail,154);
-            sellerEmail.ReadOnly = !string.IsNullOrWhiteSpace(linkedSellerEmail);
+            sellerEmail.ReadOnly = true;
+            Button accountButton=Theme.Secondary(string.IsNullOrWhiteSpace(linkedSellerEmail)?"CREAR CUENTA DE VENDEDOR":"GESTIONAR CUENTA DE VENDEDOR"); accountButton.Location=new Point(460,154); accountButton.Width=230;
+            accountButton.Click+=delegate{using(SellerAccountForm f=new SellerAccountForm(_store)){if(f.ShowDialog(this)==DialogResult.OK){sellerEmail.Text=_store.GetSetting("seller_account_email","");accountButton.Text="GESTIONAR CUENTA DE VENDEDOR";}}}; web.Controls.Add(accountButton);
             if (sellerEmail.ReadOnly) sellerEmail.BackColor = Theme.Background;
             CheckBox publish= new CheckBox { Text="Sincronización web habilitada", Checked=_store.GetSetting("web_sync_enabled","0")=="1", ForeColor=Theme.Text, Location=new Point(22,220), AutoSize=true }; web.Controls.Add(publish);
             Label webHelp=new Label { Text="La web principal muestra TIENDAS, no productos. Cada instalación se registra por StoreId en el servidor central. El comprador entra primero a la tienda y recién allí ve categorías y productos. Las coordenadas GPS permiten ordenar por cercanía.\r\nLa exportación local crea WebCatalog\\catalog.json como respaldo del catálogo.", AutoSize=false, Width=700, Height=70, ForeColor=Theme.Muted, Font=Theme.Font(9,FontStyle.Regular), Location=new Point(22,190) }; web.Controls.Add(webHelp);
-            Button exportWeb=Theme.Primary("EXPORTAR CATÁLOGO WEB"); exportWeb.Location=new Point(22,335); exportWeb.Width=220; exportWeb.Click+=delegate{try{_store.SetSetting("web_public_url",publicUrl.Text.Trim());_store.SetSetting("web_api_url",apiUrl.Text.Trim());if (string.IsNullOrWhiteSpace(_store.GetSetting("seller_account_email","")) && !string.IsNullOrWhiteSpace(sellerEmail.Text.Trim())) { _store.SetSetting("seller_account_email",sellerEmail.Text.Trim()); _store.SetSetting("seller_account_locked","1"); }_store.SetSetting("web_sync_enabled",publish.Checked?"1":"0");string path=new WebCatalogExporter(_store).Export();MessageBox.Show("Catálogo web actualizado:\r\n"+path,"NexoMarket",MessageBoxButtons.OK,MessageBoxIcon.Information);}catch(Exception ex){MessageBox.Show("No se pudo exportar el catálogo.\r\n"+ex.Message,"NexoMarket",MessageBoxButtons.OK,MessageBoxIcon.Error);}}; web.Controls.Add(exportWeb);
-            Button saveWeb=Theme.Secondary("GUARDAR CONFIGURACIÓN WEB"); saveWeb.Location=new Point(260,335); saveWeb.Width=220; saveWeb.Click+=delegate{_store.SetSetting("web_public_url",publicUrl.Text.Trim());_store.SetSetting("web_api_url",apiUrl.Text.Trim());if (string.IsNullOrWhiteSpace(_store.GetSetting("seller_account_email","")) && !string.IsNullOrWhiteSpace(sellerEmail.Text.Trim())) { _store.SetSetting("seller_account_email",sellerEmail.Text.Trim()); _store.SetSetting("seller_account_locked","1"); }_store.SetSetting("web_sync_enabled",publish.Checked?"1":"0");MessageBox.Show("Configuración web guardada.","NexoMarket",MessageBoxButtons.OK,MessageBoxIcon.Information);}; web.Controls.Add(saveWeb);
+            Button exportWeb=Theme.Primary("EXPORTAR CATÁLOGO WEB"); exportWeb.Location=new Point(22,335); exportWeb.Width=220; exportWeb.Click+=delegate{try{_store.SetSetting("web_public_url",publicUrl.Text.Trim());_store.SetSetting("web_api_url",apiUrl.Text.Trim());_store.SetSetting("web_sync_enabled",publish.Checked?"1":"0");string path=new WebCatalogExporter(_store).Export();MessageBox.Show("Catálogo web actualizado:\r\n"+path,"NexoMarket",MessageBoxButtons.OK,MessageBoxIcon.Information);}catch(Exception ex){MessageBox.Show("No se pudo exportar el catálogo.\r\n"+ex.Message,"NexoMarket",MessageBoxButtons.OK,MessageBoxIcon.Error);}}; web.Controls.Add(exportWeb);
+            Button saveWeb=Theme.Secondary("GUARDAR CONFIGURACIÓN WEB"); saveWeb.Location=new Point(260,335); saveWeb.Width=220; saveWeb.Click+=delegate{_store.SetSetting("web_public_url",publicUrl.Text.Trim());_store.SetSetting("web_api_url",apiUrl.Text.Trim());_store.SetSetting("web_sync_enabled",publish.Checked?"1":"0");MessageBox.Show("Configuración web guardada.","NexoMarket",MessageBoxButtons.OK,MessageBoxIcon.Information);}; web.Controls.Add(saveWeb);
             tabs.TabPages.Add(web);
             TabPage arca=Tab("Facturación ARCA");
             TextBox cuit=FieldInPanel(arca,"CUIT emisor",_store.GetSetting("arca_cuit",""),18);

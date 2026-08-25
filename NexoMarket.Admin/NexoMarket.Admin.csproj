@@ -40,7 +40,6 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
-    <Compile Include="LicenseCore.cs" />
     <Compile Include="Models\Models.cs" />
     <Compile Include="Data\AppDataStore.cs" />
     <Compile Include="Data\WebCatalogExporter.cs" />
@@ -56,8 +55,6 @@
     <Compile Include="UI\WebServerService.cs" />
     <Compile Include="UI\StoreDirectoryClient.cs" />
     <Compile Include="UI\CentralSyncService.cs" />
-    <Compile Include="UI\LicenseService.cs" />
-    <Compile Include="UI\LicenseGateForm.cs" />
     <Compile Include="UI\WebServerForm.cs" />
     <Compile Include="MainForm.cs" />
   </ItemGroup>

@@ -6,8 +6,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NexoMarket.Admin", "NexoMar
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NexoMarket.CentralServer", "NexoMarket.CentralServer\NexoMarket.CentralServer.csproj", "{D8D3F5A4-5D0B-4D4A-9B9A-4E8A7C3E5D11}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NexoMarket License Manager", "NexoMarket.LicenseManager\NexoMarket.LicenseManager.csproj", "{B2C5D5C4-5A2D-4EAA-8D4B-7E2F7A7A4101}"
-EndProject
 Global
     GlobalSection(SolutionConfigurationPlatforms) = preSolution
         Debug|Any CPU = Debug|Any CPU
@@ -22,9 +20,5 @@ Global
         {D8D3F5A4-5D0B-4D4A-9B9A-4E8A7C3E5D11}.Debug|Any CPU.Build.0 = Debug|Any CPU
         {D8D3F5A4-5D0B-4D4A-9B9A-4E8A7C3E5D11}.Release|Any CPU.ActiveCfg = Release|Any CPU
         {D8D3F5A4-5D0B-4D4A-9B9A-4E8A7C3E5D11}.Release|Any CPU.Build.0 = Release|Any CPU
-        {B2C5D5C4-5A2D-4EAA-8D4B-7E2F7A7A4101}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-        {B2C5D5C4-5A2D-4EAA-8D4B-7E2F7A7A4101}.Debug|Any CPU.Build.0 = Debug|Any CPU
-        {B2C5D5C4-5A2D-4EAA-8D4B-7E2F7A7A4101}.Release|Any CPU.ActiveCfg = Release|Any CPU
-        {B2C5D5C4-5A2D-4EAA-8D4B-7E2F7A7A4101}.Release|Any CPU.Build.0 = Release|Any CPU
     EndGlobalSection
 EndGlobal

@@ -117,31 +117,43 @@ namespace NexoMarket.Admin.UI
             if (_register)
             {
                 if (_repeat == null || password != _repeat.Text) { Fail("Las contraseñas no coinciden."); return; }
-                if (!string.IsNullOrWhiteSpace(_store.GetSetting("seller_account_email", "")) && !string.Equals(_store.GetSetting("seller_account_email", "").Trim(), email, StringComparison.OrdinalIgnoreCase))
-                { Fail("Esta instalación ya tiene una cuenta de vendedor vinculada: " + _store.GetSetting("seller_account_email", "")); return; }
+                string linkedEmail = (_store.GetSetting("seller_account_email", "") ?? "").Trim();
+                if (!string.IsNullOrWhiteSpace(linkedEmail) && !string.Equals(linkedEmail, email, StringComparison.OrdinalIgnoreCase))
+                { Fail("Esta instalación ya tiene una cuenta de vendedor vinculada: " + linkedEmail + ". Cerrá sesión desde NexoMarket y desvinculá la cuenta si querés usar otra."); return; }
 
                 WebUser existing = _store.FindWebUser(email);
                 if (existing != null)
                 {
                     if (existing.Role != "seller") { Fail("Ese correo ya pertenece a una cuenta de comprador. Usá otro correo para la cuenta de vendedor."); return; }
+                    if (!_store.VerifyWebUser(email, password, out existing)) { Fail("El correo ya está registrado pero la contraseña no coincide."); return; }
+                    string targetStore = string.IsNullOrWhiteSpace(existing.StoreId) ? _store.StoreId : existing.StoreId;
+                    if (string.IsNullOrWhiteSpace(targetStore)) { Fail("No se pudo asignar el identificador de la tienda. Reiniciá NexoMarket e intentá nuevamente."); return; }
+                    if (!string.Equals(existing.StoreId, targetStore, StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Completa cuentas antiguas que quedaron sin StoreId.
+                        _store.UpdateWebUserStore(existing.Id, targetStore);
+                        existing.StoreId = targetStore;
+                    }
+                    if (!string.Equals(existing.StoreId, _store.StoreId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Al iniciar una cuenta existente, se conserva la tienda asociada a esa cuenta.
+                        _store.SetSetting("store_id", existing.StoreId);
+                    }
                     _store.SetSetting("seller_account_email", email);
                     _store.SetSetting("seller_account_name", existing.Name ?? "");
-                    if (!string.IsNullOrWhiteSpace(existing.StoreId) && _store.VerifyWebUser(email, password, out existing))
-                    {
-                        // La cuenta es la identidad del vendedor. Si se abre en otra PC,
-                        // se adopta el Store ID de la cuenta para conservar la misma tienda.
-                        if (!string.Equals(existing.StoreId, _store.StoreId, StringComparison.OrdinalIgnoreCase))
-                            _store.SetSetting("store_id", existing.StoreId);
-                        DialogResult = DialogResult.OK; Close(); return;
-                    }
-                    Fail("El correo ya está registrado. Cambiá a 'Iniciar sesión' para entrar."); return;
+                    new CentralSyncService(_store).PublishAccountNow(existing);
+                    DialogResult = DialogResult.OK; Close(); return;
                 }
 
                 string salt = AuthService.CreateSalt();
-                WebUser user = new WebUser { Name = (_name == null ? "" : _name.Text.Trim()), Email = email, Role = "seller", StoreId = _store.StoreId, Salt = salt, PasswordHash = AuthService.HashPassword(password, salt), CreatedAt = DateTime.Now };
+                string storeId = _store.StoreId;
+                if (string.IsNullOrWhiteSpace(storeId)) { Fail("La tienda todavía no tiene StoreId. Reiniciá NexoMarket para generarlo automáticamente."); return; }
+                WebUser user = new WebUser { Name = (_name == null ? "" : _name.Text.Trim()), Email = email, Role = "seller", StoreId = storeId, Salt = salt, PasswordHash = AuthService.HashPassword(password, salt), CreatedAt = DateTime.Now };
                 if (!_store.CreateWebUser(user)) { Fail("No se pudo crear la cuenta. Revisá los datos e intentá nuevamente."); return; }
                 _store.SetSetting("seller_account_email", email);
                 _store.SetSetting("seller_account_name", user.Name ?? "");
+                // Publicación inmediata: la cuenta aparece en el servidor central sin esperar al ciclo de 30 segundos.
+                new CentralSyncService(_store).PublishAccountNow(user);
                 DialogResult = DialogResult.OK; Close(); return;
             }
 

@@ -47,14 +47,7 @@ namespace NexoMarket.Admin
                 {
                     if (login.ShowDialog() != DialogResult.OK)
                         return;
-
-                    using (var license = new LicenseGateForm(store))
-                    {
-                        if (license.ShowDialog() != DialogResult.OK)
-                            return;
-                    }
-
-                    Application.Run(new MainForm(store));
+Application.Run(new MainForm(store));
                 }
             }
             catch (Exception ex)

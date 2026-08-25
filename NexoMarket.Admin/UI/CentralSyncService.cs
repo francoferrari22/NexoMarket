@@ -18,10 +18,9 @@ namespace NexoMarket.Admin.UI
     public sealed class CentralSyncService : IDisposable
     {
         private readonly AppDataStore _store;
-        private readonly LicenseService _license;
         private Timer _timer;
         private volatile bool _busy;
-        public CentralSyncService(AppDataStore store) { _store = store; _license = new LicenseService(store.Root); }
+        public CentralSyncService(AppDataStore store) { _store = store; }
         public void Start()
         {
             if (_timer != null) return;
@@ -37,7 +36,6 @@ namespace NexoMarket.Admin.UI
                 string configuredUrl = (_store.GetSetting("web_api_url", "") ?? "").Trim();
                 if (string.IsNullOrWhiteSpace(configuredUrl) || configuredUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0) configuredUrl = "https://nexomarket-central.onrender.com";
                 string baseUrl = Normalize(configuredUrl);
-                if (baseUrl.Length > 0) _license.RefreshFromServer(baseUrl);
                 if (baseUrl.Length == 0) return;
                 PublishStore(baseUrl);
                 PublishAccounts(baseUrl);
@@ -71,6 +69,20 @@ namespace NexoMarket.Admin.UI
         private bool Enabled() { return true; }
         private bool AlreadyImported(string id) { foreach (Order o in _store.GetOrders("")) if (string.Equals(o.CentralOrderId,id,StringComparison.OrdinalIgnoreCase)) return true; return false; }
         private void PublishStore(string baseUrl) { try { new StoreDirectoryClient(_store).PublishStore(_store.GetSetting("web_public_url","")); } catch { } }
+
+        public bool PublishAccountNow(WebUser user)
+        {
+            try
+            {
+                string configuredUrl = (_store.GetSetting("web_api_url", "") ?? "").Trim();
+                if (string.IsNullOrWhiteSpace(configuredUrl) || configuredUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0) configuredUrl = "https://nexomarket-central.onrender.com";
+                string baseUrl = Normalize(configuredUrl);
+                if (baseUrl.Length == 0 || user == null) return false;
+                string response = Request(baseUrl+"/api/accounts/upsert","POST",Form(new Dictionary<string,string>{{"id",user.Id.ToString(CultureInfo.InvariantCulture)},{"name",user.Name},{"email",user.Email},{"phone",user.Phone},{"role",user.Role},{"storeId",user.StoreId},{"salt",user.Salt},{"passwordHash",user.PasswordHash},{"createdAt",user.CreatedAt.ToUniversalTime().ToString("o")}}));
+                return response.StartsWith("OK|",StringComparison.OrdinalIgnoreCase);
+            }
+            catch { return false; }
+        }
 
         private void PublishAccounts(string baseUrl)
         {

@@ -21,12 +21,10 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 
 [Files]
 Source: "..\NexoMarket.Admin\SALIDA\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\NexoMarket.LicenseManager\SALIDA\*"; DestDir: "{app}\LicenseManager"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\NexoMarket Admin"; Filename: "{app}\{#MyAppExeName}"
 Name: "{userdesktop}\NexoMarket Admin"; Filename: "{app}\{#MyAppExeName}"
-Name: "{group}\NexoMarket License Manager"; Filename: "{app}\LicenseManager\NexoMarket License Manager.exe"
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Abrir NexoMarket Admin"; Flags: nowait postinstall skipifsilent

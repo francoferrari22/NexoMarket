@@ -842,6 +842,16 @@ namespace NexoMarket.Admin.Data
                 RecoveryCode = S(e,"RecoveryCode"), RecoveryExpires = recoveryExpires, CreatedAt = D(e,"CreatedAt") };
         }
 
+        public bool UpdateWebUserStore(long userId, string storeId)
+        {
+            if (string.IsNullOrWhiteSpace(storeId)) return false;
+            XElement e = _doc.Root.Element("WebUsers").Elements("WebUser").FirstOrDefault(x => (long)x.Attribute("Id") == userId);
+            if (e == null) return false;
+            e.SetElementValue("StoreId", storeId);
+            Save();
+            return true;
+        }
+
         public bool VerifyWebUser(string email, string password, out WebUser user)
         {
             user = FindWebUser(email);
