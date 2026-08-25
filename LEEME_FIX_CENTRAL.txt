@@ -1,0 +1,12 @@
+NexoMarket 5.0.2 - Corrección de conexión al Central Render
+
+Esta versión apunta al Central correcto:
+https://nexomarket-0k22.onrender.com
+
+Si ya tienes NexoMarket instalado en Windows y quieres la forma más fácil:
+1. Copia FIX_CENTRAL_RENDER.bat a la carpeta donde está NexoMarket.exe.
+2. Haz doble clic en FIX_CENTRAL_RENDER.bat.
+3. Abre NexoMarket nuevamente.
+4. En Cuenta central, prueba CREAR / CONECTAR CUENTA CENTRAL.
+
+No cambies PostgreSQL ni vuelvas a desplegar Render para esta corrección.
