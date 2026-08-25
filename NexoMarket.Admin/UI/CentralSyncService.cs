@@ -20,11 +20,12 @@ namespace NexoMarket.Admin.UI
         private readonly AppDataStore _store;
         private Timer _timer;
         private volatile bool _busy;
+        private const string DefaultCentralUrl = "https://nexomarket-central.onrender.com";
         public CentralSyncService(AppDataStore store) { _store = store; }
         public void Start()
         {
             if (_timer != null) return;
-            _timer = new Timer(delegate { SyncOnce(); }, null, 3000, 5000);
+            _timer = new Timer(delegate { SyncOnce(); }, null, 2000, 3000);
         }
         public void Dispose() { if (_timer != null) { try { _timer.Dispose(); } catch { } _timer = null; } }
         public void SyncOnce()
@@ -102,7 +103,7 @@ namespace NexoMarket.Admin.UI
                 if (id.Length == 0) return false;
                 string configuredUrl = (_store.GetSetting("web_api_url", "") ?? "").Trim();
                 if (IsLegacyLocalUrl(configuredUrl) || string.IsNullOrWhiteSpace(configuredUrl) || configuredUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0)
-                    configuredUrl = "https://nexomarket-central.onrender.com";
+                    configuredUrl = GetCentralUrl();
                 string baseUrl = Normalize(configuredUrl);
                 if (baseUrl.Length == 0) return false;
                 string health = Request(baseUrl + "/health", "GET", null);
@@ -116,8 +117,42 @@ namespace NexoMarket.Admin.UI
                 if (p.Length < 5 || !string.Equals(p[0], "OK", StringComparison.OrdinalIgnoreCase))
                 {
                     string reason = p.Length > 1 ? Decode(p[1]) : "no_response";
-                    _store.SetSetting("central_sync_last_error", "store_connect:" + reason);
-                    return false;
+                    // Si la tienda fue creada en Windows y todavía no llegó al Central,
+                    // la vinculamos por StoreId. No se pide correo ni contraseña.
+                    if (string.Equals(reason, "store_not_found", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string bootstrapKey = (_store.GetSetting("central_sync_key", "") ?? "").Trim();
+                        if (bootstrapKey.Length < 16) { bootstrapKey = Guid.NewGuid().ToString("N"); _store.SetSetting("central_sync_key", bootstrapKey); }
+                        string claim = Request(baseUrl + "/api/stores/claim", "POST", Form(new Dictionary<string,string>
+                        {
+                            {"storeId", id}, {"syncKey", bootstrapKey},
+                            {"name", _store.GetSetting("store_name", "Tienda NexoMarket")},
+                            {"legalName", _store.GetSetting("store_legal_name", "")},
+                            {"category", _store.GetSetting("store_category", "Comercio")},
+                            {"address", _store.GetSetting("store_address", "")},
+                            {"city", _store.GetSetting("store_city", "")},
+                            {"province", _store.GetSetting("store_province", "")},
+                            {"description", _store.GetSetting("store_description", "Tienda NexoMarket")},
+                            {"logo", _store.GetSetting("store_logo", "")},
+                            {"slug", _store.GetSetting("store_slug", "")},
+                            {"publicUrl", _store.GetSetting("web_public_url", "")},
+                            {"delivery", _store.GetSetting("delivery_enabled", "1")},
+                            {"pickup", _store.GetSetting("pickup_enabled", "1")},
+                            {"latitude", _store.GetSetting("store_latitude", "")},
+                            {"longitude", _store.GetSetting("store_longitude", "")}
+                        }));
+                        if (claim != null && claim.StartsWith("OK|", StringComparison.OrdinalIgnoreCase))
+                        {
+                            response = Request(baseUrl + "/api/stores/connect?storeId=" + Uri.EscapeDataString(id), "GET", null);
+                            p = (response ?? "").Split('|');
+                        }
+                    }
+                    if (p.Length < 5 || !string.Equals(p[0], "OK", StringComparison.OrdinalIgnoreCase))
+                    {
+                        reason = p.Length > 1 ? Decode(p[1]) : "no_response";
+                        _store.SetSetting("central_sync_last_error", "store_connect:" + reason);
+                        return false;
+                    }
                 }
                 if (!string.Equals(Decode(p[1]), id, StringComparison.OrdinalIgnoreCase)) return false;
                 storeName = Decode(p[2]);
@@ -177,7 +212,7 @@ namespace NexoMarket.Admin.UI
             try
             {
                 string configuredUrl = (_store.GetSetting("web_api_url", "") ?? "").Trim();
-                if (IsLegacyLocalUrl(configuredUrl) || string.IsNullOrWhiteSpace(configuredUrl) || configuredUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0) configuredUrl = "https://nexomarket-central.onrender.com";
+                if (IsLegacyLocalUrl(configuredUrl) || string.IsNullOrWhiteSpace(configuredUrl) || configuredUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0) configuredUrl = GetCentralUrl();
                 string baseUrl = Normalize(configuredUrl);
                 if (baseUrl.Length == 0 || user == null) return false;
                 // Publicar primero la tienda para que el servidor pueda validar la relación cuenta -> StoreId.
@@ -253,7 +288,7 @@ namespace NexoMarket.Admin.UI
             try
             {
                 string configuredUrl = (_store.GetSetting("web_api_url", "") ?? "").Trim();
-                if (IsLegacyLocalUrl(configuredUrl) || string.IsNullOrWhiteSpace(configuredUrl) || configuredUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0) configuredUrl = "https://nexomarket-central.onrender.com";
+                if (IsLegacyLocalUrl(configuredUrl) || string.IsNullOrWhiteSpace(configuredUrl) || configuredUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0) configuredUrl = GetCentralUrl();
                 string baseUrl = Normalize(configuredUrl);
                 string response = Request(baseUrl + "/api/accounts/auth", "POST", Form(new Dictionary<string,string>
                 { {"email", (email ?? "").Trim().ToLowerInvariant()}, {"password", password ?? ""} }));
@@ -306,7 +341,7 @@ namespace NexoMarket.Admin.UI
         {
             string configuredUrl = (_store.GetSetting("web_api_url", "") ?? "").Trim();
             if (IsLegacyLocalUrl(configuredUrl) || string.IsNullOrWhiteSpace(configuredUrl) || configuredUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0)
-                configuredUrl = "https://nexomarket-central.onrender.com";
+                configuredUrl = GetCentralUrl();
             return Normalize(configuredUrl);
         }
 
@@ -368,6 +403,21 @@ namespace NexoMarket.Admin.UI
         /// Detecta endpoints antiguos/locales para evitar que una instalación de Windows
         /// siga sincronizando contra localhost o una IP LAN en vez del servidor central.
         /// </summary>
+        private static string GetCentralUrl()
+        {
+            try
+            {
+                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "NexoMarketCentral.url");
+                if (File.Exists(path))
+                {
+                    string value = File.ReadAllText(path, Encoding.UTF8).Trim();
+                    if (!string.IsNullOrWhiteSpace(value)) return Normalize(value);
+                }
+            }
+            catch { }
+            return DefaultCentralUrl;
+        }
+
         private static string NormalizeStoreId(string value)
         {
             return (value ?? "").Trim().Replace(" ", "").ToUpperInvariant();
@@ -402,7 +452,7 @@ namespace NexoMarket.Admin.UI
 
         private static string Normalize(string u){string v=(u??"").Trim().TrimEnd('/');if(v.EndsWith("/api",StringComparison.OrdinalIgnoreCase))v=v.Substring(0,v.Length-4).TrimEnd('/');return v;}
         private static string Form(Dictionary<string,string> v){StringBuilder b=new StringBuilder();foreach(KeyValuePair<string,string> x in v){if(b.Length>0)b.Append('&');b.Append(Uri.EscapeDataString(x.Key??""));b.Append('=').Append(Uri.EscapeDataString(x.Value??""));}return b.ToString();}
-        private static string Request(string url,string method,string body){try{ServicePointManager.SecurityProtocol=SecurityProtocolType.Tls12;HttpWebRequest r=(HttpWebRequest)WebRequest.Create(url);r.Method=method;r.Timeout=20000;r.ReadWriteTimeout=20000;r.UserAgent="NexoMarket Central Sync/4.1.23";r.KeepAlive=false;if(method=="POST"){byte[] d=Encoding.UTF8.GetBytes(body??"");r.ContentType="application/x-www-form-urlencoded; charset=utf-8";r.ContentLength=d.Length;using(Stream s=r.GetRequestStream())s.Write(d,0,d.Length);}using(WebResponse x=r.GetResponse())using(StreamReader sr=new StreamReader(x.GetResponseStream(),Encoding.UTF8))return sr.ReadToEnd();}catch(WebException ex){try{if(ex.Response!=null)using(StreamReader sr=new StreamReader(ex.Response.GetResponseStream(),Encoding.UTF8))return sr.ReadToEnd();}catch{}return null;}catch{return null;}}
+        private static string Request(string url,string method,string body){try{ServicePointManager.SecurityProtocol=SecurityProtocolType.Tls12;HttpWebRequest r=(HttpWebRequest)WebRequest.Create(url);r.Method=method;r.Timeout=20000;r.ReadWriteTimeout=20000;r.UserAgent="NexoMarket Central Sync/4.1.24";r.KeepAlive=false;if(method=="POST"){byte[] d=Encoding.UTF8.GetBytes(body??"");r.ContentType="application/x-www-form-urlencoded; charset=utf-8";r.ContentLength=d.Length;using(Stream s=r.GetRequestStream())s.Write(d,0,d.Length);}using(WebResponse x=r.GetResponse())using(StreamReader sr=new StreamReader(x.GetResponseStream(),Encoding.UTF8))return sr.ReadToEnd();}catch(WebException ex){try{if(ex.Response!=null)using(StreamReader sr=new StreamReader(ex.Response.GetResponseStream(),Encoding.UTF8))return sr.ReadToEnd();}catch{}return null;}catch{return null;}}
         private static long ParseLong(string s){long v;return long.TryParse(s,out v)?v:0;}
         private static decimal ParseDecimal(string s){decimal v;return decimal.TryParse(s,NumberStyles.Any,CultureInfo.InvariantCulture,out v)?v:0m;}
         private static DateTime ParseDate(string s){DateTime v;return DateTime.TryParse(s,null,DateTimeStyles.RoundtripKind,out v)?v.ToLocalTime():DateTime.Now;}

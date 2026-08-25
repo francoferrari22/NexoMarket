@@ -15,6 +15,7 @@ namespace NexoMarket.Admin.UI
     public sealed class StoreDirectoryClient
     {
         private readonly AppDataStore _store;
+        private const string DefaultCentralUrl = "https://nexomarket-central.onrender.com";
         public StoreDirectoryClient(AppDataStore store) { _store = store; }
 
         public bool IsConfigured
@@ -164,8 +165,23 @@ namespace NexoMarket.Admin.UI
         {
             string configured = (_store.GetSetting("web_api_url", "") ?? "").Trim();
             if (IsLocalUrl(configured) || string.IsNullOrWhiteSpace(configured) || configured.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0)
-                return "https://nexomarket-central.onrender.com";
+                return GetCentralUrl();
             return configured;
+        }
+
+        private static string GetCentralUrl()
+        {
+            try
+            {
+                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "NexoMarketCentral.url");
+                if (File.Exists(path))
+                {
+                    string value = File.ReadAllText(path, Encoding.UTF8).Trim();
+                    if (!string.IsNullOrWhiteSpace(value)) return Normalize(value);
+                }
+            }
+            catch { }
+            return DefaultCentralUrl;
         }
 
         private static bool IsLocalUrl(string url)
@@ -195,9 +211,11 @@ namespace NexoMarket.Admin.UI
 
         private static string Request(string url, string method, string body)
         {
+            try { ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12; } catch { }
             HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
-            req.Method = method; req.Timeout = 7000; req.ReadWriteTimeout = 7000;
-            req.UserAgent = "NexoMarket/3.5 Windows";
+            req.Method = method; req.Timeout = 20000; req.ReadWriteTimeout = 20000;
+            req.KeepAlive = false; req.UserAgent = "NexoMarket Central Client/4.1.24";
+            req.Expect = null;
             if (method == "POST")
             {
                 byte[] data = Encoding.UTF8.GetBytes(body ?? "");

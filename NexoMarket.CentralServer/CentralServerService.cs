@@ -172,6 +172,7 @@ namespace NexoMarket.CentralServer
                         if (path == "/api/stores/json" && method == "GET") { Write(stream, 200, "application/json; charset=utf-8", StoreJson(query)); return; }
                         if (path == "/api/geocode" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", Geocode(QueryValue(query, "q"))); return; }
                         if (path == "/api/stores/register" && method == "POST") { Write(stream, 200, "text/plain", Register(Form(body))); return; }
+                        if (path == "/api/stores/claim" && method == "POST") { Write(stream, 200, "text/plain; charset=utf-8", ClaimStore(Form(body))); return; }
                         if (path == "/api/products/publish" && method == "POST") { Write(stream, 200, "text/plain", PublishProduct(Form(body))); return; }
                         if (path == "/api/promotions/publish" && method == "POST") { Write(stream, 200, "text/plain", PublishPromotion(Form(body))); return; }
                         if (path == "/api/catalog" && method == "GET") { Write(stream, 200, "application/json; charset=utf-8", CatalogJson(QueryValue(query, "storeId"))); return; }
@@ -295,7 +296,7 @@ namespace NexoMarket.CentralServer
 
         private string Register(Dictionary<string,string> f)
         {
-            string id = Get(f, "storeId").Trim();
+            string id = NormalizeStoreId(Get(f, "storeId"));
             if (string.IsNullOrWhiteSpace(id)) return "ERROR|store_id_required";
             string syncKey = Get(f, "syncKey").Trim();
             if (string.IsNullOrWhiteSpace(syncKey)) return "ERROR|sync_key_required";
@@ -316,6 +317,53 @@ namespace NexoMarket.CentralServer
                 if (old != null) old.ReplaceWith(e); else stores.Add(e);
                 Save();
                 return "OK|registered|" + Escape(id);
+            }
+        }
+
+        /// <summary>
+        /// Bootstrap seguro por StoreId. El StoreId es la credencial de emparejamiento:
+        /// no se solicita correo ni contraseña al programa Windows. Si la tienda todavía
+        /// no fue registrada en Central, se crea con la clave de sincronización enviada
+        /// por la instalación Windows. Si ya existe, nunca reemplaza una clave distinta.
+        /// </summary>
+        private string ClaimStore(Dictionary<string,string> f)
+        {
+            string id = NormalizeStoreId(Get(f, "storeId"));
+            if (id.Length == 0) return "ERROR|store_id_required";
+            string syncKey = Get(f, "syncKey").Trim();
+            if (syncKey.Length < 16) return "ERROR|sync_key_required";
+            lock (_sync)
+            {
+                XElement stores = _doc.Root.Element("Stores");
+                XElement existing = stores.Elements("Store").FirstOrDefault(x => string.Equals(S(x, "StoreId"), id, StringComparison.OrdinalIgnoreCase));
+                if (existing != null)
+                {
+                    string existingKey = S(existing, "SyncKey");
+                    if (!string.IsNullOrWhiteSpace(existingKey) && !string.Equals(existingKey, syncKey, StringComparison.Ordinal))
+                        return "ERROR|store_already_claimed";
+                    if (string.IsNullOrWhiteSpace(existingKey)) existing.SetElementValue("SyncKey", syncKey);
+                    if (string.IsNullOrWhiteSpace(S(existing, "Name"))) existing.SetElementValue("Name", string.IsNullOrWhiteSpace(Get(f,"name")) ? "Tienda NexoMarket" : Get(f,"name"));
+                    if (S(existing,"Active") != "1") existing.SetElementValue("Active", "1");
+                    existing.SetAttributeValue("UpdatedAt", DateTime.UtcNow.ToString("o"));
+                    Save();
+                    return "OK|existing|" + Escape(id);
+                }
+                string name = Get(f,"name").Trim();
+                if (name.Length == 0) name = "Tienda NexoMarket";
+                string slug = Get(f,"slug").Trim();
+                if (slug.Length == 0) slug = Regex.Replace(name.ToLowerInvariant(), "[^a-z0-9]+", "-").Trim('-');
+                XElement store = new XElement("Store", new XAttribute("UpdatedAt", DateTime.UtcNow.ToString("o")),
+                    new XElement("StoreId", id), new XElement("SyncKey", syncKey), new XElement("Name", name),
+                    new XElement("LegalName", Get(f,"legalName")), new XElement("Category", string.IsNullOrWhiteSpace(Get(f,"category")) ? "Comercio" : Get(f,"category")),
+                    new XElement("Address", Get(f,"address")), new XElement("City", Get(f,"city")), new XElement("Province", Get(f,"province")),
+                    new XElement("Description", string.IsNullOrWhiteSpace(Get(f,"description")) ? "Tienda NexoMarket" : Get(f,"description")),
+                    new XElement("Logo", Get(f,"logo")), new XElement("Slug", slug),
+                    new XElement("PublicUrl", string.IsNullOrWhiteSpace(Get(f,"publicUrl")) ? "/store/" + Uri.EscapeDataString(id) : Get(f,"publicUrl")),
+                    new XElement("Active", "1"), new XElement("Delivery", Get(f,"delivery") == "0" ? "0" : "1"),
+                    new XElement("Pickup", Get(f,"pickup") == "0" ? "0" : "1"), new XElement("Latitude", Get(f,"latitude")), new XElement("Longitude", Get(f,"longitude")));
+                stores.Add(store);
+                Save();
+                return "OK|created|" + Escape(id);
             }
         }
 

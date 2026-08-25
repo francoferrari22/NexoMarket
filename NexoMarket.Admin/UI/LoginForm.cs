@@ -100,7 +100,7 @@ namespace NexoMarket.Admin.UI
                     {
                         string detail = _store.GetSetting("central_sync_last_error", "");
                         if (detail.IndexOf("store_not_found", StringComparison.OrdinalIgnoreCase) >= 0)
-                            Fail("El Store ID no existe en NexoMarket Central. Verificá que la tienda haya sido creada en la Web.");
+                            Fail("No se pudo registrar o localizar ese Store ID en NexoMarket Central. Verificá Internet y volvé a intentar.");
                         else if (detail.IndexOf("store_inactive", StringComparison.OrdinalIgnoreCase) >= 0)
                             Fail("La tienda existe, pero está desactivada en NexoMarket Central.");
                         else if (detail.IndexOf("central_unreachable", StringComparison.OrdinalIgnoreCase) >= 0)
