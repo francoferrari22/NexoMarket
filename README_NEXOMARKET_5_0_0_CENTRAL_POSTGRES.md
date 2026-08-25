@@ -25,7 +25,7 @@ La sincronización de Windows continúa con el ciclo de 20 segundos, pero ya no 
 2. En el servicio `nexomarket-022`, abrir **Environment**.
 3. Crear `NEXOMARKET_DATABASE_URL` con el **Internal Connection String** de ese PostgreSQL. No usar la URL externa.
 4. Guardar y desplegar.
-5. Abrir `https://nexomarket-022.onrender.com/api/central/status`. Debe responder algo similar a `OK|database=connected|documents=4|r2=...`.
+5. Abrir `https://nexomarket-0k22.onrender.com/api/central/status`. Debe responder algo similar a `OK|database=connected|documents=4|r2=...`.
 
 Render permite conectar un servicio con PostgreSQL mediante `fromDatabase`/connection string; para servicios en Render se recomienda la conexión interna.
 

@@ -1,10 +1,10 @@
 # NexoMarket 4.1.31 — CENTRAL ENDPOINT FIX
 
 ## Problema corregido
-La web utilizada estaba publicada en `https://nexomarket-022.onrender.com`, mientras que Windows seguía apuntando a `https://nexomarket-central.onrender.com`. Por eso Windows y la web hablaban con servidores/direcciones diferentes: el Store ID existía en un lado y no en el otro.
+La web utilizada estaba publicada en `https://nexomarket-0k22.onrender.com`, mientras que Windows seguía apuntando a `https://nexomarket-central.onrender.com`. Por eso Windows y la web hablaban con servidores/direcciones diferentes: el Store ID existía en un lado y no en el otro.
 
 ## Corrección
-- Windows usa `https://nexomarket-022.onrender.com` como endpoint central por defecto.
+- Windows usa `https://nexomarket-0k22.onrender.com` como endpoint central por defecto.
 - `NexoMarketCentral.url` fue actualizado.
 - `PUBLIC_BASE_URL` de Render fue actualizado.
 - Las instalaciones existentes migran automáticamente el endpoint antiguo `nexomarket-central.onrender.com` al nuevo.

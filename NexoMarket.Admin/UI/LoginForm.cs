@@ -32,99 +32,92 @@ namespace NexoMarket.Admin.UI
     public sealed class SellerAccountForm : Form
     {
         private readonly AppDataStore _store;
-        private TextBox _name, _email, _pass, _pair;
-        private Button _action, _pairAction;
+        private readonly CentralSyncService _central;
+        private TextBox _email, _pass;
+        private Button _login, _createWeb;
         private Label _status;
-        private CentralSyncService _central;
 
         public SellerAccountForm(AppDataStore store)
         {
             _store = store;
             _central = new CentralSyncService(_store);
-            Text = "NexoMarket · Cuenta central";
+            Text = "NexoMarket · Cuenta de vendedor";
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false; MinimizeBox = false;
-            ClientSize = new Size(560, 740);
+            ClientSize = new Size(560, 520);
             BackColor = Theme.Background; ForeColor = Theme.Text;
             Build();
         }
+
         private void Build()
         {
-            Panel card=Theme.Card(); card.SetBounds(25,18,510,700); Controls.Add(card);
-            card.Controls.Add(new Label{Text="NEXO MARKET",Font=Theme.Font(24,FontStyle.Bold),ForeColor=Theme.Text,AutoSize=true,Location=new Point(30,22)});
-            card.Controls.Add(new Label{Text="SELLER CENTER · CUENTA ÚNICA",Font=Theme.Font(9,FontStyle.Bold),ForeColor=Theme.Green,AutoSize=true,Location=new Point(33,62)});
-            card.Controls.Add(MakeLabel("Nombre del vendedor",32,96)); _name=Input(_store.GetSetting("seller_account_name",""),32,120,420); card.Controls.Add(_name);
-            card.Controls.Add(MakeLabel("Correo de la cuenta NexoMarket",32,158)); _email=Input(_store.GetSetting("seller_account_email",""),32,182,420); card.Controls.Add(_email);
-            card.Controls.Add(MakeLabel("Contraseña",32,220)); _pass=Input("",32,244,420); _pass.PasswordChar='●'; card.Controls.Add(_pass);
-            Label storeLabel=MakeLabel("STORE ID · identidad de la tienda",32,282); card.Controls.Add(storeLabel);
-            TextBox sid=Input(_store.StoreId,32,306,420); sid.ReadOnly=true; card.Controls.Add(sid);
-            card.Controls.Add(new Label{Text="Device ID: "+DeviceIdentity.GetDeviceId(),AutoSize=false,Width=420,Height=22,ForeColor=Theme.Muted,Font=Theme.Font(8),Location=new Point(32,340)});
-            Label info=new Label{Text="La cuenta, el Store ID y los productos pertenecen a una única identidad central en PostgreSQL. Windows es otra herramienta del mismo Seller Center; no crea una cuenta paralela.",AutoSize=false,Width=420,Height=58,ForeColor=Theme.Muted,Font=Theme.Font(8.5f,FontStyle.Regular),Location=new Point(32,365)}; card.Controls.Add(info);
-            _action=Theme.Primary("CREAR / CONECTAR CUENTA CENTRAL"); _action.Width=420; _action.Location=new Point(32,425); _action.Click+=ConnectAccount; card.Controls.Add(_action);
-            Button existing=Theme.Secondary("YA TENGO CUENTA · INICIAR SESIÓN"); existing.Width=420; existing.Location=new Point(32,470); existing.Click+=SignInExistingAccount; card.Controls.Add(existing);
-            card.Controls.Add(MakeLabel("Código de vinculación / QR",32,515)); _pair=Input("",32,539,280); card.Controls.Add(_pair);
-            _pairAction=Theme.Secondary("VINCULAR WINDOWS"); _pairAction.Width=130; _pairAction.Location=new Point(322,539); _pairAction.Click+=PairDevice; card.Controls.Add(_pairAction);
-            Button openWeb=Theme.Secondary("ABRIR SELLER CENTER / GENERAR CÓDIGO"); openWeb.Width=420; openWeb.Location=new Point(32,580); openWeb.Click+=delegate { try { Process.Start(new ProcessStartInfo("https://nexomarket-022.onrender.com/seller/devices"){UseShellExecute=true}); } catch { Process.Start("https://nexomarket-022.onrender.com/seller/devices"); } }; card.Controls.Add(openWeb);
-            _status=new Label{Text="La primera conexión central requiere Internet. Después Windows puede continuar con su caché local y reintentar la sincronización.",AutoSize=false,Width=420,Height=60,ForeColor=Theme.Muted,Font=Theme.Font(8.3f,FontStyle.Regular),Location=new Point(32,630)}; card.Controls.Add(_status);
-            AcceptButton=_action;
+            Panel card=Theme.Card(); card.SetBounds(35,28,490,440); Controls.Add(card);
+            card.Controls.Add(new Label{Text="NEXO MARKET",Font=Theme.Font(26,FontStyle.Bold),ForeColor=Theme.Text,AutoSize=true,Location=new Point(38,28)});
+            card.Controls.Add(new Label{Text="SELLER CENTER · ACCESO ÚNICO",Font=Theme.Font(9,FontStyle.Bold),ForeColor=Theme.NeonWhite,AutoSize=true,Location=new Point(41,70)});
+            card.Controls.Add(MakeLabel("Correo electrónico",42,116));
+            _email=Input(_store.GetSetting("seller_account_email",""),42,140,400); card.Controls.Add(_email);
+            card.Controls.Add(MakeLabel("Contraseña",42,190));
+            _pass=Input("",42,214,400); _pass.PasswordChar='●'; card.Controls.Add(_pass);
+
+            _login=Theme.Primary("INICIAR SESIÓN"); _login.Width=400; _login.Location=new Point(42,264); _login.Click+=Login; card.Controls.Add(_login);
+            _createWeb=Theme.Secondary("CREAR CUENTA DE VENDEDOR EN LA WEB"); _createWeb.Width=400; _createWeb.Location=new Point(42,314); _createWeb.Click+=CreateWebAccount; card.Controls.Add(_createWeb);
+
+            _status=new Label{Text="Usá exactamente el mismo correo y contraseña del Seller Center Web.\r\nEl Store ID se obtiene automáticamente de la cuenta.\r\nNo se pide Store ID ni código para iniciar sesión.",AutoSize=false,Width=400,Height=80,ForeColor=Theme.Muted,Font=Theme.Font(8.5f),Location=new Point(42,365)}; card.Controls.Add(_status);
+            AcceptButton=_login;
             Shown+=delegate{ if(string.IsNullOrWhiteSpace(_email.Text))_email.Focus(); else _pass.Focus(); };
         }
+
         private Label MakeLabel(string t,int x,int y){return new Label{Text=t,AutoSize=true,ForeColor=Theme.Muted,Font=Theme.Font(9,FontStyle.Bold),Location=new Point(x,y)};}
-        private TextBox Input(string t,int x,int y,int w){return new TextBox{Text=t??"",Width=w,Height=30,Font=Theme.Font(10),BackColor=Theme.Card2,ForeColor=Theme.Text,BorderStyle=BorderStyle.FixedSingle,Location=new Point(x,y)};}
-        private void ConnectAccount(object sender,EventArgs e)
+        private TextBox Input(string t,int x,int y,int w){return new TextBox{Text=t??"",Width=w,Height=31,Font=Theme.Font(10),BackColor=Theme.Card2,ForeColor=Theme.Text,BorderStyle=BorderStyle.FixedSingle,Location=new Point(x,y)};}
+
+        private void Login(object sender,EventArgs e)
         {
-            string name=(_name.Text??"").Trim(), email=(_email.Text??"").Trim().ToLowerInvariant(), pass=_pass.Text??"", sid=_store.StoreId;
-            if(name.Length<2){Fail("Ingresá el nombre del vendedor.");return;}
-            if(email.Length<3||email.IndexOf('@')<1){Fail("Ingresá un correo válido.");return;}
-            if(pass.Length<6){Fail("La contraseña debe tener al menos 6 caracteres.");return;}
-            Cursor=Cursors.WaitCursor; _action.Enabled=false;
+            string email=(_email.Text??"").Trim().ToLowerInvariant(), pass=_pass.Text??"";
+            if(email.Length<3||email.IndexOf('@')<1){Fail("Ingresá un correo válido.");_email.Focus();return;}
+            if(pass.Length<1){Fail("Ingresá la contraseña de tu cuenta web.");_pass.Focus();return;}
+            Cursor=Cursors.WaitCursor; _login.Enabled=false;
             try
             {
                 WebUser user;
-                bool ok=_central.AuthenticateCentral(email,pass,out user);
-                if(!ok)
+                if(!_central.AuthenticateCentral(email,pass,out user) || user==null)
                 {
-                    ok=_central.RegisterSellerCentral(name,email,pass,sid,out user);
+                    Fail("No se pudo iniciar sesión. Si todavía no tenés una cuenta de vendedor, usá «CREAR CUENTA DE VENDEDOR EN LA WEB». No se crea una cuenta paralela desde Windows.");
+                    return;
                 }
-                if(!ok||user==null){Fail("No se pudo autenticar o registrar la cuenta en NexoMarket Central. Revisá Render/PostgreSQL y las credenciales.");return;}
-                // Si la cuenta ya existe en la Web, su Store ID es la única fuente de verdad.
-                // Nunca rechazamos el acceso por un Store ID antiguo guardado localmente.
-                if(string.IsNullOrWhiteSpace(user.StoreId)){Fail("La cuenta fue autenticada, pero no tiene un Store ID de vendedor asociado.");return;}
+                if(!string.Equals(user.Role,"seller",StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(user.StoreId))
+                {
+                    Fail("El correo pertenece a una cuenta que no tiene una tienda de vendedor asociada.");
+                    return;
+                }
+                _store.UpsertWebUserFromCentral(user);
+                _store.SetSetting("seller_account_email",user.Email??email);
+                _store.SetSetting("seller_account_name",user.Name??"");
+                _store.SetSetting("seller_account_locked","1");
                 _store.SetSetting("store_id",user.StoreId);
-                _store.UpsertWebUserFromCentral(user); _store.SetSetting("seller_account_email",user.Email); _store.SetSetting("seller_account_name",user.Name); _store.SetSetting("seller_account_locked","1"); _store.SetSetting("store_web_active","1"); _store.SetSetting("web_sync_enabled","1");
-                _status.ForeColor=Theme.Green; _status.Text="✓ CUENTA CENTRAL CONECTADA\r\n"+user.Email+"\r\nStore ID: "+user.StoreId+"\r\nAhora Windows y Web utilizan la misma identidad.";
+                _store.SetSetting("web_sync_enabled","1");
+                _store.SetSetting("store_web_active","1");
+                _store.SetSetting("central_sync_status","account_authenticated");
+                _store.SetSetting("central_sync_last_error","");
+                _status.ForeColor=Theme.NeonWhite;
+                _status.Text="✓ CUENTA CONECTADA\r\n"+user.Email+"\r\nStore ID: "+user.StoreId+"\r\nWindows y Web utilizan la misma cuenta.";
                 DialogResult=DialogResult.OK; Close();
             }
-            finally { Cursor=Cursors.Default; _action.Enabled=true; }
-        }
-        private void SignInExistingAccount(object sender, EventArgs e)
-        {
-            using (SellerSignInForm login = new SellerSignInForm(_store))
-            {
-                if (login.ShowDialog(this) == DialogResult.OK)
-                {
-                    _email.Text = _store.GetSetting("seller_account_email", "");
-                    _name.Text = _store.GetSetting("seller_account_name", "");
-                    _pass.Clear();
-                    _status.ForeColor = Theme.Green;
-                    _status.Text = "✓ SESIÓN INICIADA\r\n" + _store.GetSetting("seller_account_email", "") + "\r\nStore ID: " + _store.StoreId + "\r\nLa cuenta web quedó conectada a Windows.";
-                    DialogResult = DialogResult.OK;
-                    Close();
-                }
-            }
+            finally { Cursor=Cursors.Default; _login.Enabled=true; }
         }
 
-        private void PairDevice(object sender,EventArgs e)
+        private void CreateWebAccount(object sender,EventArgs e)
         {
-            string code=(_pair.Text??"").Trim(); if(code.Length==0){Fail("Pegá el código generado en Seller Center → Dispositivos.");return;}
-            Cursor=Cursors.WaitCursor; _pairAction.Enabled=false;
             try
             {
-                string error; if(_central.PairWindowsDevice(code,DeviceIdentity.GetDeviceId(),Environment.MachineName,out error)) { _status.ForeColor=Theme.Green; _status.Text="✓ WINDOWS VINCULADO\r\nDevice ID: "+DeviceIdentity.GetDeviceId()+"\r\nLa PC quedó autorizada para esta tienda."; } else Fail(error);
+                string url="https://nexomarket-0k22.onrender.com/seller-register";
+                Process.Start(new ProcessStartInfo(url){UseShellExecute=true});
+                _status.ForeColor=Theme.Muted;
+                _status.Text="Se abrió el registro de vendedor en la Web. Creá la cuenta allí y después volvé a Windows para iniciar sesión con el mismo correo y contraseña.";
             }
-            finally { Cursor=Cursors.Default; _pairAction.Enabled=true; }
+            catch(Exception ex){Fail("No se pudo abrir el Seller Center: "+ex.Message);}
         }
+
         private void Fail(string text){_status.Text=text;_status.ForeColor=Theme.Danger;}
     }
 

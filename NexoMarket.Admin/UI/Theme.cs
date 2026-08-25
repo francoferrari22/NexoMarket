@@ -7,19 +7,20 @@ namespace NexoMarket.Admin.UI
 {
     internal static class Theme
     {
-        public static readonly Color Background = Color.FromArgb(12, 16, 23);
-        public static readonly Color Sidebar = Color.FromArgb(16, 21, 30);
-        public static readonly Color CardBackground = Color.FromArgb(25, 31, 42);
-        public static readonly Color Card2 = Color.FromArgb(34, 42, 56);
-        public static readonly Color Line = Color.FromArgb(57, 69, 88);
+        public static readonly Color Background = Color.FromArgb(0, 0, 0);
+        public static readonly Color Sidebar = Color.FromArgb(5, 5, 7);
+        public static readonly Color CardBackground = Color.FromArgb(8, 8, 10);
+        public static readonly Color Card2 = Color.FromArgb(14, 14, 17);
+        public static readonly Color Line = Color.FromArgb(45, 45, 50);
         public static readonly Color Text = Color.FromArgb(244, 247, 252);
         public static readonly Color Muted = Color.FromArgb(157, 169, 188);
-        public static readonly Color Accent = Color.FromArgb(55, 139, 255);
-        public static readonly Color AccentDark = Color.FromArgb(30, 91, 194);
-        public static readonly Color Green = Color.FromArgb(38, 211, 158);
+        public static readonly Color Accent = Color.FromArgb(245, 245, 250);
+        public static readonly Color AccentDark = Color.FromArgb(190, 190, 200);
+        public static readonly Color Green = Color.FromArgb(57, 255, 102);
         public static readonly Color NeonGreen = Color.FromArgb(57, 255, 20);
-        public static readonly Color Warning = Color.FromArgb(248, 180, 62);
-        public static readonly Color Danger = Color.FromArgb(235, 92, 96);
+        public static readonly Color NeonWhite = Color.FromArgb(255, 255, 255);
+        public static readonly Color Warning = Color.FromArgb(255, 220, 50);
+        public static readonly Color Danger = Color.FromArgb(255, 55, 70);
 
         public static Font Font(float size, FontStyle style)
         {

@@ -23,7 +23,7 @@ namespace NexoMarket.Admin.UI
         private Timer _timer;
         private volatile bool _busy;
         public event Action DataChanged;
-        private const string DefaultCentralUrl = "https://nexomarket-022.onrender.com";
+        private const string DefaultCentralUrl = "https://nexomarket-0k22.onrender.com";
         public CentralSyncService(AppDataStore store) { _store = store; }
         public void Start()
         {
@@ -437,6 +437,8 @@ namespace NexoMarket.Admin.UI
                         }
                         else
                         {
+                            _store.SetSetting("web_api_url", baseUrl);
+                            _store.SetSetting("web_public_url", baseUrl);
                             _store.SetSetting("central_sync_status", "account_authenticated_sync_pending");
                         }
                     }

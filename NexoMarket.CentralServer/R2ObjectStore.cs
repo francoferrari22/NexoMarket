@@ -35,7 +35,9 @@ namespace NexoMarket.CentralServer
                 {
                     ServiceURL = "https://" + accountId + ".r2.cloudflarestorage.com",
                     ForcePathStyle = true,
-                    UseHttp = false
+                    UseHttp = false,
+                    Timeout = TimeSpan.FromSeconds(25),
+                    ReadWriteTimeout = TimeSpan.FromSeconds(25)
                 };
                 _client = new AmazonS3Client(credentials, config);
                 Enabled = true;
@@ -43,8 +45,9 @@ namespace NexoMarket.CentralServer
             catch { Enabled = false; }
         }
 
-        public bool PutBytes(string key, byte[] bytes, string contentType)
+        public bool PutBytes(string key, byte[] bytes, string contentType, out string error)
         {
+            error = "not_configured";
             if (!Enabled || bytes == null) return false;
             try
             {
@@ -58,15 +61,16 @@ namespace NexoMarket.CentralServer
                         ContentType = string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType
                     };
                     _client.PutObjectAsync(req).GetAwaiter().GetResult();
+                    error = "";
                     return true;
                 }
             }
-            catch { return false; }
+            catch (Exception ex) { error = ex.GetType().Name + ":" + (ex.Message ?? ""); return false; }
         }
 
         public bool PutText(string key, string text)
         {
-            return PutBytes(key, Encoding.UTF8.GetBytes(text ?? ""), "application/xml; charset=utf-8");
+            string error; return PutBytes(key, Encoding.UTF8.GetBytes(text ?? ""), "application/xml; charset=utf-8", out error);
         }
 
         public byte[] GetBytes(string key)
