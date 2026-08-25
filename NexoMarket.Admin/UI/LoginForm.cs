@@ -114,6 +114,10 @@ namespace NexoMarket.Admin.UI
             if (email.Length < 5 || !email.Contains("@")) { Fail("Ingresá un correo electrónico válido."); return; }
             if (password.Length < 6) { Fail("La contraseña debe tener al menos 6 caracteres."); return; }
 
+            // Antes de crear o validar localmente, traer las cuentas de la tienda desde Central.
+            // Esto evita que una cuenta creada en la web aparezca como inexistente en Windows.
+            try { using (CentralSyncService sync = new CentralSyncService(_store)) sync.SyncOnce(); } catch { }
+
             if (_register)
             {
                 if (_repeat == null || password != _repeat.Text) { Fail("Las contraseñas no coinciden."); return; }

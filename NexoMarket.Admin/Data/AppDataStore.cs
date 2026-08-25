@@ -852,6 +852,44 @@ namespace NexoMarket.Admin.Data
             return true;
         }
 
+        /// <summary>
+        /// Inserta o actualiza una cuenta que llegó desde NexoMarket Central.
+        /// La identidad de sincronización es el correo normalizado; el Id local se conserva.
+        /// </summary>
+        public bool UpsertWebUserFromCentral(WebUser user)
+        {
+            if (user == null || string.IsNullOrWhiteSpace(user.Email) || string.IsNullOrWhiteSpace(user.PasswordHash) || string.IsNullOrWhiteSpace(user.Salt)) return false;
+            string email = user.Email.Trim().ToLowerInvariant();
+            XElement root = _doc.Root.Element("WebUsers");
+            XElement e = root.Elements("WebUser").FirstOrDefault(x => string.Equals(S(x, "Email").Trim(), email, StringComparison.OrdinalIgnoreCase));
+            if (e == null)
+            {
+                user.Id = NextId("WebUsers", "WebUser");
+                root.Add(new XElement("WebUser",
+                    new XAttribute("Id", user.Id), new XElement("Name", user.Name ?? ""),
+                    new XElement("Email", email), new XElement("Phone", user.Phone ?? ""),
+                    new XElement("Role", user.Role == "seller" ? "seller" : "buyer"),
+                    new XElement("StoreId", user.StoreId ?? ""), new XElement("Salt", user.Salt ?? ""),
+                    new XElement("PasswordHash", user.PasswordHash ?? ""), new XElement("RecoveryCode", ""),
+                    new XElement("RecoveryExpires", ""), new XElement("CreatedAt", user.CreatedAt == DateTime.MinValue ? DateTime.Now.ToString("o") : user.CreatedAt.ToString("o"))));
+            }
+            else
+            {
+                long localId = (long)e.Attribute("Id");
+                e.SetElementValue("Name", user.Name ?? "");
+                e.SetElementValue("Email", email);
+                e.SetElementValue("Phone", user.Phone ?? "");
+                e.SetElementValue("Role", user.Role == "seller" ? "seller" : "buyer");
+                e.SetElementValue("StoreId", user.StoreId ?? "");
+                e.SetElementValue("Salt", user.Salt ?? "");
+                e.SetElementValue("PasswordHash", user.PasswordHash ?? "");
+                if (user.CreatedAt != DateTime.MinValue) e.SetElementValue("CreatedAt", user.CreatedAt.ToString("o"));
+                user.Id = localId;
+            }
+            Save();
+            return true;
+        }
+
         public bool VerifyWebUser(string email, string password, out WebUser user)
         {
             user = FindWebUser(email);

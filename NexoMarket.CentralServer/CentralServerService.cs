@@ -138,7 +138,7 @@ namespace NexoMarket.CentralServer
                         string body = Body(request); string path = target; string query = ""; int q = path.IndexOf('?');
                         if (q >= 0) { query = path.Substring(q + 1); path = path.Substring(0, q); }
                         if (path == "/health") { Write(stream, 200, "text/plain", "NexoMarket Central OK\n"); return; }
-                        if (path == "/api/accounts/upsert" && method == "POST") { Write(stream, 200, "text/plain", AccountUpsert(Form(body))); return; }
+                        if (path == "/api/accounts/upsert" && method == "POST") { Write(stream, 200, "text/plain", AccountUpsert(Form(body), true)); return; }
                         if (path == "/login") { CentralLogin(stream, method, body, HeaderCookie(request, "NexoCentralSession")); return; }
                         if (path == "/register") { CentralRegister(stream, method, body); return; }
                         if (path == "/logout") { CentralLogout(stream); return; }
@@ -163,6 +163,7 @@ namespace NexoMarket.CentralServer
                         if (path == "/api/orders/history" && method == "GET") { Write(stream, 200, "application/json; charset=utf-8", HistoryOrders(QueryValue(query, "storeId"), QueryValue(query, "email"))); return; }
                         if (path == "/api/sync/heartbeat" && method == "POST") { Write(stream, 200, "text/plain", Heartbeat(Form(body))); return; }
                         if (path == "/api/accounts/lookup" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", AccountLookup(QueryValue(query, "email"), QueryValue(query, "accountId"))); return; }
+                        if (path == "/api/accounts" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", AccountLines(QueryValue(query, "storeId"), QueryValue(query, "syncKey"))); return; }
                         if (path == "/" || path == "/stores") { Write(stream, 200, "text/html; charset=utf-8", Marketplace(query)); return; }
                         if (path.StartsWith("/store/", StringComparison.OrdinalIgnoreCase) && method == "GET") { string slug = path.Substring(7).Trim('/'); Write(stream, 200, "text/html; charset=utf-8", Storefront(slug)); return; }
                         Write(stream, 404, "text/plain", "Not found\n");
@@ -276,7 +277,7 @@ namespace NexoMarket.CentralServer
             {
                 XElement stores = _doc.Root.Element("Stores"); XElement old = stores.Elements("Store").FirstOrDefault(x => S(x, "StoreId") == id);
                 XElement e = new XElement("Store", new XAttribute("UpdatedAt", Get(f, "updatedAt")),
-                    new XElement("StoreId", id), new XElement("Name", Get(f, "name")), new XElement("LegalName", Get(f, "legalName")),
+                    new XElement("StoreId", id), new XElement("SyncKey", Get(f, "syncKey")), new XElement("Name", Get(f, "name")), new XElement("LegalName", Get(f, "legalName")),
                     new XElement("Category", Get(f, "category")), new XElement("Address", Get(f, "address")), new XElement("City", Get(f, "city")),
                     new XElement("Province", Get(f, "province")), new XElement("Description", Get(f, "description")), new XElement("Logo", Get(f, "logo")),
                     new XElement("Slug", Get(f, "slug")), new XElement("PublicUrl", Get(f, "publicUrl")), new XElement("Active", Get(f, "active")),
@@ -761,27 +762,76 @@ namespace NexoMarket.CentralServer
             return b.ToString();
         }
 
-        private string AccountUpsert(Dictionary<string,string> f)
+        private string AccountUpsert(Dictionary<string,string> f, bool requireSyncKey)
         {
             string email = Get(f,"email").Trim().ToLowerInvariant();
             string role = Get(f,"role").Trim().ToLowerInvariant() == "seller" ? "seller" : "buyer";
-            string salt = Get(f,"salt"); string hash = Get(f,"passwordHash");
+            string storeId = Get(f,"storeId").Trim();
+            string salt = Get(f,"salt"); string hash = Get(f,"passwordHash"); string syncKey = Get(f,"syncKey");
             if (email.Length < 3 || salt.Length == 0 || hash.Length == 0) return "ERROR|account";
+            if(requireSyncKey && !ValidateStoreSyncKey(storeId, syncKey)) return "ERROR|sync_key";
+            if(role=="seller")
+            {
+                if(string.IsNullOrWhiteSpace(storeId)) return "ERROR|store_required";
+                lock(_sync)
+                {
+                    XElement store=_doc.Root.Element("Stores").Elements("Store").FirstOrDefault(x=>string.Equals(S(x,"StoreId"),storeId,StringComparison.OrdinalIgnoreCase));
+                    if(store==null) return "ERROR|store_not_found";
+                    storeId=S(store,"StoreId");
+                }
+            }
             lock(_sync)
             {
                 XDocument d = LoadFile(_accountsFile,"NexoMarketAccounts","Users");
                 XElement root=d.Root.Element("Users");
                 XElement old=root.Elements("User").FirstOrDefault(x=>string.Equals(S(x,"Email"),email,StringComparison.OrdinalIgnoreCase));
-                XElement e=new XElement("User",new XElement("Id",Get(f,"id")),new XElement("Name",Get(f,"name")),new XElement("Email",email),new XElement("Phone",Get(f,"phone")),new XElement("Role",role),new XElement("StoreId",Get(f,"storeId")),new XElement("Salt",salt),new XElement("PasswordHash",hash),new XElement("CreatedAt",Get(f,"createdAt")));
+                XElement e=new XElement("User",new XElement("Id",Get(f,"id")),new XElement("Name",Get(f,"name")),new XElement("Email",email),new XElement("Phone",Get(f,"phone")),new XElement("Role",role),new XElement("StoreId",storeId),new XElement("Salt",salt),new XElement("PasswordHash",hash),new XElement("CreatedAt",Get(f,"createdAt")));
                 if (old != null)
                 {
                     string oldId=S(old,"Id"); if(!string.IsNullOrWhiteSpace(oldId))e.SetElementValue("Id",oldId);
-                    string oldStore=S(old,"StoreId"); if(role=="seller" && !string.IsNullOrWhiteSpace(oldStore))e.SetElementValue("StoreId",oldStore);
+                    string oldStore=S(old,"StoreId");
+                    if(role=="seller" && !string.IsNullOrWhiteSpace(oldStore))
+                    {
+                        if(string.IsNullOrWhiteSpace(storeId)) e.SetElementValue("StoreId",oldStore);
+                        else if(!string.Equals(oldStore,storeId,StringComparison.OrdinalIgnoreCase)) return "ERROR|account_store_conflict|"+Escape(oldStore);
+                    }
                 }
                 if(old!=null) old.ReplaceWith(e); else root.Add(e);
                 SaveDoc(_accountsFile,d);
             }
             return "OK|account";
+        }
+
+        private string AccountLines(string storeId, string syncKey)
+        {
+            StringBuilder b=new StringBuilder();
+            storeId=(storeId??"").Trim();
+            if(string.IsNullOrWhiteSpace(storeId) || !ValidateStoreSyncKey(storeId, syncKey)) return "";
+            lock(_sync)
+            {
+                XDocument d=LoadFile(_accountsFile,"NexoMarketAccounts","Users");
+                XElement users=d.Root.Element("Users");
+                if(users==null)return "";
+                foreach(XElement e in users.Elements("User"))
+                {
+                    string role=S(e,"Role"); string sid=S(e,"StoreId");
+                    if(!string.Equals(sid,storeId,StringComparison.OrdinalIgnoreCase)) continue;
+                    b.Append("ACCOUNT|").Append(Escape(S(e,"Id"))).Append('|').Append(Escape(S(e,"Name"))).Append('|').Append(Escape(S(e,"Email"))).Append('|').Append(Escape(S(e,"Phone"))).Append('|').Append(Escape(role)).Append('|').Append(Escape(sid)).Append('|').Append(Escape(S(e,"Salt"))).Append('|').Append(Escape(S(e,"PasswordHash"))).Append('|').Append(Escape(S(e,"CreatedAt"))).Append('\n');
+                }
+            }
+            return b.ToString();
+        }
+
+        private bool ValidateStoreSyncKey(string storeId, string syncKey)
+        {
+            if(string.IsNullOrWhiteSpace(storeId) || string.IsNullOrWhiteSpace(syncKey)) return false;
+            lock(_sync)
+            {
+                XElement store=_doc.Root.Element("Stores").Elements("Store").FirstOrDefault(x=>string.Equals(S(x,"StoreId"),storeId,StringComparison.OrdinalIgnoreCase));
+                if(store==null) return false;
+                string expected=S(store,"SyncKey");
+                return !string.IsNullOrWhiteSpace(expected) && string.Equals(expected,syncKey,StringComparison.Ordinal);
+            }
         }
 
         private CentralUser FindAccount(string email)
@@ -819,13 +869,41 @@ namespace NexoMarket.CentralServer
 
         private void CentralRegister(NetworkStream stream,string method,string body)
         {
-            if(method=="GET") { Write(stream,200,"text/html; charset=utf-8",AuthPage("Crear cuenta", "<form method='post' action='/register'><input name='name' placeholder='Nombre completo' required/><input name='email' type='email' placeholder='Correo electrónico' required/><input name='phone' placeholder='Teléfono'/><select name='role'><option value='buyer'>Soy comprador</option><option value='seller'>Soy vendedor</option></select><input name='storeId' placeholder='Store ID (solo vendedor, si ya tenés tienda)'/><input name='password' type='password' placeholder='Contraseña (mínimo 6 caracteres)' required/><button class='btn' type='submit'>CREAR CUENTA</button></form><p class='muted'>¿Ya tenés cuenta? <a href='/login'>Ingresar</a></p>")); return; }
-            Dictionary<string,string> f=Form(body); string email=Get(f,"email").Trim().ToLowerInvariant(); string password=Get(f,"password"); string role=Get(f,"role")=="seller"?"seller":"buyer";
+            if(method=="GET")
+            {
+                StringBuilder form=new StringBuilder();
+                form.Append("<form method='post' action='/register'><input name='name' placeholder='Nombre completo' required/><input name='email' type='email' placeholder='Correo electrónico' required/><input name='phone' placeholder='Teléfono'/><select name='role' id='role' onchange='toggleStore()'><option value='buyer'>Soy comprador</option><option value='seller'>Soy vendedor</option></select><div id='storeBox'><label class='muted'>Tienda del vendedor</label><select name='storeId'><option value=''>Seleccioná una tienda activa...</option>");
+                string lines=StoreLines("");
+                using(StringReader reader=new StringReader(lines))
+                {
+                    string line;
+                    while((line=reader.ReadLine())!=null)
+                    {
+                        if(!line.StartsWith("STORE|",StringComparison.OrdinalIgnoreCase))continue;
+                        string[] p=line.Split('|'); if(p.Length<12)continue;
+                        form.Append("<option value='").Append(E(Uri.UnescapeDataString(p[1]))).Append("'>").Append(E(Uri.UnescapeDataString(p[2]))).Append(" · ").Append(E(Uri.UnescapeDataString(p[4]))).Append("</option>");
+                    }
+                }
+                form.Append("</select></div><input name='password' type='password' placeholder='Contraseña (mínimo 6 caracteres)' required/><button class='btn' type='submit'>CREAR CUENTA</button></form><script>function toggleStore(){var r=document.getElementById('role').value;document.getElementById('storeBox').style.display=r==='seller'?'block':'none';}toggleStore();</script><p class='muted'>La cuenta de vendedor queda vinculada a una única tienda mediante StoreId. ¿Ya tenés cuenta? <a href='/login'>Ingresar</a></p>");
+                Write(stream,200,"text/html; charset=utf-8",AuthPage("Crear cuenta",form.ToString())); return;
+            }
+            Dictionary<string,string> f=Form(body); string email=Get(f,"email").Trim().ToLowerInvariant(); string password=Get(f,"password"); string role=Get(f,"role")=="seller"?"seller":"buyer"; string storeId=Get(f,"storeId").Trim();
             if(password.Length<6||email.Length<3||email.IndexOf('@')<1) { Write(stream,200,"text/html; charset=utf-8",AuthPage("Crear cuenta","<div class='error'>Completá los datos y usá una contraseña de al menos 6 caracteres.</div><a class='btn' href='/register'>Volver</a>")); return; }
+            if(role=="seller")
+            {
+                if(string.IsNullOrWhiteSpace(storeId)) { Write(stream,200,"text/html; charset=utf-8",AuthPage("Crear cuenta","<div class='error'>Para una cuenta de vendedor tenés que seleccionar la tienda a la que pertenece.</div><a class='btn' href='/register'>Volver</a>")); return; }
+                lock(_sync)
+                {
+                    XElement store=_doc.Root.Element("Stores").Elements("Store").FirstOrDefault(x=>string.Equals(S(x,"StoreId"),storeId,StringComparison.OrdinalIgnoreCase)&&S(x,"Active")=="1");
+                    if(store==null) { Write(stream,200,"text/html; charset=utf-8",AuthPage("Crear cuenta","<div class='error'>La tienda seleccionada no existe o no está activa.</div><a class='btn' href='/register'>Volver</a>")); return; }
+                    storeId=S(store,"StoreId");
+                }
+            }
             if(FindAccount(email)!=null) { Write(stream,200,"text/html; charset=utf-8",AuthPage("Crear cuenta","<div class='error'>Ese correo ya está registrado.</div><a class='btn' href='/login'>Ingresar</a>")); return; }
             byte[] salt=new byte[16]; using(var rng=RandomNumberGenerator.Create())rng.GetBytes(salt); string salt64=Convert.ToBase64String(salt); byte[] hash; using(var kdf=new Rfc2898DeriveBytes(password,salt,50000))hash=kdf.GetBytes(32);
-            Dictionary<string,string> v=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){{"id",Guid.NewGuid().ToString("N")},{"name",Get(f,"name")},{"email",email},{"phone",Get(f,"phone")},{"role",role},{"storeId",Get(f,"storeId")},{"salt",salt64},{"passwordHash",Convert.ToBase64String(hash)},{"createdAt",DateTime.UtcNow.ToString("o")}};
-            AccountUpsert(v); CentralUser u=FindAccount(email); string token=Guid.NewGuid().ToString("N"); lock(_sync)_sessions[token]=u; WriteRedirectCookie(stream,u.Role=="seller"?"/seller":"/buyer","NexoCentralSession="+token+"; Path=/; HttpOnly; SameSite=Lax");
+            Dictionary<string,string> v=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){{"id",Guid.NewGuid().ToString("N")},{"name",Get(f,"name")},{"email",email},{"phone",Get(f,"phone")},{"role",role},{"storeId",storeId},{"salt",salt64},{"passwordHash",Convert.ToBase64String(hash)},{"createdAt",DateTime.UtcNow.ToString("o")}};
+            string result=AccountUpsert(v, false); if(!result.StartsWith("OK|",StringComparison.OrdinalIgnoreCase)){Write(stream,200,"text/html; charset=utf-8",AuthPage("Crear cuenta","<div class='error'>No se pudo registrar la cuenta: "+E(result)+"</div><a class='btn' href='/register'>Volver</a>"));return;}
+            CentralUser u=FindAccount(email); string token=Guid.NewGuid().ToString("N"); lock(_sync)_sessions[token]=u; WriteRedirectCookie(stream,u.Role=="seller"?"/seller":"/buyer","NexoCentralSession="+token+"; Path=/; HttpOnly; SameSite=Lax");
         }
 
         private void CentralLogout(NetworkStream stream)

@@ -209,6 +209,10 @@ namespace NexoMarket.Admin.UI
             if (path == "/login" && method == "POST")
             {
                 Dictionary<string,string> f = Form(body); WebUser found;
+                if (!_store.VerifyWebUser(f.Get("email"), f.Get("password"), out found))
+                {
+                    try { using (CentralSyncService sync = new CentralSyncService(_store)) sync.SyncOnce(); } catch { }
+                }
                 if (_store.VerifyWebUser(f.Get("email"), f.Get("password"), out found))
                 {
                     string token = Guid.NewGuid().ToString("N");
@@ -230,6 +234,7 @@ namespace NexoMarket.Admin.UI
                 if (role != "seller" && role != "buyer") role = "buyer";
                 if (f.Get("password").Length < 6) return Page("Crear cuenta", "<div class='error'>La contraseña debe tener al menos 6 caracteres.</div>" + RegisterForm());
                 string email = (f.Get("email") ?? "").Trim().ToLowerInvariant();
+                try { using (CentralSyncService sync = new CentralSyncService(_store)) sync.SyncOnce(); } catch { }
                 if (role == "seller")
                 {
                     string linked = (_store.GetSetting("seller_account_email", "") ?? "").Trim();
@@ -247,8 +252,14 @@ namespace NexoMarket.Admin.UI
                     _store.SetSetting("seller_account_email", email);
                     _store.SetSetting("seller_account_name", f.Get("name"));
                     _store.SetSetting("seller_account_locked", "1");
+                    try
+                    {
+                        WebUser created = _store.FindWebUser(email);
+                        if (created != null) new CentralSyncService(_store).PublishAccountNow(created);
+                    }
+                    catch { }
                 }
-                return RedirectPage("/", "Cuenta creada. Ahora podés ingresar como " + (role == "seller" ? "vendedor" : "comprador") + ". El mismo correo y contraseña funcionan en Windows y en el Seller Center web.");
+                return RedirectPage("/", "Cuenta creada. Ahora podés ingresar como " + (role == "seller" ? "vendedor" : "comprador") + ". La cuenta queda sincronizada con el servidor central por StoreId.");
             }
             if (path == "/logout") return LogoutPage(out setCookie, out cookieValue);
             if (path == "/promotion" && method == "POST")

@@ -8,7 +8,6 @@ services:
       - key: PUBLIC_BASE_URL
         value: https://nexomarket-central.onrender.com
         sync: false
-        sync: false
       - key: R2_ACCOUNT_ID
         sync: false
       - key: R2_ACCESS_KEY_ID

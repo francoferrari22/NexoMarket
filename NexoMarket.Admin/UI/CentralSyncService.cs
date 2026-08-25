@@ -39,6 +39,7 @@ namespace NexoMarket.Admin.UI
                 if (baseUrl.Length == 0) return;
                 PublishStore(baseUrl);
                 PublishAccounts(baseUrl);
+                PullAccounts(baseUrl);
                 List<Product> products = _store.GetProducts("");
                 foreach (Product p in products) PublishProduct(baseUrl, p);
                 List<Promotion> promotions = _store.GetPromotions();
@@ -78,7 +79,10 @@ namespace NexoMarket.Admin.UI
                 if (string.IsNullOrWhiteSpace(configuredUrl) || configuredUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0) configuredUrl = "https://nexomarket-central.onrender.com";
                 string baseUrl = Normalize(configuredUrl);
                 if (baseUrl.Length == 0 || user == null) return false;
-                string response = Request(baseUrl+"/api/accounts/upsert","POST",Form(new Dictionary<string,string>{{"id",user.Id.ToString(CultureInfo.InvariantCulture)},{"name",user.Name},{"email",user.Email},{"phone",user.Phone},{"role",user.Role},{"storeId",user.StoreId},{"salt",user.Salt},{"passwordHash",user.PasswordHash},{"createdAt",user.CreatedAt.ToUniversalTime().ToString("o")}}));
+                // Publicar primero la tienda para que el servidor pueda validar la relación cuenta -> StoreId.
+                try { new StoreDirectoryClient(_store).PublishStore(_store.GetSetting("web_public_url", "")); } catch { }
+                string syncKey = _store.GetSetting("central_sync_key", "") ?? "";
+                string response = Request(baseUrl+"/api/accounts/upsert","POST",Form(new Dictionary<string,string>{{"id",user.Id.ToString(CultureInfo.InvariantCulture)},{"name",user.Name},{"email",user.Email},{"phone",user.Phone},{"role",user.Role},{"storeId",user.StoreId},{"syncKey",syncKey},{"salt",user.Salt},{"passwordHash",user.PasswordHash},{"createdAt",user.CreatedAt.ToUniversalTime().ToString("o")}}));
                 return response.StartsWith("OK|",StringComparison.OrdinalIgnoreCase);
             }
             catch { return false; }
@@ -90,10 +94,49 @@ namespace NexoMarket.Admin.UI
             {
                 foreach (var u in _store.GetWebUsers())
                 {
-                    Request(baseUrl+"/api/accounts/upsert","POST",Form(new Dictionary<string,string>{{"id",u.Id.ToString(CultureInfo.InvariantCulture)},{"name",u.Name},{"email",u.Email},{"phone",u.Phone},{"role",u.Role},{"storeId",u.StoreId},{"salt",u.Salt},{"passwordHash",u.PasswordHash},{"createdAt",u.CreatedAt.ToUniversalTime().ToString("o")}}));
+                    Request(baseUrl+"/api/accounts/upsert","POST",Form(new Dictionary<string,string>{{"id",u.Id.ToString(CultureInfo.InvariantCulture)},{"name",u.Name},{"email",u.Email},{"phone",u.Phone},{"role",u.Role},{"storeId",u.StoreId},{"syncKey",_store.GetSetting("central_sync_key","")},{"salt",u.Salt},{"passwordHash",u.PasswordHash},{"createdAt",u.CreatedAt.ToUniversalTime().ToString("o")}}));
                 }
             }
             catch { }
+        }
+
+        private void PullAccounts(string baseUrl)
+        {
+            try
+            {
+                string storeId = _store.StoreId;
+                if (string.IsNullOrWhiteSpace(storeId)) return;
+                string syncKey = _store.GetSetting("central_sync_key", "") ?? "";
+                string response = Request(baseUrl + "/api/accounts?storeId=" + Uri.EscapeDataString(storeId) + "&syncKey=" + Uri.EscapeDataString(syncKey), "GET", null);
+                using (StringReader reader = new StringReader(response ?? ""))
+                {
+                    string line;
+                    while ((line = reader.ReadLine()) != null)
+                    {
+                        if (!line.StartsWith("ACCOUNT|", StringComparison.OrdinalIgnoreCase)) continue;
+                        string[] p = line.Split('|');
+                        if (p.Length < 10) continue;
+                        WebUser u = new WebUser();
+                        u.Name = Decode(p[2]); u.Email = Decode(p[3]); u.Phone = Decode(p[4]);
+                        u.Role = Decode(p[5]) == "seller" ? "seller" : "buyer"; u.StoreId = Decode(p[6]);
+                        u.Salt = Decode(p[7]); u.PasswordHash = Decode(p[8]); u.CreatedAt = ParseDate(Decode(p[9]));
+                        if (string.IsNullOrWhiteSpace(u.Email) || string.IsNullOrWhiteSpace(u.StoreId)) continue;
+                        if (!_store.UpsertWebUserFromCentral(u)) continue;
+                        if (u.Role == "seller" && string.Equals(u.StoreId, storeId, StringComparison.OrdinalIgnoreCase))
+                        {
+                            _store.SetSetting("seller_account_email", u.Email);
+                            _store.SetSetting("seller_account_name", u.Name ?? "");
+                            _store.SetSetting("seller_account_locked", "1");
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private static string Decode(string value)
+        {
+            try { return Uri.UnescapeDataString(value ?? ""); } catch { return value ?? ""; }
         }
         private void PublishProduct(string baseUrl, Product p)
         {

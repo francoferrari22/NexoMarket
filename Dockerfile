@@ -1,4 +1,4 @@
-# NexoMarket Central Server 4.1.17 - Render / Docker
+# NexoMarket Central Server 4.1.18 - Render / Docker
 # Build robusto: restaura dependencias despues de copiar el proyecto completo.
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src

@@ -25,12 +25,15 @@ namespace NexoMarket.Admin.UI
         {
             if (!IsConfigured) return false;
             string endpoint = Normalize(CentralUrl()) + "/api/stores/register";
+            string syncKey = (_store.GetSetting("central_sync_key", "") ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(syncKey)) { syncKey = Guid.NewGuid().ToString("N"); _store.SetSetting("central_sync_key", syncKey); }
             string resolvedPublicUrl = (publicUrl ?? "").Trim();
             if (string.IsNullOrWhiteSpace(resolvedPublicUrl) || resolvedPublicUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0)
                 resolvedPublicUrl = Normalize(CentralUrl()) + "/store/" + Uri.EscapeDataString(_store.StoreId);
             string body = Form(new Dictionary<string, string>
             {
                 { "storeId", _store.StoreId },
+                { "syncKey", syncKey },
                 { "name", _store.GetSetting("store_name", "NexoMarket") },
                 { "legalName", _store.GetSetting("store_legal_name", "") },
                 { "category", _store.GetSetting("store_category", "") },
