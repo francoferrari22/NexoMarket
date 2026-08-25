@@ -1,3 +1,9 @@
+# NexoMarket 4.1.25 — Store ID Pairing
+
+Windows y Web usan el mismo Store ID como identidad de la tienda. Windows puede crear la cuenta local y continuar sin esperar a Render; la cuenta Web se vincula posteriormente pegando el mismo Store ID. Central mantiene una sola tienda y una sola identidad vendedora canónica por Store ID.
+
+---
+
 # NexoMarket
 
 ## Estructura

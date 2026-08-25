@@ -305,7 +305,10 @@ namespace NexoMarket.CentralServer
                 XElement stores = _doc.Root.Element("Stores");
                 XElement old = stores.Elements("Store").FirstOrDefault(x => string.Equals(S(x, "StoreId"), id, StringComparison.OrdinalIgnoreCase));
                 string existingKey = old == null ? "" : S(old, "SyncKey");
-                if (!string.IsNullOrWhiteSpace(existingKey) && !string.Equals(existingKey, syncKey, StringComparison.Ordinal)) return "ERROR|store_sync_key_mismatch";
+                // Store ID is the canonical pairing identity. If the Web created the store
+                // first, keep Central's SyncKey; Windows will learn it on the next connect.
+                // If Windows created it first, its SyncKey is accepted. Never create a second store.
+                if (old != null && !string.IsNullOrWhiteSpace(existingKey)) syncKey = existingKey;
                 string active = Get(f, "active"); if (active != "0") active = "1";
                 XElement e = new XElement("Store", new XAttribute("UpdatedAt", string.IsNullOrWhiteSpace(Get(f,"updatedAt")) ? DateTime.UtcNow.ToString("o") : Get(f, "updatedAt")),
                     new XElement("StoreId", id), new XElement("SyncKey", syncKey), new XElement("Name", Get(f, "name")), new XElement("LegalName", Get(f, "legalName")),
@@ -339,8 +342,9 @@ namespace NexoMarket.CentralServer
                 if (existing != null)
                 {
                     string existingKey = S(existing, "SyncKey");
-                    if (!string.IsNullOrWhiteSpace(existingKey) && !string.Equals(existingKey, syncKey, StringComparison.Ordinal))
-                        return "ERROR|store_already_claimed";
+                    // El Store ID es el código de emparejamiento común. Si Windows y Web
+                    // llegan con claves internas diferentes, Central conserva la clave canónica
+                    // de la tienda y Windows la adoptará al conectar. No se crean dos tiendas.
                     if (string.IsNullOrWhiteSpace(existingKey)) existing.SetElementValue("SyncKey", syncKey);
                     if (string.IsNullOrWhiteSpace(S(existing, "Name"))) existing.SetElementValue("Name", string.IsNullOrWhiteSpace(Get(f,"name")) ? "Tienda NexoMarket" : Get(f,"name"));
                     if (S(existing,"Active") != "1") existing.SetElementValue("Active", "1");
@@ -964,6 +968,14 @@ namespace NexoMarket.CentralServer
                 XDocument d = LoadFile(_accountsFile,"NexoMarketAccounts","Users");
                 XElement root=d.Root.Element("Users");
                 XElement old=root.Elements("User").FirstOrDefault(x=>string.Equals(S(x,"Email"),email,StringComparison.OrdinalIgnoreCase));
+                // Para vendedores la identidad real es StoreId. Una tienda tiene una cuenta
+                // vendedora canónica; si Web y Windows usaron correos distintos, el último
+                // emparejamiento reemplaza la identidad anterior en lugar de crear dos vendedores.
+                if(role=="seller" && !string.IsNullOrWhiteSpace(storeId))
+                {
+                    XElement byStore=root.Elements("User").FirstOrDefault(x=>string.Equals(S(x,"StoreId"),storeId,StringComparison.OrdinalIgnoreCase) && string.Equals(S(x,"Role"),"seller",StringComparison.OrdinalIgnoreCase));
+                    if(byStore!=null && old==null) old=byStore;
+                }
                 XElement e=new XElement("User",new XElement("Id",Get(f,"id")),new XElement("Name",Get(f,"name")),new XElement("Email",email),new XElement("Phone",Get(f,"phone")),new XElement("Role",role),new XElement("StoreId",storeId),new XElement("Salt",salt),new XElement("PasswordHash",hash),new XElement("CreatedAt",Get(f,"createdAt")));
                 if (old != null)
                 {
@@ -1051,19 +1063,7 @@ namespace NexoMarket.CentralServer
             if(method=="GET")
             {
                 StringBuilder form=new StringBuilder();
-                form.Append("<form method='post' action='/register'><input name='name' placeholder='Nombre completo' required/><input name='email' type='email' placeholder='Correo electrónico' required/><input name='phone' placeholder='Teléfono'/><select name='role' id='role' onchange='toggleStore()'><option value='buyer'>Soy comprador</option><option value='seller'>Soy vendedor</option></select><div id='storeBox'><label class='muted'>Tienda del vendedor</label><input name='storeName' placeholder='Nombre de la nueva tienda (si no tenés una)'/><select name='storeId'><option value=''>Crear una nueva tienda</option>");
-                string lines=StoreLines("");
-                using(StringReader reader=new StringReader(lines))
-                {
-                    string line;
-                    while((line=reader.ReadLine())!=null)
-                    {
-                        if(!line.StartsWith("STORE|",StringComparison.OrdinalIgnoreCase))continue;
-                        string[] p=line.Split('|'); if(p.Length<12)continue;
-                        form.Append("<option value='").Append(E(Uri.UnescapeDataString(p[1]))).Append("'>").Append(E(Uri.UnescapeDataString(p[2]))).Append(" · ").Append(E(Uri.UnescapeDataString(p[4]))).Append("</option>");
-                    }
-                }
-                form.Append("</select></div><input name='password' type='password' placeholder='Contraseña (mínimo 6 caracteres)' required/><button class='btn' type='submit'>CREAR CUENTA</button></form><script>function toggleStore(){var r=document.getElementById('role').value;document.getElementById('storeBox').style.display=r==='seller'?'block':'none';}toggleStore();</script><p class='muted'>La cuenta de vendedor queda vinculada a una única tienda mediante StoreId. ¿Ya tenés cuenta? <a href='/login'>Ingresar</a></p>");
+                form.Append("<form method='post' action='/register'><input name='name' placeholder='Nombre completo' required/><input name='email' type='email' placeholder='Correo electrónico' required/><input name='phone' placeholder='Teléfono'/><select name='role' id='role' onchange='toggleStore()'><option value='buyer'>Soy comprador</option><option value='seller'>Soy vendedor</option></select><div id='storeBox'><label class='muted'>Código / Store ID de Windows</label><input name='storeId' placeholder='Pegá aquí el Store ID que te dio NexoMarket Windows'/><input name='storeName' placeholder='Nombre de la tienda (solo si todavía no existe)'/><p class='muted'>Si creaste primero la cuenta en Windows, usá exactamente el mismo Store ID. Así la cuenta web queda en la misma tienda.</p></div><input name='password' type='password' placeholder='Contraseña (mínimo 6 caracteres)' required/><button class='btn' type='submit'>CREAR CUENTA</button></form><script>function toggleStore(){var r=document.getElementById('role').value;document.getElementById('storeBox').style.display=r==='seller'?'block':'none';}toggleStore();</script><p class='muted'>La cuenta de vendedor queda vinculada a una única tienda mediante Store ID. ¿Ya tenés cuenta? <a href='/login'>Ingresar</a></p>");
                 Write(stream,200,"text/html; charset=utf-8",AuthPage("Crear cuenta",form.ToString())); return;
             }
             Dictionary<string,string> f=Form(body); string email=Get(f,"email").Trim().ToLowerInvariant(); string password=Get(f,"password"); string role=Get(f,"role")=="seller"?"seller":"buyer"; string storeId=Get(f,"storeId").Trim();
@@ -1075,17 +1075,40 @@ namespace NexoMarket.CentralServer
                     XElement stores=_doc.Root.Element("Stores");
                     if(string.IsNullOrWhiteSpace(storeId))
                     {
-                        storeId=Guid.NewGuid().ToString("N").ToUpperInvariant(); string syncKey=Guid.NewGuid().ToString("N");
-                        string storeName=Get(f,"storeName").Trim(); if(string.IsNullOrWhiteSpace(storeName)) storeName="Tienda de "+Get(f,"name").Trim();
-                        XElement store=new XElement("Store",new XAttribute("UpdatedAt",DateTime.UtcNow.ToString("o")),new XElement("StoreId",storeId),new XElement("SyncKey",syncKey),new XElement("Name",storeName),new XElement("LegalName",storeName),new XElement("Category","Comercio"),new XElement("Address",""),new XElement("City",""),new XElement("Province",""),new XElement("Description","Tienda NexoMarket"),new XElement("Logo",""),new XElement("Slug",Regex.Replace(storeName.ToLowerInvariant(),"[^a-z0-9]+","-").Trim('-')),new XElement("PublicUrl","/store/"+Uri.EscapeDataString(storeId)),new XElement("Active","1"),new XElement("Delivery","1"),new XElement("Pickup","1"),new XElement("Latitude",""),new XElement("Longitude",""));
-                        stores.Add(store); Save();
+                        // Flujo Web-first: se crea una tienda nueva y su Store ID.
+                        storeId=Guid.NewGuid().ToString("N").ToUpperInvariant();
                     }
                     else
                     {
-                        XElement store=stores.Elements("Store").FirstOrDefault(x=>string.Equals(S(x,"StoreId"),storeId,StringComparison.OrdinalIgnoreCase));
-                        if(store==null) { Write(stream,200,"text/html; charset=utf-8",AuthPage("Crear cuenta","<div class='error'>La tienda seleccionada no existe.</div><a class='btn' href='/register'>Volver</a>")); return; }
-                        storeId=S(store,"StoreId");
+                        storeId=NormalizeStoreId(storeId);
                     }
+                    XElement store=stores.Elements("Store").FirstOrDefault(x=>string.Equals(S(x,"StoreId"),storeId,StringComparison.OrdinalIgnoreCase));
+                    if(store==null)
+                    {
+                        // Flujo Windows-first: el Store ID ya existe en la PC pero todavía
+                        // puede no haber llegado a Render. La Web lo puede reclamar sin
+                        // pedir una segunda cuenta ni generar otra tienda.
+                        string storeName=Get(f,"storeName").Trim();
+                        if(string.IsNullOrWhiteSpace(storeName)) storeName="Tienda NexoMarket";
+                        string syncKey=Guid.NewGuid().ToString("N");
+                        store=new XElement("Store",new XAttribute("UpdatedAt",DateTime.UtcNow.ToString("o")),
+                            new XElement("StoreId",storeId),new XElement("SyncKey",syncKey),new XElement("Name",storeName),
+                            new XElement("LegalName",storeName),new XElement("Category","Comercio"),new XElement("Address",""),
+                            new XElement("City",""),new XElement("Province",""),new XElement("Description","Tienda NexoMarket"),
+                            new XElement("Logo",""),new XElement("Slug",Regex.Replace(storeName.ToLowerInvariant(),"[^a-z0-9]+","-").Trim('-')),
+                            new XElement("PublicUrl","/store/"+Uri.EscapeDataString(storeId)),new XElement("Active","1"),
+                            new XElement("Delivery","1"),new XElement("Pickup","1"),new XElement("Latitude",""),new XElement("Longitude",""));
+                        stores.Add(store);
+                    }
+                    else
+                    {
+                        // El código identifica la tienda existente. No se crea otra.
+                        if(S(store,"Active")!="1") store.SetElementValue("Active","1");
+                        string requestedName=Get(f,"storeName").Trim();
+                        if(!string.IsNullOrWhiteSpace(requestedName) && string.IsNullOrWhiteSpace(S(store,"Name"))) store.SetElementValue("Name",requestedName);
+                        store.SetAttributeValue("UpdatedAt",DateTime.UtcNow.ToString("o"));
+                    }
+                    Save();
                 }
             }
             if(FindAccount(email)!=null) { Write(stream,200,"text/html; charset=utf-8",AuthPage("Crear cuenta","<div class='error'>Ese correo ya está registrado.</div><a class='btn' href='/login'>Ingresar</a>")); return; }

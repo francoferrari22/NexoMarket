@@ -38,8 +38,10 @@ namespace NexoMarket.Admin.UI
                 string baseUrl = ResolveCentralBaseUrl();
                 if (baseUrl.Length == 0) return;
                 PublishStore(baseUrl);
-                PublishAccounts(baseUrl);
+                // Central es la fuente canónica de identidad. Primero descargamos la cuenta
+                // vinculada al Store ID; recién después publicamos la copia local.
                 PullAccounts(baseUrl);
+                PublishAccounts(baseUrl);
                 List<Product> products = _store.GetProducts("");
                 foreach (Product p in products) PublishProduct(baseUrl, p);
                 List<Promotion> promotions = _store.GetPromotions();

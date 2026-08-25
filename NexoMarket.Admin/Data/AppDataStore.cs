@@ -903,6 +903,16 @@ namespace NexoMarket.Admin.Data
             string email = user.Email.Trim().ToLowerInvariant();
             XElement root = _doc.Root.Element("WebUsers");
             XElement e = root.Elements("WebUser").FirstOrDefault(x => string.Equals(S(x, "Email").Trim(), email, StringComparison.OrdinalIgnoreCase));
+            if (user.Role == "seller" && !string.IsNullOrWhiteSpace(user.StoreId))
+            {
+                // Una tienda = una identidad vendedora canónica. Si llegó la cuenta desde
+                // Central con otro correo, eliminamos la cuenta vendedora anterior de esta tienda.
+                foreach (XElement other in root.Elements("WebUser").Where(x =>
+                    string.Equals(S(x, "Role"), "seller", StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(S(x, "StoreId"), user.StoreId, StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(S(x, "Email"), email, StringComparison.OrdinalIgnoreCase)).ToList())
+                    other.Remove();
+            }
             if (e == null)
             {
                 user.Id = NextId("WebUsers", "WebUser");
