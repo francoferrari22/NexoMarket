@@ -554,7 +554,7 @@ namespace NexoMarket.Admin
 
             TableLayoutPanel command = new TableLayoutPanel { Dock = DockStyle.Top, Height = 72, ColumnCount = 6, RowCount = 1, Padding = new Padding(0, 0, 0, 8) };
             for (int i = 0; i < 6; i++) command.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 16.666f));
-            AddCommand(command, 0, "+ PRODUCTO", delegate { using (Form f = ProductDialog(null)) if (f.ShowDialog(this) == DialogResult.OK) { _store.SaveProduct((Product)f.Tag); ShowPage("Productos", BuildProducts); } });
+            AddCommand(command, 0, "+ PRODUCTO", delegate { using (Form f = ProductDialog(null)) if (f.ShowDialog(this) == DialogResult.OK) { _store.SaveProduct((Product)f.Tag); try { _centralSync.SyncOnce(); } catch { } ShowPage("Productos", BuildProducts); } });
             AddCommand(command, 1, "NUEVO PEDIDO", delegate { ShowPage("Pedidos nuevos", BuildOrders); });
             AddCommand(command, 2, "ABRIR CAJA", delegate { ShowPage("Caja / arqueo", BuildCashRegister); });
             AddCommand(command, 3, "VER DELIVERY", delegate { ShowPage("Delivery", BuildDelivery); });
@@ -1163,7 +1163,7 @@ namespace NexoMarket.Admin
             {
                 if (grid.SelectedRows.Count == 0) return;
                 long id = Convert.ToInt64(grid.SelectedRows[0].Cells["Id"].Value);
-                if (MessageBox.Show("¿Eliminar el producto seleccionado?", "NexoMarket", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes) { _store.DeleteProduct(id); ShowPage("Productos", BuildProducts); }
+                if (MessageBox.Show("¿Eliminar el producto seleccionado?", "NexoMarket", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes) { _store.DeleteProduct(id); try { _centralSync.SyncOnce(); } catch { } ShowPage("Productos", BuildProducts); }
             };
             page.Controls.Add(card);
             return page;
@@ -1197,6 +1197,7 @@ namespace NexoMarket.Admin
                     if (f.ShowDialog(this) == DialogResult.OK)
                     {
                         _store.SaveProduct((Product)f.Tag);
+                        try { _centralSync.SyncOnce(); } catch { }
                         ShowPage("Productos", BuildProducts);
                     }
                 }

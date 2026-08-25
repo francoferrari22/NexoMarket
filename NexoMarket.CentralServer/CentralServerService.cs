@@ -103,6 +103,17 @@ namespace NexoMarket.CentralServer
             catch { }
         }
 
+        private void RestoreLatest(string file, string key)
+        {
+            if (_r2 == null || !_r2.Enabled) return;
+            try
+            {
+                string text = _r2.GetText(key);
+                if (!string.IsNullOrWhiteSpace(text)) File.WriteAllText(file, text, Encoding.UTF8);
+            }
+            catch { }
+        }
+
         private XDocument NewDoc() { return new XDocument(new XElement("NexoMarketRegistry", new XElement("Stores"))); }
         private void Save()
         {
@@ -150,9 +161,9 @@ namespace NexoMarket.CentralServer
                         if (path == "/api/stores" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", StoreLines(query)); return; }
                         if (path == "/api/stores/json" && method == "GET") { Write(stream, 200, "application/json; charset=utf-8", StoreJson(query)); return; }
                         if (path == "/api/geocode" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", Geocode(QueryValue(query, "q"))); return; }
-                        if (path == "/api/stores/register" && method == "POST") { Register(Form(body)); Write(stream, 200, "text/plain", "OK|registered\n"); return; }
-                        if (path == "/api/products/publish" && method == "POST") { PublishProduct(Form(body)); Write(stream, 200, "text/plain", "OK|product\n"); return; }
-                        if (path == "/api/promotions/publish" && method == "POST") { PublishPromotion(Form(body)); Write(stream, 200, "text/plain", "OK|promotion\n"); return; }
+                        if (path == "/api/stores/register" && method == "POST") { Write(stream, 200, "text/plain", Register(Form(body))); return; }
+                        if (path == "/api/products/publish" && method == "POST") { Write(stream, 200, "text/plain", PublishProduct(Form(body))); return; }
+                        if (path == "/api/promotions/publish" && method == "POST") { Write(stream, 200, "text/plain", PublishPromotion(Form(body))); return; }
                         if (path == "/api/catalog" && method == "GET") { Write(stream, 200, "application/json; charset=utf-8", CatalogJson(QueryValue(query, "storeId"))); return; }
                         if (path == "/api/orders/create" && method == "POST") { Write(stream, 200, "text/plain; charset=utf-8", CreateOrder(Form(body))); return; }
                         if (path == "/api/orders/pending" && method == "GET") { Write(stream, 200, "application/json; charset=utf-8", PendingOrders(QueryValue(query, "storeId"))); return; }
@@ -162,6 +173,7 @@ namespace NexoMarket.CentralServer
                         if (path == "/api/orders/confirm" && method == "POST") { Write(stream, 200, "text/plain", ConfirmOrder(Form(body))); return; }
                         if (path == "/api/orders/history" && method == "GET") { Write(stream, 200, "application/json; charset=utf-8", HistoryOrders(QueryValue(query, "storeId"), QueryValue(query, "email"))); return; }
                         if (path == "/api/sync/heartbeat" && method == "POST") { Write(stream, 200, "text/plain", Heartbeat(Form(body))); return; }
+                        if (path == "/api/accounts/auth" && method == "POST") { Write(stream, 200, "text/plain; charset=utf-8", AccountAuthenticate(Form(body))); return; }
                         if (path == "/api/accounts/lookup" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", AccountLookup(QueryValue(query, "email"), QueryValue(query, "accountId"))); return; }
                         if (path == "/api/accounts" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", AccountLines(QueryValue(query, "storeId"), QueryValue(query, "syncKey"))); return; }
                         if (path == "/" || path == "/stores") { Write(stream, 200, "text/html; charset=utf-8", Marketplace(query)); return; }
@@ -270,30 +282,39 @@ namespace NexoMarket.CentralServer
             stream.Flush();
         }
 
-        private void Register(Dictionary<string,string> f)
+        private string Register(Dictionary<string,string> f)
         {
-            string id = Get(f, "storeId"); if (string.IsNullOrWhiteSpace(id)) return;
+            string id = Get(f, "storeId").Trim();
+            if (string.IsNullOrWhiteSpace(id)) return "ERROR|store_id_required";
+            string syncKey = Get(f, "syncKey").Trim();
+            if (string.IsNullOrWhiteSpace(syncKey)) return "ERROR|sync_key_required";
             lock (_sync)
             {
-                XElement stores = _doc.Root.Element("Stores"); XElement old = stores.Elements("Store").FirstOrDefault(x => S(x, "StoreId") == id);
-                XElement e = new XElement("Store", new XAttribute("UpdatedAt", Get(f, "updatedAt")),
-                    new XElement("StoreId", id), new XElement("SyncKey", Get(f, "syncKey")), new XElement("Name", Get(f, "name")), new XElement("LegalName", Get(f, "legalName")),
+                XElement stores = _doc.Root.Element("Stores");
+                XElement old = stores.Elements("Store").FirstOrDefault(x => string.Equals(S(x, "StoreId"), id, StringComparison.OrdinalIgnoreCase));
+                string existingKey = old == null ? "" : S(old, "SyncKey");
+                if (!string.IsNullOrWhiteSpace(existingKey) && !string.Equals(existingKey, syncKey, StringComparison.Ordinal)) return "ERROR|store_sync_key_mismatch";
+                string active = Get(f, "active"); if (active != "0") active = "1";
+                XElement e = new XElement("Store", new XAttribute("UpdatedAt", string.IsNullOrWhiteSpace(Get(f,"updatedAt")) ? DateTime.UtcNow.ToString("o") : Get(f, "updatedAt")),
+                    new XElement("StoreId", id), new XElement("SyncKey", syncKey), new XElement("Name", Get(f, "name")), new XElement("LegalName", Get(f, "legalName")),
                     new XElement("Category", Get(f, "category")), new XElement("Address", Get(f, "address")), new XElement("City", Get(f, "city")),
                     new XElement("Province", Get(f, "province")), new XElement("Description", Get(f, "description")), new XElement("Logo", Get(f, "logo")),
-                    new XElement("Slug", Get(f, "slug")), new XElement("PublicUrl", Get(f, "publicUrl")), new XElement("Active", Get(f, "active")),
-                    new XElement("Delivery", Get(f, "delivery")), new XElement("Pickup", Get(f, "pickup")), new XElement("Latitude", Get(f, "latitude")), new XElement("Longitude", Get(f, "longitude")));
-                if (old != null) old.ReplaceWith(e); else stores.Add(e); Save();
+                    new XElement("Slug", Get(f, "slug")), new XElement("PublicUrl", Get(f, "publicUrl")), new XElement("Active", active),
+                    new XElement("Delivery", Get(f, "delivery") == "0" ? "0" : "1"), new XElement("Pickup", Get(f, "pickup") == "0" ? "0" : "1"),
+                    new XElement("Latitude", Get(f, "latitude")), new XElement("Longitude", Get(f, "longitude")));
+                if (old != null) old.ReplaceWith(e); else stores.Add(e);
+                Save();
+                return "OK|registered|" + Escape(id);
             }
         }
-
 
         private void EnsureCentralDataFiles()
         {
             lock (_sync)
             {
-                RestoreIfMissing(_catalogFile, "data/nexomarket_catalog.xml");
-                RestoreIfMissing(_ordersFile, "data/nexomarket_orders.xml");
-                RestoreIfMissing(_accountsFile, "data/nexomarket_accounts.xml");
+                RestoreLatest(_catalogFile, "data/nexomarket_catalog.xml");
+                RestoreLatest(_ordersFile, "data/nexomarket_orders.xml");
+                RestoreLatest(_accountsFile, "data/nexomarket_accounts.xml");
                 if (!File.Exists(_accountsFile)) File.WriteAllText(_accountsFile, new XDocument(new XElement("NexoMarketAccounts", new XElement("Users"))).ToString(SaveOptions.None), Encoding.UTF8);
                 if (!File.Exists(_catalogFile)) File.WriteAllText(_catalogFile, new XDocument(new XElement("NexoMarketCatalog", new XElement("Products"), new XElement("Promotions"))).ToString(SaveOptions.None), Encoding.UTF8);
                 if (!File.Exists(_ordersFile)) File.WriteAllText(_ordersFile, new XDocument(new XElement("NexoMarketOrders", new XElement("Orders"))).ToString(SaveOptions.None), Encoding.UTF8);
@@ -348,6 +369,13 @@ namespace NexoMarket.CentralServer
             catch { return "ERROR|invalid_base64"; }
         }
 
+        private string AccountAuthenticate(Dictionary<string,string> f)
+        {
+            string email=Get(f,"email").Trim().ToLowerInvariant(); string password=Get(f,"password"); CentralUser u;
+            if(!VerifyAccount(email,password,out u)||u==null)return "ERROR|invalid_credentials";
+            return "OK|"+Escape(u.Id)+"|"+Escape(u.Name)+"|"+Escape(u.Email)+"|"+Escape(u.Phone)+"|"+Escape(u.Role)+"|"+Escape(u.StoreId)+"|"+Escape(u.Salt)+"|"+Escape(u.PasswordHash)+"|"+Escape(u.CreatedAt);
+        }
+
         private string AccountLookup(string email,string accountId)
         {
             CentralUser u=null;
@@ -365,10 +393,11 @@ namespace NexoMarket.CentralServer
             return "OK|"+Escape(u.Id)+"|"+Escape(u.Email)+"|"+Escape(u.Name)+"|"+Escape(u.StoreId)+"|"+Escape(u.Role);
         }
 
-        private void PublishProduct(Dictionary<string,string> f)
+        private string PublishProduct(Dictionary<string,string> f)
         {
-            string storeId = Get(f, "storeId"), productId = Get(f, "productId");
-            if (string.IsNullOrWhiteSpace(storeId) || string.IsNullOrWhiteSpace(productId)) return;
+            string storeId = Get(f, "storeId").Trim(), productId = Get(f, "productId").Trim();
+            if (string.IsNullOrWhiteSpace(storeId) || string.IsNullOrWhiteSpace(productId)) return "ERROR|missing";
+            if (!ValidateStoreSyncKey(storeId, Get(f,"syncKey"))) return "ERROR|sync_key";
             lock (_sync)
             {
                 XDocument d = LoadFile(_catalogFile, "NexoMarketCatalog", "Products"); XElement root = d.Root; if (root.Element("Products") == null) root.Add(new XElement("Products"));
@@ -382,14 +411,15 @@ namespace NexoMarket.CentralServer
                     new XElement("PublicDescription",Get(f,"publicDescription")),new XElement("UpdatedAt",Get(f,"updatedAt")));
                 if(old!=null) old.ReplaceWith(e); else root.Element("Products").Add(e); SaveDoc(_catalogFile,d);
             }
+            return "OK|product";
         }
 
-        private void PublishPromotion(Dictionary<string,string> f)
+        private string PublishPromotion(Dictionary<string,string> f)
         {
-            string storeId=Get(f,"storeId"), promotionId=Get(f,"promotionId"); if(string.IsNullOrWhiteSpace(storeId)||string.IsNullOrWhiteSpace(promotionId)) return;
+            string storeId=Get(f,"storeId").Trim(), promotionId=Get(f,"promotionId").Trim(); if(string.IsNullOrWhiteSpace(storeId)||string.IsNullOrWhiteSpace(promotionId)) return "ERROR|missing"; if(!ValidateStoreSyncKey(storeId,Get(f,"syncKey"))) return "ERROR|sync_key";
             lock(_sync){ XDocument d=LoadFile(_catalogFile,"NexoMarketCatalog","Promotions"); if(d.Root.Element("Promotions")==null)d.Root.Add(new XElement("Promotions")); XElement old=d.Root.Element("Promotions").Elements("Promotion").FirstOrDefault(x=>S(x,"StoreId")==storeId&&S(x,"PromotionId")==promotionId);
                 XElement e=new XElement("Promotion",new XElement("StoreId",storeId),new XElement("PromotionId",promotionId),new XElement("Name",Get(f,"name")),new XElement("ProductIds",Get(f,"productIds")),new XElement("PromotionalPrice",Get(f,"promotionalPrice")),new XElement("Active",Get(f,"active")),new XElement("From",Get(f,"from")),new XElement("To",Get(f,"to")),new XElement("UpdatedAt",Get(f,"updatedAt")));
-                if(old!=null)old.ReplaceWith(e);else d.Root.Element("Promotions").Add(e);SaveDoc(_catalogFile,d); }
+                if(old!=null)old.ReplaceWith(e);else d.Root.Element("Promotions").Add(e);SaveDoc(_catalogFile,d); } return "OK|promotion";
         }
 
         private string CatalogJson(string storeId)
@@ -872,7 +902,7 @@ namespace NexoMarket.CentralServer
             if(method=="GET")
             {
                 StringBuilder form=new StringBuilder();
-                form.Append("<form method='post' action='/register'><input name='name' placeholder='Nombre completo' required/><input name='email' type='email' placeholder='Correo electrónico' required/><input name='phone' placeholder='Teléfono'/><select name='role' id='role' onchange='toggleStore()'><option value='buyer'>Soy comprador</option><option value='seller'>Soy vendedor</option></select><div id='storeBox'><label class='muted'>Tienda del vendedor</label><select name='storeId'><option value=''>Seleccioná una tienda activa...</option>");
+                form.Append("<form method='post' action='/register'><input name='name' placeholder='Nombre completo' required/><input name='email' type='email' placeholder='Correo electrónico' required/><input name='phone' placeholder='Teléfono'/><select name='role' id='role' onchange='toggleStore()'><option value='buyer'>Soy comprador</option><option value='seller'>Soy vendedor</option></select><div id='storeBox'><label class='muted'>Tienda del vendedor</label><input name='storeName' placeholder='Nombre de la nueva tienda (si no tenés una)'/><select name='storeId'><option value=''>Crear una nueva tienda</option>");
                 string lines=StoreLines("");
                 using(StringReader reader=new StringReader(lines))
                 {
@@ -891,12 +921,22 @@ namespace NexoMarket.CentralServer
             if(password.Length<6||email.Length<3||email.IndexOf('@')<1) { Write(stream,200,"text/html; charset=utf-8",AuthPage("Crear cuenta","<div class='error'>Completá los datos y usá una contraseña de al menos 6 caracteres.</div><a class='btn' href='/register'>Volver</a>")); return; }
             if(role=="seller")
             {
-                if(string.IsNullOrWhiteSpace(storeId)) { Write(stream,200,"text/html; charset=utf-8",AuthPage("Crear cuenta","<div class='error'>Para una cuenta de vendedor tenés que seleccionar la tienda a la que pertenece.</div><a class='btn' href='/register'>Volver</a>")); return; }
                 lock(_sync)
                 {
-                    XElement store=_doc.Root.Element("Stores").Elements("Store").FirstOrDefault(x=>string.Equals(S(x,"StoreId"),storeId,StringComparison.OrdinalIgnoreCase)&&S(x,"Active")=="1");
-                    if(store==null) { Write(stream,200,"text/html; charset=utf-8",AuthPage("Crear cuenta","<div class='error'>La tienda seleccionada no existe o no está activa.</div><a class='btn' href='/register'>Volver</a>")); return; }
-                    storeId=S(store,"StoreId");
+                    XElement stores=_doc.Root.Element("Stores");
+                    if(string.IsNullOrWhiteSpace(storeId))
+                    {
+                        storeId=Guid.NewGuid().ToString("N").ToUpperInvariant(); string syncKey=Guid.NewGuid().ToString("N");
+                        string storeName=Get(f,"storeName").Trim(); if(string.IsNullOrWhiteSpace(storeName)) storeName="Tienda de "+Get(f,"name").Trim();
+                        XElement store=new XElement("Store",new XAttribute("UpdatedAt",DateTime.UtcNow.ToString("o")),new XElement("StoreId",storeId),new XElement("SyncKey",syncKey),new XElement("Name",storeName),new XElement("LegalName",storeName),new XElement("Category","Comercio"),new XElement("Address",""),new XElement("City",""),new XElement("Province",""),new XElement("Description","Tienda NexoMarket"),new XElement("Logo",""),new XElement("Slug",Regex.Replace(storeName.ToLowerInvariant(),"[^a-z0-9]+","-").Trim('-')),new XElement("PublicUrl","/store/"+Uri.EscapeDataString(storeId)),new XElement("Active","1"),new XElement("Delivery","1"),new XElement("Pickup","1"),new XElement("Latitude",""),new XElement("Longitude",""));
+                        stores.Add(store); Save();
+                    }
+                    else
+                    {
+                        XElement store=stores.Elements("Store").FirstOrDefault(x=>string.Equals(S(x,"StoreId"),storeId,StringComparison.OrdinalIgnoreCase));
+                        if(store==null) { Write(stream,200,"text/html; charset=utf-8",AuthPage("Crear cuenta","<div class='error'>La tienda seleccionada no existe.</div><a class='btn' href='/register'>Volver</a>")); return; }
+                        storeId=S(store,"StoreId");
+                    }
                 }
             }
             if(FindAccount(email)!=null) { Write(stream,200,"text/html; charset=utf-8",AuthPage("Crear cuenta","<div class='error'>Ese correo ya está registrado.</div><a class='btn' href='/login'>Ingresar</a>")); return; }
@@ -1020,8 +1060,8 @@ namespace NexoMarket.CentralServer
 
         private sealed class CentralUser
         {
-            public string Id="",Name="",Email="",Phone="",Role="buyer",StoreId="",Salt="",PasswordHash="";
-            public static CentralUser From(XElement e){return new CentralUser{Id=S(e,"Id"),Name=S(e,"Name"),Email=S(e,"Email"),Phone=S(e,"Phone"),Role=S(e,"Role")=="seller"?"seller":"buyer",StoreId=S(e,"StoreId"),Salt=S(e,"Salt"),PasswordHash=S(e,"PasswordHash")};}
+            public string Id="",Name="",Email="",Phone="",Role="buyer",StoreId="",Salt="",PasswordHash="",CreatedAt="";
+            public static CentralUser From(XElement e){return new CentralUser{Id=S(e,"Id"),Name=S(e,"Name"),Email=S(e,"Email"),Phone=S(e,"Phone"),Role=S(e,"Role")=="seller"?"seller":"buyer",StoreId=S(e,"StoreId"),Salt=S(e,"Salt"),PasswordHash=S(e,"PasswordHash"),CreatedAt=S(e,"CreatedAt")};}
         }
         private sealed class CentralStore
         {

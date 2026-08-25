@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Text;
+using System.Security;
 using NexoMarket.Admin.Data;
 
 namespace NexoMarket.Admin.UI
@@ -28,7 +29,7 @@ namespace NexoMarket.Admin.UI
             string syncKey = (_store.GetSetting("central_sync_key", "") ?? "").Trim();
             if (string.IsNullOrWhiteSpace(syncKey)) { syncKey = Guid.NewGuid().ToString("N"); _store.SetSetting("central_sync_key", syncKey); }
             string resolvedPublicUrl = (publicUrl ?? "").Trim();
-            if (string.IsNullOrWhiteSpace(resolvedPublicUrl) || resolvedPublicUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0)
+            if (IsLocalUrl(resolvedPublicUrl) || string.IsNullOrWhiteSpace(resolvedPublicUrl) || resolvedPublicUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0)
                 resolvedPublicUrl = Normalize(CentralUrl()) + "/store/" + Uri.EscapeDataString(_store.StoreId);
             string body = Form(new Dictionary<string, string>
             {
@@ -44,7 +45,7 @@ namespace NexoMarket.Admin.UI
                 { "logo", _store.GetSetting("store_logo", "") },
                 { "slug", _store.GetSetting("store_slug", "") },
                 { "publicUrl", resolvedPublicUrl },
-                { "active", _store.GetSetting("store_web_active", "0") },
+                { "active", _store.GetSetting("store_web_active", "1") },
                 { "delivery", _store.GetSetting("delivery_enabled", "1") },
                 { "pickup", _store.GetSetting("pickup_enabled", "1") },
                 { "latitude", _store.GetSetting("store_latitude", "") },
@@ -52,7 +53,13 @@ namespace NexoMarket.Admin.UI
                 { "updatedAt", DateTime.UtcNow.ToString("o") }
             });
             string response = Request(endpoint, "POST", body);
-            return response != null && response.StartsWith("OK", StringComparison.OrdinalIgnoreCase);
+            if (response == null || !response.StartsWith("OK", StringComparison.OrdinalIgnoreCase))
+            {
+                try { _store.SetSetting("central_sync_last_error", "store_register:" + (response ?? "no_response")); } catch { }
+                return false;
+            }
+            try { _store.SetSetting("central_sync_last_error", ""); } catch { }
+            return true;
         }
 
         public List<RemoteStore> GetStores() { return GetStores("", 0d, 0d, false); }
@@ -156,9 +163,16 @@ namespace NexoMarket.Admin.UI
         private string CentralUrl()
         {
             string configured = (_store.GetSetting("web_api_url", "") ?? "").Trim();
-            if (string.IsNullOrWhiteSpace(configured) || configured.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0)
+            if (IsLocalUrl(configured) || string.IsNullOrWhiteSpace(configured) || configured.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0)
                 return "https://nexomarket-central.onrender.com";
             return configured;
+        }
+
+        private static bool IsLocalUrl(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return true;
+            string u = url.Trim().ToLowerInvariant();
+            return u.StartsWith("http://localhost") || u.StartsWith("https://localhost") || u.StartsWith("http://127.0.0.1") || u.StartsWith("https://127.0.0.1") || u.StartsWith("http://192.168.") || u.StartsWith("https://192.168.") || u.StartsWith("http://10.") || u.StartsWith("https://10.") || u.StartsWith("http://172.16.") || u.StartsWith("https://172.16.") || u.StartsWith("http://172.17.") || u.StartsWith("https://172.17.") || u.StartsWith("http://172.18.") || u.StartsWith("https://172.18.") || u.StartsWith("http://172.19.") || u.StartsWith("https://172.19.");
         }
 
         private static string Normalize(string url)

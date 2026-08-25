@@ -211,7 +211,7 @@ namespace NexoMarket.Admin.UI
                 Dictionary<string,string> f = Form(body); WebUser found;
                 if (!_store.VerifyWebUser(f.Get("email"), f.Get("password"), out found))
                 {
-                    try { using (CentralSyncService sync = new CentralSyncService(_store)) sync.SyncOnce(); } catch { }
+                    try { using (CentralSyncService sync = new CentralSyncService(_store)) { sync.SyncOnce(); sync.AuthenticateCentral(f.Get("email"), f.Get("password"), out found); } } catch { }
                 }
                 if (_store.VerifyWebUser(f.Get("email"), f.Get("password"), out found))
                 {

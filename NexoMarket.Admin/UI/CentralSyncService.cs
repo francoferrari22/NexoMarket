@@ -29,12 +29,13 @@ namespace NexoMarket.Admin.UI
         public void Dispose() { if (_timer != null) { try { _timer.Dispose(); } catch { } _timer = null; } }
         public void SyncOnce()
         {
+            try { ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12; } catch { }
             if (_busy || !Enabled()) return;
             _busy = true;
             try
             {
                 string configuredUrl = (_store.GetSetting("web_api_url", "") ?? "").Trim();
-                if (string.IsNullOrWhiteSpace(configuredUrl) || configuredUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0) configuredUrl = "https://nexomarket-central.onrender.com";
+                if (IsLegacyLocalUrl(configuredUrl) || string.IsNullOrWhiteSpace(configuredUrl) || configuredUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0) configuredUrl = "https://nexomarket-central.onrender.com";
                 string baseUrl = Normalize(configuredUrl);
                 if (baseUrl.Length == 0) return;
                 PublishStore(baseUrl);
@@ -64,19 +65,36 @@ namespace NexoMarket.Admin.UI
                 }
                 _store.SetSetting("central_sync_last", DateTime.Now.ToString("o"));
             }
-            catch { }
+            catch (Exception ex)
+            {
+                try { _store.SetSetting("central_sync_last_error", ex.GetType().Name + ":" + (ex.Message ?? "")); } catch { }
+            }
             finally { _busy = false; }
         }
         private bool Enabled() { return true; }
         private bool AlreadyImported(string id) { foreach (Order o in _store.GetOrders("")) if (string.Equals(o.CentralOrderId,id,StringComparison.OrdinalIgnoreCase)) return true; return false; }
-        private void PublishStore(string baseUrl) { try { new StoreDirectoryClient(_store).PublishStore(_store.GetSetting("web_public_url","")); } catch { } }
+        private void PublishStore(string baseUrl)
+        {
+            try
+            {
+                StoreDirectoryClient client = new StoreDirectoryClient(_store);
+                if (!client.PublishStore(_store.GetSetting("web_public_url", "")))
+                    _store.SetSetting("central_sync_last_error", "store_publish_failed");
+                else
+                    _store.SetSetting("central_sync_last_error", "");
+            }
+            catch (Exception ex)
+            {
+                _store.SetSetting("central_sync_last_error", "store_publish:" + ex.GetType().Name);
+            }
+        }
 
         public bool PublishAccountNow(WebUser user)
         {
             try
             {
                 string configuredUrl = (_store.GetSetting("web_api_url", "") ?? "").Trim();
-                if (string.IsNullOrWhiteSpace(configuredUrl) || configuredUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0) configuredUrl = "https://nexomarket-central.onrender.com";
+                if (IsLegacyLocalUrl(configuredUrl) || string.IsNullOrWhiteSpace(configuredUrl) || configuredUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0) configuredUrl = "https://nexomarket-central.onrender.com";
                 string baseUrl = Normalize(configuredUrl);
                 if (baseUrl.Length == 0 || user == null) return false;
                 // Publicar primero la tienda para que el servidor pueda validar la relación cuenta -> StoreId.
@@ -85,7 +103,11 @@ namespace NexoMarket.Admin.UI
                 string response = Request(baseUrl+"/api/accounts/upsert","POST",Form(new Dictionary<string,string>{{"id",user.Id.ToString(CultureInfo.InvariantCulture)},{"name",user.Name},{"email",user.Email},{"phone",user.Phone},{"role",user.Role},{"storeId",user.StoreId},{"syncKey",syncKey},{"salt",user.Salt},{"passwordHash",user.PasswordHash},{"createdAt",user.CreatedAt.ToUniversalTime().ToString("o")}}));
                 return response.StartsWith("OK|",StringComparison.OrdinalIgnoreCase);
             }
-            catch { return false; }
+            catch (Exception ex)
+            {
+                try { _store.SetSetting("central_sync_last_error", "account_publish:" + ex.GetType().Name); } catch { }
+                return false;
+            }
         }
 
         private void PublishAccounts(string baseUrl)
@@ -138,12 +160,47 @@ namespace NexoMarket.Admin.UI
         {
             try { return Uri.UnescapeDataString(value ?? ""); } catch { return value ?? ""; }
         }
+
+        /// <summary>Autentica contra NexoMarket Central y devuelve la misma identidad que usa la web.
+        /// Esto evita que Windows y la web mantengan dos cuentas paralelas con el mismo correo.
+        /// </summary>
+        public bool AuthenticateCentral(string email, string password, out WebUser user)
+        {
+            user = null;
+            try
+            {
+                string configuredUrl = (_store.GetSetting("web_api_url", "") ?? "").Trim();
+                if (IsLegacyLocalUrl(configuredUrl) || string.IsNullOrWhiteSpace(configuredUrl) || configuredUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0) configuredUrl = "https://nexomarket-central.onrender.com";
+                string baseUrl = Normalize(configuredUrl);
+                string response = Request(baseUrl + "/api/accounts/auth", "POST", Form(new Dictionary<string,string>
+                { {"email", (email ?? "").Trim().ToLowerInvariant()}, {"password", password ?? ""} }));
+                string[] p = (response ?? "").Split('|');
+                if (p.Length < 10 || !string.Equals(p[0], "OK", StringComparison.OrdinalIgnoreCase)) return false;
+                user = new WebUser
+                {
+                    Name = Decode(p[2]), Email = Decode(p[3]), Phone = Decode(p[4]),
+                    Role = string.Equals(Decode(p[5]), "seller", StringComparison.OrdinalIgnoreCase) ? "seller" : "buyer",
+                    StoreId = Decode(p[6]), Salt = Decode(p[7]), PasswordHash = Decode(p[8]), CreatedAt = ParseDate(Decode(p[9]))
+                };
+                if (string.IsNullOrWhiteSpace(user.Email) || string.IsNullOrWhiteSpace(user.PasswordHash) || string.IsNullOrWhiteSpace(user.Salt)) return false;
+                _store.UpsertWebUserFromCentral(user);
+                if (user.Role == "seller")
+                {
+                    _store.SetSetting("seller_account_email", user.Email);
+                    _store.SetSetting("seller_account_name", user.Name ?? "");
+                    _store.SetSetting("seller_account_locked", "1");
+                    if (!string.IsNullOrWhiteSpace(user.StoreId)) _store.SetSetting("store_id", user.StoreId);
+                }
+                return true;
+            }
+            catch { return false; }
+        }
         private void PublishProduct(string baseUrl, Product p)
         {
-            Request(baseUrl+"/api/products/publish","POST",Form(new Dictionary<string,string>{{"storeId",_store.StoreId},{"productId",p.Id.ToString(CultureInfo.InvariantCulture)},{"name",p.Name},{"category",p.Category},{"description",p.Description},{"price",p.Price.ToString(CultureInfo.InvariantCulture)},{"salePrice",p.SalePrice.ToString(CultureInfo.InvariantCulture)},{"stock",p.Stock.ToString(CultureInfo.InvariantCulture)},{"minimumStock",p.MinimumStock.ToString(CultureInfo.InvariantCulture)},{"sku",p.SKU},{"brand",p.Brand},{"size",p.Size},{"color",p.Color},{"active",p.Active?"1":"0"},{"onlineEnabled",p.OnlineEnabled?"1":"0"},{"imagePath",p.ImagePath},{"slug",p.Slug},{"publicDescription",p.PublicDescription},{"updatedAt",DateTime.UtcNow.ToString("o")}}));
+            Request(baseUrl+"/api/products/publish","POST",Form(new Dictionary<string,string>{{"storeId",_store.StoreId},{"syncKey",_store.GetSetting("central_sync_key","")},{"productId",p.Id.ToString(CultureInfo.InvariantCulture)},{"name",p.Name},{"category",p.Category},{"description",p.Description},{"price",p.Price.ToString(CultureInfo.InvariantCulture)},{"salePrice",p.SalePrice.ToString(CultureInfo.InvariantCulture)},{"stock",p.Stock.ToString(CultureInfo.InvariantCulture)},{"minimumStock",p.MinimumStock.ToString(CultureInfo.InvariantCulture)},{"sku",p.SKU},{"brand",p.Brand},{"size",p.Size},{"color",p.Color},{"active",p.Active?"1":"0"},{"onlineEnabled",p.OnlineEnabled?"1":"0"},{"imagePath",p.ImagePath},{"slug",p.Slug},{"publicDescription",p.PublicDescription},{"updatedAt",DateTime.UtcNow.ToString("o")}}));
         }
         private void PublishPromotion(string baseUrl, Promotion p)
-        { Request(baseUrl+"/api/promotions/publish","POST",Form(new Dictionary<string,string>{{"storeId",_store.StoreId},{"promotionId",p.Id.ToString(CultureInfo.InvariantCulture)},{"name",p.Name},{"productIds",p.ProductIds},{"promotionalPrice",p.PromotionalPrice.ToString(CultureInfo.InvariantCulture)},{"active",p.Active?"1":"0"},{"from",p.From.ToString("o")},{"to",p.To.ToString("o")},{"updatedAt",DateTime.UtcNow.ToString("o")}})); }
+        { Request(baseUrl+"/api/promotions/publish","POST",Form(new Dictionary<string,string>{{"storeId",_store.StoreId},{"syncKey",_store.GetSetting("central_sync_key","")},{"promotionId",p.Id.ToString(CultureInfo.InvariantCulture)},{"name",p.Name},{"productIds",p.ProductIds},{"promotionalPrice",p.PromotionalPrice.ToString(CultureInfo.InvariantCulture)},{"active",p.Active?"1":"0"},{"from",p.From.ToString("o")},{"to",p.To.ToString("o")},{"updatedAt",DateTime.UtcNow.ToString("o")}})); }
 
         private void ApplyOrderStock(string itemsJson)
         {
@@ -162,9 +219,40 @@ namespace NexoMarket.Admin.UI
         }
 
         private static string Get(Dictionary<string,string> d,string k){string v;return d!=null&&d.TryGetValue(k,out v)?v:"";}
+        /// <summary>
+        /// Detecta endpoints antiguos/locales para evitar que una instalación de Windows
+        /// siga sincronizando contra localhost o una IP LAN en vez del servidor central.
+        /// </summary>
+        private static bool IsLegacyLocalUrl(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return true;
+            string u = url.Trim().ToLowerInvariant();
+            if (u.StartsWith("http://localhost") || u.StartsWith("https://localhost")) return true;
+            if (u.StartsWith("http://127.0.0.1") || u.StartsWith("https://127.0.0.1")) return true;
+            if (u.StartsWith("http://192.168.") || u.StartsWith("https://192.168.")) return true;
+            if (u.StartsWith("http://10.") || u.StartsWith("https://10.")) return true;
+            if (u.StartsWith("http://172.16.") || u.StartsWith("https://172.16.")) return true;
+            if (u.StartsWith("http://172.17.") || u.StartsWith("https://172.17.")) return true;
+            if (u.StartsWith("http://172.18.") || u.StartsWith("https://172.18.")) return true;
+            if (u.StartsWith("http://172.19.") || u.StartsWith("https://172.19.")) return true;
+            if (u.StartsWith("http://172.20.") || u.StartsWith("https://172.20.")) return true;
+            if (u.StartsWith("http://172.21.") || u.StartsWith("https://172.21.")) return true;
+            if (u.StartsWith("http://172.22.") || u.StartsWith("https://172.22.")) return true;
+            if (u.StartsWith("http://172.23.") || u.StartsWith("https://172.23.")) return true;
+            if (u.StartsWith("http://172.24.") || u.StartsWith("https://172.24.")) return true;
+            if (u.StartsWith("http://172.25.") || u.StartsWith("https://172.25.")) return true;
+            if (u.StartsWith("http://172.26.") || u.StartsWith("https://172.26.")) return true;
+            if (u.StartsWith("http://172.27.") || u.StartsWith("https://172.27.")) return true;
+            if (u.StartsWith("http://172.28.") || u.StartsWith("https://172.28.")) return true;
+            if (u.StartsWith("http://172.29.") || u.StartsWith("https://172.29.")) return true;
+            if (u.StartsWith("http://172.30.") || u.StartsWith("https://172.30.")) return true;
+            if (u.StartsWith("http://172.31.") || u.StartsWith("https://172.31.")) return true;
+            return false;
+        }
+
         private static string Normalize(string u){string v=(u??"").Trim().TrimEnd('/');if(v.EndsWith("/api",StringComparison.OrdinalIgnoreCase))v=v.Substring(0,v.Length-4).TrimEnd('/');return v;}
         private static string Form(Dictionary<string,string> v){StringBuilder b=new StringBuilder();foreach(KeyValuePair<string,string> x in v){if(b.Length>0)b.Append('&');b.Append(Uri.EscapeDataString(x.Key??""));b.Append('=').Append(Uri.EscapeDataString(x.Value??""));}return b.ToString();}
-        private static string Request(string url,string method,string body){HttpWebRequest r=(HttpWebRequest)WebRequest.Create(url);r.Method=method;r.Timeout=8000;r.ReadWriteTimeout=8000;r.UserAgent="NexoMarket Central Sync/4.0";if(method=="POST"){byte[] d=Encoding.UTF8.GetBytes(body??"");r.ContentType="application/x-www-form-urlencoded";r.ContentLength=d.Length;using(Stream s=r.GetRequestStream())s.Write(d,0,d.Length);}using(WebResponse x=r.GetResponse())using(StreamReader sr=new StreamReader(x.GetResponseStream(),Encoding.UTF8))return sr.ReadToEnd();}
+        private static string Request(string url,string method,string body){try{ServicePointManager.SecurityProtocol=SecurityProtocolType.Tls12;}catch{} HttpWebRequest r=(HttpWebRequest)WebRequest.Create(url);r.Method=method;r.Timeout=20000;r.ReadWriteTimeout=20000;r.UserAgent="NexoMarket Central Sync/4.0";if(method=="POST"){byte[] d=Encoding.UTF8.GetBytes(body??"");r.ContentType="application/x-www-form-urlencoded";r.ContentLength=d.Length;using(Stream s=r.GetRequestStream())s.Write(d,0,d.Length);}using(WebResponse x=r.GetResponse())using(StreamReader sr=new StreamReader(x.GetResponseStream(),Encoding.UTF8))return sr.ReadToEnd();}
         private static long ParseLong(string s){long v;return long.TryParse(s,out v)?v:0;}
         private static decimal ParseDecimal(string s){decimal v;return decimal.TryParse(s,NumberStyles.Any,CultureInfo.InvariantCulture,out v)?v:0m;}
         private static DateTime ParseDate(string s){DateTime v;return DateTime.TryParse(s,null,DateTimeStyles.RoundtripKind,out v)?v.ToLocalTime():DateTime.Now;}

@@ -162,11 +162,23 @@ namespace NexoMarket.Admin.UI
             }
 
             WebUser found;
-            if (!_store.VerifyWebUser(email, password, out found) || found.Role != "seller") { Fail("Correo o contraseña incorrectos."); return; }
-            if (!string.IsNullOrWhiteSpace(found.StoreId) && !string.Equals(found.StoreId, _store.StoreId, StringComparison.OrdinalIgnoreCase))
-                _store.SetSetting("store_id", found.StoreId);
+            bool localOk = _store.VerifyWebUser(email, password, out found) && found.Role == "seller";
+            if (!localOk)
+            {
+                try
+                {
+                    using (CentralSyncService sync = new CentralSyncService(_store))
+                    {
+                        if (sync.AuthenticateCentral(email, password, out found) && found != null && found.Role == "seller")
+                        { localOk = true; sync.PublishAccountNow(found); }
+                    }
+                } catch { }
+            }
+            if (!localOk) { Fail("Correo o contraseña incorrectos. Verificá que la cuenta exista en NexoMarket Central."); return; }
+            if (!string.IsNullOrWhiteSpace(found.StoreId) && !string.Equals(found.StoreId, _store.StoreId, StringComparison.OrdinalIgnoreCase)) _store.SetSetting("store_id", found.StoreId);
             _store.SetSetting("seller_account_email", found.Email);
             _store.SetSetting("seller_account_name", found.Name ?? "");
+            _store.SetSetting("seller_account_locked", "1");
             DialogResult = DialogResult.OK; Close();
         }
 

@@ -123,7 +123,27 @@ namespace NexoMarket.Admin.Data
             SetDefault("ticket_footer", "Gracias por su compra");
             SetDefault("web_public_url", "https://nexomarket-central.onrender.com");
             SetDefault("web_api_url", "https://nexomarket-central.onrender.com");
+            // Migración 4.1.20: instalaciones antiguas podían conservar localhost/LAN y
+            // terminar sincronizando contra una web distinta a Render. Se corrige una sola vez.
+            if (GetSetting("central_endpoint_migrated_4120", "0") != "1")
+            {
+                string api = GetSetting("web_api_url", "");
+                string pub = GetSetting("web_public_url", "");
+                if (IsLocalEndpoint(api) || string.IsNullOrWhiteSpace(api)) SetSetting("web_api_url", "https://nexomarket-central.onrender.com");
+                if (IsLocalEndpoint(pub) || string.IsNullOrWhiteSpace(pub)) SetSetting("web_public_url", "https://nexomarket-central.onrender.com");
+                SetSetting("web_sync_enabled", "1");
+                SetSetting("store_web_active", "1");
+                SetSetting("central_endpoint_migrated_4120", "1");
+            }
             SetDefault("web_sync_enabled", "1");
+            // La tienda nace publicada/activa en el directorio central.
+            SetDefault("store_web_active", "1");
+            // Migración de instalaciones anteriores: la publicación central queda activa por defecto.
+            if (GetSetting("central_store_activation_migrated_4119", "0") != "1")
+            {
+                SetSetting("store_web_active", "1");
+                SetSetting("central_store_activation_migrated_4119", "1");
+            }
             SetDefault("store_id", Guid.NewGuid().ToString("N").ToUpperInvariant());
             SetDefault("web_server_port", "8090");
             SetDefault("web_server_enabled", "0");
@@ -297,6 +317,13 @@ namespace NexoMarket.Admin.Data
         public void MarkAdminPasswordChangeRequired()
         {
             SetSetting("admin_must_change_password", "1");
+        }
+
+        private static bool IsLocalEndpoint(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return true;
+            string u = value.Trim().ToLowerInvariant();
+            return u.StartsWith("http://localhost") || u.StartsWith("https://localhost") || u.StartsWith("http://127.0.0.1") || u.StartsWith("https://127.0.0.1") || u.StartsWith("http://192.168.") || u.StartsWith("https://192.168.") || u.StartsWith("http://10.") || u.StartsWith("https://10.") || u.StartsWith("http://172.16.") || u.StartsWith("https://172.16.") || u.StartsWith("http://172.17.") || u.StartsWith("https://172.17.") || u.StartsWith("http://172.18.") || u.StartsWith("https://172.18.") || u.StartsWith("http://172.19.") || u.StartsWith("https://172.19.");
         }
 
         private void SetDefault(string key, string value)
