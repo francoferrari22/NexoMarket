@@ -10,125 +10,32 @@ namespace NexoMarket.LicenseManager
 {
     public sealed class MainForm : Form
     {
-        TextBox client, store, machine, api, adminKey;
-        ComboBox duration;
-        Label result;
-        string dataDir;
-        string privateKeyPath, publicKeyPath;
-
-        public MainForm()
-        {
-            Text="NexoMarket License Manager v1.0";
-            StartPosition=FormStartPosition.CenterScreen;
-            ClientSize=new Size(760,540);
-            BackColor=Color.FromArgb(12,16,22); ForeColor=Color.White;
-            dataDir=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"Data");
-            Directory.CreateDirectory(dataDir);
-            privateKeyPath=Path.Combine(dataDir,"license_private_key.xml");
-            publicKeyPath=Path.Combine(dataDir,"license_public_key.xml");
-            EnsureKeys();
-            Build();
+        TextBox client, email, accountId, store, api, adminKey, token; ComboBox duration; Label result; string dataDir,privateKeyPath,publicKeyPath;
+        public MainForm(){Text="NexoMarket License Manager v2.0 · Licencia por cuenta";StartPosition=FormStartPosition.CenterScreen;ClientSize=new Size(820,690);BackColor=Color.FromArgb(12,16,22);ForeColor=Color.White;dataDir=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"Data");Directory.CreateDirectory(dataDir);privateKeyPath=Path.Combine(dataDir,"license_private_key.xml");publicKeyPath=Path.Combine(dataDir,"license_public_key.xml");EnsureKeys();Build();}
+        void Build(){
+            Controls.Clear(); Controls.Add(new Label{Text="NEXOMARKET LICENSE MANAGER",Dock=DockStyle.Top,Height=58,Font=new Font("Segoe UI",19,FontStyle.Bold),ForeColor=Color.FromArgb(57,255,102),TextAlign=ContentAlignment.MiddleCenter});
+            int y=76; AddLabel("Cliente / comercio",20,y);client=AddBox(230,y,555);y+=46; AddLabel("Correo de la cuenta",20,y);email=AddBox(230,y,555);y+=46;
+            AddLabel("ID de cuenta",20,y);accountId=AddBox(230,y,360);Button copyAccount=Button("COPIAR ID DE CUENTA",600,y-2,185);copyAccount.Click+=delegate{try{Clipboard.SetText(accountId==null?"":accountId.Text.Trim());MessageBox.Show("ID de cuenta copiado. Es el identificador principal de la licencia.","NexoMarket",MessageBoxButtons.OK,MessageBoxIcon.Information);}catch{}};y+=46;
+            AddLabel("Store ID (opcional)",20,y);store=AddBox(230,y,360);Button copyStoreField=Button("COPIAR STORE ID",600,y-2,185);copyStoreField.Click+=delegate{try{Clipboard.SetText(store==null?"":store.Text.Trim());MessageBox.Show("Store ID copiado. Se usa como dato adicional de la tienda.","NexoMarket",MessageBoxButtons.OK,MessageBoxIcon.Information);}catch{}};y+=46;
+            Button lookup=Button("BUSCAR CUENTA",610,y-2,175);lookup.Click+=Lookup; y+=48;
+            AddLabel("Duración licencia",20,y);duration=new ComboBox{Left=230,Top=y,Width=230,DropDownStyle=ComboBoxStyle.DropDownList,BackColor=Color.FromArgb(25,32,42),ForeColor=Color.White};duration.Items.AddRange(new object[]{"60 días","90 días","180 días","365 días","Permanente"});duration.SelectedIndex=0;Controls.Add(duration);y+=46;
+            AddLabel("API central",20,y);api=AddBox(230,y,555);api.Text="https://nexomarket-central.onrender.com";y+=46;AddLabel("Clave admin API",20,y);adminKey=AddBox(230,y,555);adminKey.UseSystemPasswordChar=true;y+=54;
+            Button generate=Button("CREAR / RENOVAR CÓDIGO",20,y,240);generate.Click+=Generate;Button copy=Button("COPIAR TOKEN",270,y,150);copy.Click+=delegate{try{Clipboard.SetText(token==null?"":token.Text);MessageBox.Show("Token copiado al portapapeles. Ya podés enviárselo al vendedor.","NexoMarket",MessageBoxButtons.OK,MessageBoxIcon.Information);}catch{}};Button save=Button("GUARDAR TOKEN",430,y,160);save.Click+=SaveToken;Button pub=Button("EXPORTAR CLAVE PÚBLICA",600,y,185);pub.Click+=delegate{SavePublicKey();};y+=48;
+            token=new TextBox{Left=20,Top=y,Width=765,Height=105,Multiline=true,ScrollBars=ScrollBars.Vertical,BackColor=Color.FromArgb(25,32,42),ForeColor=Color.White,BorderStyle=BorderStyle.FixedSingle,Font=new Font("Consolas",8.5f)};Controls.Add(token);y+=114;
+            result=new Label{Left=20,Top=y,Width=765,Height=125,Font=new Font("Consolas",9),ForeColor=Color.LightGray,BorderStyle=BorderStyle.FixedSingle,Padding=new Padding(8)};Controls.Add(result);result.Text="FLUJO NUEVO\r\n1) El vendedor crea la cuenta y el sistema asigna 60 días por cuenta.\r\n2) El ID DE CUENTA es el identificador principal de la licencia.\r\n3) El Store ID es opcional y sirve como dato adicional de la tienda.\r\n4) Buscás la cuenta, generás el código, usás COPIAR TOKEN y se lo enviás.\r\n5) El vendedor pega el token en Windows o en su panel web.";
         }
-
-        void Build()
-        {
-            Label title=new Label{Text="NEXOMARKET LICENSE MANAGER",Dock=DockStyle.Top,Height=58,Font=new Font("Segoe UI",19,FontStyle.Bold),ForeColor=Color.FromArgb(57,255,102),TextAlign=ContentAlignment.MiddleCenter};
-            Controls.Add(title);
-            int y=78;
-            AddLabel("Cliente / comercio",20,y); client=AddBox(220,y,500); y+=48;
-            AddLabel("Store ID",20,y); store=AddBox(220,y,500); y+=48;
-            AddLabel("Machine ID",20,y); machine=AddBox(220,y,500); y+=48;
-            AddLabel("Duración",20,y);
-            duration=new ComboBox{Left=220,Top=y,Width=220,DropDownStyle=ComboBoxStyle.DropDownList,BackColor=Color.FromArgb(25,32,42),ForeColor=Color.White};
-            duration.Items.AddRange(new object[]{"30 días","90 días","365 días","Permanente"}); duration.SelectedIndex=0; Controls.Add(duration); y+=48;
-            AddLabel("API central",20,y); api=AddBox(220,y,500); api.Text="https://nexomarket-central.onrender.com"; y+=48;
-            AddLabel("Clave admin API",20,y); adminKey=AddBox(220,y,500); adminKey.UseSystemPasswordChar=true; y+=52;
-
-            Button generate=Button("CREAR / RENOVAR",20,y,210); generate.Click+=Generate;
-            Button search=Button("BUSCAR LICENCIA",240,y,190); search.Click+=Search;
-            Button revoke=Button("REVOCAR",440,y,130); revoke.Click+=Revoke;
-            Button pub=Button("EXPORTAR CLAVE PÚBLICA",580,y,140); pub.Click+=delegate{SavePublicKey();};
-            y+=52;
-            result=new Label{Left=20,Top=y,Width=700,Height=115,Font=new Font("Consolas",9),ForeColor=Color.LightGray,BorderStyle=BorderStyle.FixedSingle,Padding=new Padding(8)};
-            Controls.Add(result);
-            result.Text="Clave pública generada en:\r\n"+publicKeyPath+"\r\n\r\nEl archivo privado queda sólo en este equipo.";
-        }
-
-        void AddLabel(string t,int x,int y){Controls.Add(new Label{Text=t,Left=x,Top=y+5,Width=190,Height=28,ForeColor=Color.Gainsboro});}
-        TextBox AddBox(int x,int y,int w){TextBox t=new TextBox{Left=x,Top=y,Width=w,Height=28,BackColor=Color.FromArgb(25,32,42),ForeColor=Color.White,BorderStyle=BorderStyle.FixedSingle};Controls.Add(t);return t;}
-        Button Button(string t,int x,int y,int w){Button b=new Button{Text=t,Left=x,Top=y,Width=w,Height=36,FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(30,40,52),ForeColor=Color.White};Controls.Add(b);return b;}
-
-        void EnsureKeys()
-        {
-            if(File.Exists(privateKeyPath)&&File.Exists(publicKeyPath))return;
-            using(var rsa=new System.Security.Cryptography.RSACryptoServiceProvider(2048))
-            {
-                File.WriteAllText(privateKeyPath,rsa.ToXmlString(true),Encoding.UTF8);
-                File.WriteAllText(publicKeyPath,rsa.ToXmlString(false),Encoding.UTF8);
-            }
-        }
-
-        int SelectedDays(){string s=duration.SelectedItem.ToString();if(s.StartsWith("30"))return 30;if(s.StartsWith("365"))return 365;if(s.StartsWith("Permanente"))return 0;return 90;}
-
-        void Generate(object sender,EventArgs e)
-        {
-            if(string.IsNullOrWhiteSpace(store.Text)||string.IsNullOrWhiteSpace(machine.Text)||string.IsNullOrWhiteSpace(client.Text)){MessageBox.Show("Cliente, Store ID y Machine ID son obligatorios.");return;}
-            try
-            {
-                int days=SelectedDays(); DateTime issued=DateTime.UtcNow; DateTime expires=days==0?new DateTime(9999,12,31,23,59,59,DateTimeKind.Utc):issued.AddDays(days);
-                LicenseRecord r=new LicenseRecord{StoreId=store.Text.Trim(),MachineId=machine.Text.Trim().ToUpperInvariant(),ClientName=client.Text.Trim(),Days=days,IssuedUtc=issued,ExpiresUtc=expires,Status="Active"};
-                r.Signature=LicenseCore.Sign(r,File.ReadAllText(privateKeyPath,Encoding.UTF8));
-                string token=LicenseCore.Serialize(r);
-                string file=Path.Combine(dataDir,"NexoMarket_"+r.StoreId+"_"+DateTime.Now.ToString("yyyyMMdd_HHmmss")+".nexolicense");
-                File.WriteAllText(file,token,Encoding.UTF8);
-                SavePublicKey();
-                bool remote=Register(token);
-                result.Text="LICENCIA CREADA\r\nArchivo: "+file+"\r\nEstado: Activa · "+(days==0?"Permanente":days+" días")+"\r\nServidor: "+(remote?"Registrada":"No registrada (se guardó localmente)")+"\r\n\r\nEntregar también license_public_key.xml al vendedor.";
-            }
-            catch(Exception ex){result.Text="ERROR: "+ex.Message;}
-        }
-
-        void SavePublicKey()
-        {
-            using(SaveFileDialog s=new SaveFileDialog{FileName="license_public_key.xml",Filter="XML (*.xml)|*.xml"})
-            {
-                if(s.ShowDialog()==DialogResult.OK)File.Copy(publicKeyPath,s.FileName,true);
-            }
-        }
-
-        bool Register(string token)
-        {
-            try
-            {
-                string baseUrl=(api.Text??"").Trim().TrimEnd('/'); if(baseUrl.Length==0)return false;
-                string body="license="+Uri.EscapeDataString(token)+"&adminKey="+Uri.EscapeDataString(adminKey.Text??"");
-                HttpWebRequest req=(HttpWebRequest)WebRequest.Create(baseUrl+"/api/licenses/upsert");req.Method="POST";req.Timeout=8000;byte[] b=Encoding.UTF8.GetBytes(body);req.ContentType="application/x-www-form-urlencoded";req.ContentLength=b.Length;
-                using(Stream s=req.GetRequestStream())s.Write(b,0,b.Length);
-                using(WebResponse r=req.GetResponse())using(StreamReader sr=new StreamReader(r.GetResponseStream()))return sr.ReadToEnd().StartsWith("OK|",StringComparison.OrdinalIgnoreCase);
-            }catch{return false;}
-        }
-
-        void Search(object sender,EventArgs e)
-        {
-            try
-            {
-                string baseUrl=(api.Text??"").Trim().TrimEnd('/'); string q="";
-                if(!string.IsNullOrWhiteSpace(store.Text))q="storeId="+Uri.EscapeDataString(store.Text.Trim());
-                if(!string.IsNullOrWhiteSpace(machine.Text))q+=(q.Length>0?"&":"")+"machineId="+Uri.EscapeDataString(machine.Text.Trim());
-                HttpWebRequest req=(HttpWebRequest)WebRequest.Create(baseUrl+"/api/licenses/search?"+q);req.Timeout=8000;
-                using(WebResponse r=req.GetResponse())using(StreamReader sr=new StreamReader(r.GetResponseStream(),Encoding.UTF8))result.Text=sr.ReadToEnd();
-            }catch(Exception ex){result.Text="No se pudo consultar: "+ex.Message;}
-        }
-
-        void Revoke(object sender,EventArgs e)
-        {
-            try
-            {
-                string baseUrl=(api.Text??"").Trim().TrimEnd('/'); string body="storeId="+Uri.EscapeDataString(store.Text.Trim())+"&machineId="+Uri.EscapeDataString(machine.Text.Trim())+"&adminKey="+Uri.EscapeDataString(adminKey.Text??"");
-                HttpWebRequest req=(HttpWebRequest)WebRequest.Create(baseUrl+"/api/licenses/revoke");req.Method="POST";req.Timeout=8000;byte[] b=Encoding.UTF8.GetBytes(body);req.ContentType="application/x-www-form-urlencoded";req.ContentLength=b.Length;
-                using(Stream s=req.GetRequestStream())s.Write(b,0,b.Length);
-                using(WebResponse r=req.GetResponse())using(StreamReader sr=new StreamReader(r.GetResponseStream()))result.Text=sr.ReadToEnd();
-            }catch(Exception ex){result.Text="No se pudo revocar: "+ex.Message;}
-        }
+        void AddLabel(string t,int x,int y){Controls.Add(new Label{Text=t,Left=x,Top=y+5,Width=200,Height=28,ForeColor=Color.Gainsboro});}
+        TextBox AddBox(int x,int y,int w){var t=new TextBox{Left=x,Top=y,Width=w,Height=28,BackColor=Color.FromArgb(25,32,42),ForeColor=Color.White,BorderStyle=BorderStyle.FixedSingle};Controls.Add(t);return t;}
+        Button Button(string t,int x,int y,int w){var b=new Button{Text=t,Left=x,Top=y,Width=w,Height=36,FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(30,40,52),ForeColor=Color.White};Controls.Add(b);return b;}
+        void EnsureKeys(){if(File.Exists(privateKeyPath)&&File.Exists(publicKeyPath))return;using(var rsa=new System.Security.Cryptography.RSACryptoServiceProvider(2048)){File.WriteAllText(privateKeyPath,rsa.ToXmlString(true),Encoding.UTF8);File.WriteAllText(publicKeyPath,rsa.ToXmlString(false),Encoding.UTF8);}}
+        int SelectedDays(){string s=duration.SelectedItem.ToString();if(s.StartsWith("60"))return 60;if(s.StartsWith("90"))return 90;if(s.StartsWith("180"))return 180;if(s.StartsWith("365"))return 365;return 0;}
+        string Base(){return (api.Text??"").Trim().TrimEnd('/');}
+        string Post(string url,string body){HttpWebRequest req=(HttpWebRequest)WebRequest.Create(url);req.Method="POST";req.Timeout=10000;req.ContentType="application/x-www-form-urlencoded";byte[] b=Encoding.UTF8.GetBytes(body);req.ContentLength=b.Length;using(Stream s=req.GetRequestStream())s.Write(b,0,b.Length);using(WebResponse r=req.GetResponse())using(StreamReader sr=new StreamReader(r.GetResponseStream(),Encoding.UTF8))return sr.ReadToEnd().Trim();}
+        void Lookup(object sender,EventArgs e){try{string q=!string.IsNullOrWhiteSpace(accountId.Text)?"accountId="+Uri.EscapeDataString(accountId.Text.Trim()):"email="+Uri.EscapeDataString(email.Text.Trim());string u=Base()+"/api/accounts/lookup?"+q;HttpWebRequest req=(HttpWebRequest)WebRequest.Create(u);req.Timeout=8000;using(WebResponse r=req.GetResponse())using(StreamReader sr=new StreamReader(r.GetResponseStream(),Encoding.UTF8)){string line=sr.ReadToEnd().Trim();string[] p=line.Split('|');if(p.Length>=6&&p[0]=="OK"){accountId.Text=Uri.UnescapeDataString(p[1]);email.Text=Uri.UnescapeDataString(p[2]);client.Text=Uri.UnescapeDataString(p[3]);store.Text=Uri.UnescapeDataString(p[4]);result.Text="CUENTA ENCONTRADA\r\nID: "+accountId.Text+"\r\nCorreo: "+email.Text+"\r\nComercio: "+client.Text+"\r\nStore ID: "+store.Text+"\r\nRol: "+Uri.UnescapeDataString(p[5]);}else result.Text="No se encontró la cuenta.";}}catch(Exception ex){result.Text="No se pudo buscar la cuenta: "+ex.Message;}}
+        void Generate(object sender,EventArgs e){if(string.IsNullOrWhiteSpace(client.Text)||string.IsNullOrWhiteSpace(email.Text)||string.IsNullOrWhiteSpace(accountId.Text)){MessageBox.Show("Completá Cliente, correo e ID de cuenta. El Store ID es opcional y se usa como dato adicional. No se usa Machine ID.");return;}try{int days=SelectedDays();DateTime issued=DateTime.UtcNow;DateTime expires=days==0?new DateTime(9999,12,31,23,59,59,DateTimeKind.Utc):issued.AddDays(days);var r=new LicenseRecord{AccountId=accountId.Text.Trim(),AccountEmail=email.Text.Trim().ToLowerInvariant(),StoreId=store.Text.Trim(),ClientName=client.Text.Trim(),Days=days,IssuedUtc=issued,ExpiresUtc=expires,Status="Active"};r.Signature=LicenseCore.Sign(r,File.ReadAllText(privateKeyPath,Encoding.UTF8));string t=LicenseCore.Serialize(r);token.Text=t;string file=Path.Combine(dataDir,"NexoMarket_ACCOUNT_"+San(accountId.Text)+"_"+DateTime.Now.ToString("yyyyMMdd_HHmmss")+".nexotoken");File.WriteAllText(file,t,Encoding.UTF8);bool remote=Register(t);result.Text="CÓDIGO GENERADO\r\nCuenta: "+r.AccountEmail+"\r\nID: "+r.AccountId+"\r\nDuración: "+(days==0?"Permanente":days+" días")+"\r\nVence: "+expires.ToLocalTime().ToString("dd/MM/yyyy HH:mm")+"\r\nServidor: "+(remote?"Registrado":"No registrado")+"\r\nArchivo: "+file+"\r\n\r\nUsá COPIAR TOKEN para enviárselo al vendedor.";}catch(Exception ex){result.Text="ERROR: "+ex.Message;}}
+        string San(string s){foreach(char c in Path.GetInvalidFileNameChars())s=s.Replace(c,'_');return s;}
+        bool Register(string t){try{string body="license="+Uri.EscapeDataString(t)+"&adminKey="+Uri.EscapeDataString(adminKey.Text??"");return Post(Base()+"/api/licenses/upsert-account",body).StartsWith("OK|",StringComparison.OrdinalIgnoreCase);}catch{return false;}}
+        void SaveToken(object sender,EventArgs e){if(string.IsNullOrWhiteSpace(token.Text)){MessageBox.Show("Primero generá un código.");return;}using(var s=new SaveFileDialog{FileName="NexoMarket_Licencia_Cuenta.nexotoken",Filter="Token NexoMarket (*.nexotoken)|*.nexotoken|Todos (*.*)|*.*"})if(s.ShowDialog()==DialogResult.OK)File.WriteAllText(s.FileName,token.Text.Trim(),Encoding.UTF8);}
+        void SavePublicKey(){using(var s=new SaveFileDialog{FileName="license_public_key.xml",Filter="XML (*.xml)|*.xml"})if(s.ShowDialog()==DialogResult.OK)File.Copy(publicKeyPath,s.FileName,true);}
     }
 }
