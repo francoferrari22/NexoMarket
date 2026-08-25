@@ -14,7 +14,7 @@ CORRECCION PRINCIPAL
 
 FLUJO
 1. Vendedor crea/inicia sesión.
-2. Primera entrada: Render fija 60 días para esa cuenta.
+2. Primera entrada: Render fija 90 días para esa cuenta.
 3. Windows muestra el ID de cuenta y permite copiarlo.
 4. Para licencia paga, el vendedor envía el ID de cuenta (Store ID no necesario).
 5. License Manager busca la cuenta, genera el token, permite COPIAR TOKEN y GUARDAR TOKEN.

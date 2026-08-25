@@ -32,6 +32,7 @@ namespace NexoMarket.CentralServer
         private volatile bool _running;
         private XDocument _doc;
         private readonly R2ObjectStore _r2;
+        private const int SellerTrialDays = 90;
 
         public CentralServerService(int port)
         {
@@ -396,7 +397,7 @@ namespace NexoMarket.CentralServer
         private string LicenseUpsertAccount(Dictionary<string,string> f)
         {
             if(!IsLicenseAdmin(f))return "ERROR|unauthorized"; string token=Get(f,"license"); NexoMarket.Licensing.LicenseRecord r; if(!NexoMarket.Licensing.LicenseCore.TryParse(token,out r))return "ERROR|license"; string pub=LicensePublicKey(); if(string.IsNullOrWhiteSpace(pub)||!NexoMarket.Licensing.LicenseCore.Verify(r,pub))return "ERROR|signature"; if(r.ExpiresUtc<=DateTime.UtcNow)return "ERROR|expired";
-            CentralUser u=FindAccount(r.AccountEmail); if(u==null||u.Role!="seller")return "ERROR|seller_account"; if(!string.Equals(LicenseAccountId(u.Email),r.AccountId,StringComparison.OrdinalIgnoreCase))return "ERROR|account_id"; if(!string.IsNullOrWhiteSpace(r.StoreId)&&!string.IsNullOrWhiteSpace(u.StoreId)&&!string.Equals(u.StoreId,r.StoreId,StringComparison.OrdinalIgnoreCase))return "ERROR|store";
+            CentralUser u=FindAccount(r.AccountEmail); if(u==null||u.Role!="seller")return "ERROR|seller_account"; if(!string.Equals(LicenseAccountId(u.Email),r.AccountId,StringComparison.OrdinalIgnoreCase))return "ERROR|account_id"; // Store ID ignorado: la licencia pertenece a la cuenta.
             return ActivateAccountLicense(new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){{"email",r.AccountEmail},{"accountId",r.AccountId},{"storeId",r.StoreId},{"license",token}});
         }
 
@@ -818,7 +819,7 @@ namespace NexoMarket.CentralServer
                 {
                     string oldId=S(old,"Id"); if(!string.IsNullOrWhiteSpace(oldId))e.SetElementValue("Id",oldId); string oldLicenseId=S(old,"LicenseAccountId"); if(!string.IsNullOrWhiteSpace(oldLicenseId))e.SetElementValue("LicenseAccountId",oldLicenseId);
                     string oldStore=S(old,"StoreId"); if(role=="seller" && !string.IsNullOrWhiteSpace(oldStore))e.SetElementValue("StoreId",oldStore);
-                    string[] keep={"TrialStartedUtc","TrialExpiresUtc","LicenseStatus","PaidLicenseIssuedUtc","PaidLicenseExpiresUtc","PaidLicenseStatus","PaidLicenseToken"};
+                    string[] keep={"TrialStartedUtc","TrialExpiresUtc","TrialDays","LicenseStatus","PaidLicenseIssuedUtc","PaidLicenseExpiresUtc","PaidLicenseStatus","PaidLicenseToken"};
                     foreach(string k in keep){string v=S(old,k);if(!string.IsNullOrWhiteSpace(v))e.Add(new XElement(k,v));}
                 }
                 if(old!=null) old.ReplaceWith(e); else root.Add(e);
@@ -833,7 +834,7 @@ namespace NexoMarket.CentralServer
             string storeId=Get(f,"storeId").Trim();
             CentralUser user=FindAccount(email);
             if(user==null || user.Role!="seller") return "ERROR|seller_account";
-            if(!string.IsNullOrWhiteSpace(storeId) && !string.IsNullOrWhiteSpace(user.StoreId) && !string.Equals(storeId,user.StoreId,StringComparison.OrdinalIgnoreCase)) return "ERROR|store";
+            // Store ID es informativo. La prueba y la licencia pertenecen a la cuenta, no a la tienda ni a la PC.
             EnsureSellerTrialForUser(user);
             user=FindAccount(email);
             return SellerTrialResponse(user);
@@ -847,9 +848,49 @@ namespace NexoMarket.CentralServer
                 XDocument d=LoadFile(_accountsFile,"NexoMarketAccounts","Users");
                 XElement e=d.Root.Element("Users").Elements("User").FirstOrDefault(x=>string.Equals(S(x,"Email"),user.Email,StringComparison.OrdinalIgnoreCase));
                 if(e==null)return;
-                DateTime started,expires; bool hasStarted=DateTime.TryParse(S(e,"TrialStartedUtc"),null,System.Globalization.DateTimeStyles.RoundtripKind,out started); bool hasExpires=DateTime.TryParse(S(e,"TrialExpiresUtc"),null,System.Globalization.DateTimeStyles.RoundtripKind,out expires);
-                if(!hasStarted || !hasExpires){started=DateTime.UtcNow;expires=started.AddDays(60);e.SetElementValue("TrialStartedUtc",started.ToString("o"));e.SetElementValue("TrialExpiresUtc",expires.ToString("o"));if(string.IsNullOrWhiteSpace(S(e,"LicenseStatus")))e.SetElementValue("LicenseStatus","Active");SaveDoc(_accountsFile,d);}
-                else if(expires<=DateTime.UtcNow && string.Equals(S(e,"LicenseStatus"),"Active",StringComparison.OrdinalIgnoreCase)){e.SetElementValue("LicenseStatus","Expired");SaveDoc(_accountsFile,d);}
+                DateTime started,expires;
+                bool hasStarted=DateTime.TryParse(S(e,"TrialStartedUtc"),null,System.Globalization.DateTimeStyles.RoundtripKind,out started);
+                bool hasExpires=DateTime.TryParse(S(e,"TrialExpiresUtc"),null,System.Globalization.DateTimeStyles.RoundtripKind,out expires);
+                bool changed=false;
+
+                if(!hasStarted || !hasExpires)
+                {
+                    started=DateTime.UtcNow;
+                    expires=started.AddDays(SellerTrialDays);
+                    e.SetElementValue("TrialStartedUtc",started.ToString("o"));
+                    e.SetElementValue("TrialExpiresUtc",expires.ToString("o"));
+                    e.SetElementValue("TrialDays",SellerTrialDays.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    if(string.IsNullOrWhiteSpace(S(e,"LicenseStatus")))
+                        e.SetElementValue("LicenseStatus","Active");
+                    changed=true;
+                }
+                else
+                {
+                    // Migración de cuentas creadas con la versión anterior de 60 días:
+                    // si la fecha de vencimiento era exactamente inicio + 60 días,
+                    // se corrige a inicio + 90 días. No se reinicia el reloj de la cuenta.
+                    DateTime oldSixty=started.AddDays(60);
+                    if(string.IsNullOrWhiteSpace(S(e,"TrialDays")) &&
+                       Math.Abs((expires-oldSixty).TotalMinutes) <= 2 &&
+                       !string.Equals(S(e,"PaidLicenseStatus"),"Active",StringComparison.OrdinalIgnoreCase))
+                    {
+                        expires=started.AddDays(SellerTrialDays);
+                        e.SetElementValue("TrialExpiresUtc",expires.ToString("o"));
+                        e.SetElementValue("TrialDays",SellerTrialDays.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                        if(string.IsNullOrWhiteSpace(S(e,"LicenseStatus")) ||
+                           string.Equals(S(e,"LicenseStatus"),"Active",StringComparison.OrdinalIgnoreCase))
+                            e.SetElementValue("LicenseStatus","Active");
+                        changed=true;
+                    }
+                }
+
+                if(expires<=DateTime.UtcNow && string.Equals(S(e,"LicenseStatus"),"Active",StringComparison.OrdinalIgnoreCase))
+                {
+                    e.SetElementValue("LicenseStatus","Expired");
+                    changed=true;
+                }
+
+                if(changed) SaveDoc(_accountsFile,d);
             }
         }
 
@@ -929,8 +970,16 @@ namespace NexoMarket.CentralServer
         private void CentralSeller(NetworkStream stream,string cookie)
         {
             CentralUser u=SessionUser(cookie); if(u==null||u.Role!="seller"){WriteRedirect(stream,"/login");return;}
+            EnsureSellerTrialForUser(u);
+            u=FindAccount(u.Email);
             List<XElement> products=new List<XElement>(); lock(_sync){XDocument d=LoadFile(_catalogFile,"NexoMarketCatalog","Products"); products=d.Root.Element("Products").Elements("Product").Where(x=>S(x,"StoreId")==u.StoreId && S(x,"Active")!="0").OrderBy(x=>S(x,"Name")).ToList();}
-            StringBuilder b=new StringBuilder(AuthShellStart("Panel vendedor")); b.Append("<h1>Panel de vendedor</h1><p>Cuenta: <b>").Append(E(u.Email)).Append("</b> · ID de cuenta: <b>").Append(E(LicenseAccountId(u.Email))).Append("</b> · Tienda: <b>").Append(E(u.StoreId)).Append("</b></p><p><a class='btn alt' href='/'>TIENDAS</a> <a class='btn alt' href='/logout'>SALIR</a></p>"); DateTime trialExp; StringBuilder lic=new StringBuilder(); lic.Append("<div class='card'><h2>Mi licencia</h2><p>La prueba inicial del vendedor es de 60 días y pertenece a esta cuenta. Para una licencia comprada, pegá aquí el código que te envió NexoMarket.</p><form method='post' action='/seller/license'><textarea name='license' placeholder='Pegá aquí tu código/token'></textarea><button class='btn' type='submit'>ACTIVAR CÓDIGO</button></form><p><b>ID de cuenta para solicitar licencia:</b> "+E(LicenseAccountId(u.Email))+"</p></div>"); b.Append(lic.ToString()); b.Append("<h2>Mis productos sincronizados</h2><div class='grid'>");
+            string trial=SellerTrialResponse(u);
+            string[] tp=trial.Split('|');
+            string trialStatus=tp.Length>1?tp[1]:"Sin licencia";
+            string trialDays=tp.Length>2?tp[2]:"0";
+            string trialExpires=tp.Length>4?tp[4]:"";
+            StringBuilder b=new StringBuilder(AuthShellStart("Panel vendedor")); b.Append("<h1>Panel de vendedor</h1><p>Cuenta: <b>").Append(E(u.Email)).Append("</b> · ID de cuenta: <b>").Append(E(LicenseAccountId(u.Email))).Append("</b></p><p><a class='btn alt' href='/'>TIENDAS</a> <a class='btn alt' href='/logout'>SALIR</a></p>");
+            StringBuilder lic=new StringBuilder(); lic.Append("<div class='card'><h2>Mi licencia</h2><p><b>Estado:</b> ").Append(E(trialStatus)).Append(" · <b>Días restantes:</b> ").Append(E(trialDays)).Append("</p><p>La prueba inicial del vendedor es de 90 días y pertenece a esta cuenta. No depende de la computadora, Machine ID ni Store ID.</p><p><b>Vencimiento:</b> ").Append(E(trialExpires)).Append("</p><p><b>ID de cuenta para solicitar licencia:</b> ").Append(E(LicenseAccountId(u.Email))).Append("</p><form method='post' action='/seller/license'><textarea name='license' placeholder='Pegá aquí tu código/token'></textarea><button class='btn' type='submit'>ACTIVAR CÓDIGO</button></form></div>"); b.Append(lic.ToString()); b.Append("<h2>Mis productos sincronizados</h2><div class='grid'>");
             foreach(XElement x in products)b.Append("<div class='card'><h3>").Append(E(S(x,"Name"))).Append("</h3><p>").Append(E(S(x,"PublicDescription"))).Append("</p><strong>$ ").Append(E(S(x,"SalePrice")=="0"?S(x,"Price"):S(x,"SalePrice"))).Append("</strong><p>Stock: ").Append(E(S(x,"Stock"))).Append("</p></div>");
             if(products.Count==0)b.Append("<div class='empty'>Todavía no hay productos sincronizados para esta tienda. Abrí el panel de Windows con esta misma cuenta y esperá la sincronización.</div>"); b.Append("</div>").Append(AuthShellEnd()); Write(stream,200,"text/html; charset=utf-8",b.ToString());
         }

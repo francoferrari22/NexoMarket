@@ -73,10 +73,10 @@ No se puede compilar el proyecto Windows en este entorno porque no hay SDK .NET 
 === 4.1.7 - LICENCIA POR CUENTA (60 DIAS) ===
 
 - La licencia del vendedor ya no depende del Machine ID.
-- La primera creación/entrada de una cuenta de vendedor activa 60 días en NexoMarket Central.
+- La primera creación/entrada de una cuenta de vendedor activa 90 días en NexoMarket Central.
 - La fecha de inicio y vencimiento se guardan en la cuenta central y no se reinician al cambiar de PC.
 - La misma cuenta de vendedor puede iniciar sesión en otra computadora y conserva la misma fecha de vencimiento.
 - Compradores no requieren licencia.
 - Windows publica la cuenta local a Central antes de consultar/activar el período, sin esperar al sincronizador periódico.
 - El botón de licencia ya no solicita token para el período inicial: muestra la licencia de cuenta y permite continuar.
-- El License Manager antiguo queda como herramienta de compatibilidad para tokens históricos; el período inicial de 60 días se gestiona automáticamente por cuenta.
+- El License Manager antiguo queda como herramienta de compatibilidad para tokens históricos; el período inicial de 90 días se gestiona automáticamente por cuenta.
