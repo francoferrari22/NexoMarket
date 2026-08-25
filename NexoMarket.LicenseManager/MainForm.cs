@@ -40,7 +40,7 @@ namespace NexoMarket.LicenseManager
             AddLabel("Machine ID",20,y); machine=AddBox(220,y,500); y+=48;
             AddLabel("Duración",20,y);
             duration=new ComboBox{Left=220,Top=y,Width=220,DropDownStyle=ComboBoxStyle.DropDownList,BackColor=Color.FromArgb(25,32,42),ForeColor=Color.White};
-            duration.Items.AddRange(new object[]{"30 días","90 días","365 días","Permanente"}); duration.SelectedIndex=1; Controls.Add(duration); y+=48;
+            duration.Items.AddRange(new object[]{"30 días","90 días","365 días","Permanente"}); duration.SelectedIndex=0; Controls.Add(duration); y+=48;
             AddLabel("API central",20,y); api=AddBox(220,y,500); api.Text="https://nexomarket-central.onrender.com"; y+=48;
             AddLabel("Clave admin API",20,y); adminKey=AddBox(220,y,500); adminKey.UseSystemPasswordChar=true; y+=52;
 

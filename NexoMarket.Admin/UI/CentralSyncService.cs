@@ -40,6 +40,7 @@ namespace NexoMarket.Admin.UI
                 if (baseUrl.Length > 0) _license.RefreshFromServer(baseUrl);
                 if (baseUrl.Length == 0) return;
                 PublishStore(baseUrl);
+                PublishAccounts(baseUrl);
                 List<Product> products = _store.GetProducts("");
                 foreach (Product p in products) PublishProduct(baseUrl, p);
                 List<Promotion> promotions = _store.GetPromotions();
@@ -67,9 +68,21 @@ namespace NexoMarket.Admin.UI
             catch { }
             finally { _busy = false; }
         }
-        private bool Enabled() { string u=(_store.GetSetting("web_api_url","")??"").Trim(); return !string.IsNullOrWhiteSpace(u); }
+        private bool Enabled() { return true; }
         private bool AlreadyImported(string id) { foreach (Order o in _store.GetOrders("")) if (string.Equals(o.CentralOrderId,id,StringComparison.OrdinalIgnoreCase)) return true; return false; }
         private void PublishStore(string baseUrl) { try { new StoreDirectoryClient(_store).PublishStore(_store.GetSetting("web_public_url","")); } catch { } }
+
+        private void PublishAccounts(string baseUrl)
+        {
+            try
+            {
+                foreach (var u in _store.GetWebUsers())
+                {
+                    Request(baseUrl+"/api/accounts/upsert","POST",Form(new Dictionary<string,string>{{"id",u.Id.ToString(CultureInfo.InvariantCulture)},{"name",u.Name},{"email",u.Email},{"phone",u.Phone},{"role",u.Role},{"storeId",u.StoreId},{"salt",u.Salt},{"passwordHash",u.PasswordHash},{"createdAt",u.CreatedAt.ToUniversalTime().ToString("o")}}));
+                }
+            }
+            catch { }
+        }
         private void PublishProduct(string baseUrl, Product p)
         {
             Request(baseUrl+"/api/products/publish","POST",Form(new Dictionary<string,string>{{"storeId",_store.StoreId},{"productId",p.Id.ToString(CultureInfo.InvariantCulture)},{"name",p.Name},{"category",p.Category},{"description",p.Description},{"price",p.Price.ToString(CultureInfo.InvariantCulture)},{"salePrice",p.SalePrice.ToString(CultureInfo.InvariantCulture)},{"stock",p.Stock.ToString(CultureInfo.InvariantCulture)},{"minimumStock",p.MinimumStock.ToString(CultureInfo.InvariantCulture)},{"sku",p.SKU},{"brand",p.Brand},{"size",p.Size},{"color",p.Color},{"active",p.Active?"1":"0"},{"onlineEnabled",p.OnlineEnabled?"1":"0"},{"imagePath",p.ImagePath},{"slug",p.Slug},{"publicDescription",p.PublicDescription},{"updatedAt",DateTime.UtcNow.ToString("o")}}));

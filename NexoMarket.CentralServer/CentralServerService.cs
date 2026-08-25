@@ -24,7 +24,9 @@ namespace NexoMarket.CentralServer
         private readonly string _catalogFile;
         private readonly string _ordersFile;
         private readonly string _licensesFile;
+        private readonly string _accountsFile;
         private readonly object _sync = new object();
+        private readonly Dictionary<string, CentralUser> _sessions = new Dictionary<string, CentralUser>(StringComparer.OrdinalIgnoreCase);
         private TcpListener _listener;
         private System.Threading.Thread _worker;
         private volatile bool _running;
@@ -39,6 +41,7 @@ namespace NexoMarket.CentralServer
             _catalogFile = Path.Combine(_root, "nexomarket_catalog.xml");
             _ordersFile = Path.Combine(_root, "nexomarket_orders.xml");
             _licensesFile = Path.Combine(_root, "nexomarket_licenses.xml");
+            _accountsFile = Path.Combine(_root, "nexomarket_accounts.xml");
             Directory.CreateDirectory(_root);
             _r2 = new R2ObjectStore();
             Load();
@@ -137,6 +140,14 @@ namespace NexoMarket.CentralServer
                         string body = Body(request); string path = target; string query = ""; int q = path.IndexOf('?');
                         if (q >= 0) { query = path.Substring(q + 1); path = path.Substring(0, q); }
                         if (path == "/health") { Write(stream, 200, "text/plain", "NexoMarket Central OK\n"); return; }
+                        if (path == "/api/licenses/public-key" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", LicensePublicKey()); return; }
+                        if (path == "/api/accounts/upsert" && method == "POST") { Write(stream, 200, "text/plain", AccountUpsert(Form(body))); return; }
+                        if (path == "/api/accounts/ensure-trial" && method == "POST") { Write(stream, 200, "text/plain; charset=utf-8", EnsureSellerTrial(Form(body))); return; }
+                        if (path == "/login") { CentralLogin(stream, method, body, HeaderCookie(request, "NexoCentralSession")); return; }
+                        if (path == "/register") { CentralRegister(stream, method, body); return; }
+                        if (path == "/logout") { CentralLogout(stream); return; }
+                        if (path == "/seller") { CentralSeller(stream, HeaderCookie(request, "NexoCentralSession")); return; }
+                        if (path == "/buyer") { CentralBuyer(stream, HeaderCookie(request, "NexoCentralSession")); return; }
                         if (path == "/api/storage/status" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", StorageStatus()); return; }
                         if (path == "/api/media/upload" && method == "POST") { Write(stream, 200, "text/plain; charset=utf-8", UploadMedia(Form(body))); return; }
                         if (path == "/api/stores" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", StoreLines(query)); return; }
@@ -288,6 +299,8 @@ namespace NexoMarket.CentralServer
                 RestoreIfMissing(_catalogFile, "data/nexomarket_catalog.xml");
                 RestoreIfMissing(_ordersFile, "data/nexomarket_orders.xml");
                 RestoreIfMissing(_licensesFile, "data/nexomarket_licenses.xml");
+                RestoreIfMissing(_accountsFile, "data/nexomarket_accounts.xml");
+                if (!File.Exists(_accountsFile)) File.WriteAllText(_accountsFile, new XDocument(new XElement("NexoMarketAccounts", new XElement("Users"))).ToString(SaveOptions.None), Encoding.UTF8);
                 if (!File.Exists(_catalogFile)) File.WriteAllText(_catalogFile, new XDocument(new XElement("NexoMarketCatalog", new XElement("Products"), new XElement("Promotions"))).ToString(SaveOptions.None), Encoding.UTF8);
                 if (!File.Exists(_ordersFile)) File.WriteAllText(_ordersFile, new XDocument(new XElement("NexoMarketOrders", new XElement("Orders"))).ToString(SaveOptions.None), Encoding.UTF8);
                 if (!File.Exists(_licensesFile)) File.WriteAllText(_licensesFile, new XDocument(new XElement("NexoMarketLicenses", new XElement("Licenses"))).ToString(SaveOptions.None), Encoding.UTF8);
@@ -822,7 +835,7 @@ namespace NexoMarket.CentralServer
             string locationTitle = hasCoords ? (string.IsNullOrWhiteSpace(q) ? "Tu ubicación" : q) : (string.IsNullOrWhiteSpace(q) ? "Sin ubicación definida" : q);
             b.Append("<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><meta http-equiv='Cache-Control' content='no-store'><title>NexoMarket · Tiendas</title>");
             b.Append("<style>body{font-family:'Segoe UI',Arial,sans-serif;background:#070b10;color:#fff;margin:0}.wrap{max-width:1180px;margin:auto;padding:22px}.top{display:flex;justify-content:space-between;align-items:center;padding:6px 4px 18px}.brand{font-weight:900;font-size:23px}.brand .n{color:#39ff66}.top a{color:#fff;text-decoration:none;margin-left:18px;font-weight:700}.hero{padding:28px;border:1px solid #2a4660;background:linear-gradient(135deg,#101925,#0b1722);border-radius:22px;box-shadow:0 12px 35px rgba(0,0,0,.18)}.eyebrow{font-size:11px;letter-spacing:2px;color:#39ff66;font-weight:900}.nexo{color:#39ff66;font-size:45px;font-weight:900}.market{font-size:40px;font-weight:800}.hero-sub{color:#a8c0d4;margin-top:9px;font-size:15px}.location-box{margin-top:20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}.location-box input{background:#0c141d;color:#fff;border:1px solid #2c4963;border-radius:10px;padding:12px;width:330px}.btn{background:#39ff66;color:#061009;border:0;border-radius:10px;padding:11px 16px;font-weight:900;cursor:pointer}.btn.alt{background:#0d1721;color:#fff;border:1px solid #2d4a64}.hint{color:#7e94a8;font-size:12px;margin-top:12px}.section-head{display:flex;justify-content:space-between;align-items:end;margin:24px 2px 12px}.section-head h2{margin:0;font-size:24px}.section-head p{margin:5px 0 0;color:#8da3b6;font-size:13px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:15px}.card{display:block;color:#fff;text-decoration:none;background:#0e1721;border:1px solid #2a4660;border-radius:18px;padding:18px;min-height:118px;transition:.15s}.card:hover{transform:translateY(-2px);border-color:#39ff66}.logo{width:58px;height:58px;border-radius:14px;background:#07110a;border:1px solid #2d7042;display:flex;align-items:center;justify-content:center;color:#39ff66;font-size:29px;font-weight:900;float:left;margin-right:14px}.name{font-size:20px;font-weight:900;padding-top:3px}.meta{color:#92a6b7;font-size:13px;margin-top:6px}.open{color:#39ff66;font-size:12px;margin-top:11px}.distance{color:#ffd34d;font-size:12px;margin-top:5px}.empty{margin-top:18px;border:1px dashed #38516a;border-radius:18px;padding:28px;color:#a2b2c0;background:#0b131c}.empty b{font-size:18px}.auth-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:15px;margin-top:20px}.panel{background:#0e1721;border:1px solid #2a4660;border-radius:18px;padding:20px}.panel h2{margin-top:0}.panel p{color:#92a6b7;font-size:13px;line-height:1.5}.mini{color:#39ff66;font-size:12px;font-weight:800}.footer{margin-top:35px;border-top:1px solid #203448;padding-top:14px;color:#60768a;font-size:11px}@media(max-width:650px){.wrap{padding:14px}.nexo{font-size:35px}.market{font-size:31px}.location-box input{width:100%}}</style></head><body><div class='wrap'>");
-            b.Append("<div class='top'><div class='brand'><span class='n'>NEXO</span>MARKET</div><div><a href='/'>Tiendas</a><a href='#cuenta'>Ingresar</a></div></div>");
+            b.Append("<div class='top'><div class='brand'><span class='n'>NEXO</span>MARKET</div><div><a href='/'>Tiendas</a><a href='/login'>Ingresar</a><a href='/register'>Crear cuenta</a></div></div>");
             b.Append("<section class='hero'><span class='eyebrow'>MARKETPLACE</span><div><span class='nexo'>NEXO</span><span class='market'>MARKET</span></div><div class='hero-sub'>Encontrá todas las tiendas disponibles y priorizá las más cercanas" + (hasCoords ? " a <b>" + E(locationTitle) + "</b>." : ".") + "</div><form class='location-box' method='get' action='/'><input id='q' name='q' value='" + E(q) + "' placeholder='¿Desde dónde estás? Ej.: Mendoza, Luján...'/><input type='hidden' id='lat' name='lat'/><input type='hidden' id='lon' name='lon'/><button class='btn' type='submit'>Buscar tiendas</button><button class='btn' type='button' onclick='geo()'>Usar mi ubicación</button></form><div class='hint'>La ubicación se convierte a coordenadas y las tiendas se ordenan por cercanía. Los datos se actualizan desde NexoMarket Central.</div></section>");
             b.Append("<div class='section-head'><div><h2>Tiendas disponibles</h2><p>Las tiendas activas se muestran automáticamente desde el directorio central.</p></div><span class='mini'>DIRECTORIO MULTI-TIENDA</span></div>");
             if (stores.Count > 0) { b.Append("<div class='grid'>"); foreach (CentralStore cs in stores) { string href = "/store/" + Uri.EscapeDataString(cs.StoreId); string d = cs.Distance > 0 ? cs.Distance.ToString("0.0") + " km · " : ""; b.Append("<a class='card' href='" + E(href) + "'><div class='logo'>N</div><div class='name'>" + E(cs.Name) + "</div><div class='meta'>" + E(cs.Category.Length == 0 ? "Comercio" : cs.Category) + " · " + E(cs.City) + "</div><div class='open'>● Abierta · " + (cs.Delivery ? "Delivery" : "Retiro") + "</div><div class='distance'>📍 " + E(d) + (cs.Delivery ? "🚚 Delivery" : "🏪 Retiro") + "</div></a>"); } b.Append("</div>"); }
@@ -832,8 +845,170 @@ namespace NexoMarket.CentralServer
             return b.ToString();
         }
 
+        private string AccountUpsert(Dictionary<string,string> f)
+        {
+            string email = Get(f,"email").Trim().ToLowerInvariant();
+            string role = Get(f,"role").Trim().ToLowerInvariant() == "seller" ? "seller" : "buyer";
+            string salt = Get(f,"salt"); string hash = Get(f,"passwordHash");
+            if (email.Length < 3 || salt.Length == 0 || hash.Length == 0) return "ERROR|account";
+            lock(_sync)
+            {
+                XDocument d = LoadFile(_accountsFile,"NexoMarketAccounts","Users");
+                XElement root=d.Root.Element("Users");
+                XElement old=root.Elements("User").FirstOrDefault(x=>string.Equals(S(x,"Email"),email,StringComparison.OrdinalIgnoreCase));
+                XElement e=new XElement("User",new XElement("Id",Get(f,"id")),new XElement("Name",Get(f,"name")),new XElement("Email",email),new XElement("Phone",Get(f,"phone")),new XElement("Role",role),new XElement("StoreId",Get(f,"storeId")),new XElement("Salt",salt),new XElement("PasswordHash",hash),new XElement("CreatedAt",Get(f,"createdAt")));
+                if (old != null)
+                {
+                    string started=S(old,"TrialStartedUtc"), expires=S(old,"TrialExpiresUtc"), status=S(old,"LicenseStatus");
+                    if (!string.IsNullOrWhiteSpace(started)) e.Add(new XElement("TrialStartedUtc",started));
+                    if (!string.IsNullOrWhiteSpace(expires)) e.Add(new XElement("TrialExpiresUtc",expires));
+                    if (!string.IsNullOrWhiteSpace(status)) e.Add(new XElement("LicenseStatus",status));
+                }
+                if(old!=null) old.ReplaceWith(e); else root.Add(e);
+                SaveDoc(_accountsFile,d);
+            }
+            return "OK|account";
+        }
+
+        private string EnsureSellerTrial(Dictionary<string,string> f)
+        {
+            string email=Get(f,"email").Trim().ToLowerInvariant();
+            string storeId=Get(f,"storeId").Trim();
+            CentralUser user=FindAccount(email);
+            if(user==null || user.Role!="seller") return "ERROR|seller_account";
+            if(!string.IsNullOrWhiteSpace(storeId) && !string.IsNullOrWhiteSpace(user.StoreId) && !string.Equals(storeId,user.StoreId,StringComparison.OrdinalIgnoreCase)) return "ERROR|store";
+            EnsureSellerTrialForUser(user);
+            user=FindAccount(email);
+            return SellerTrialResponse(user);
+        }
+
+        private void EnsureSellerTrialForUser(CentralUser user)
+        {
+            if(user==null || user.Role!="seller" || string.IsNullOrWhiteSpace(user.Email)) return;
+            lock(_sync)
+            {
+                XDocument d=LoadFile(_accountsFile,"NexoMarketAccounts","Users");
+                XElement e=d.Root.Element("Users").Elements("User").FirstOrDefault(x=>string.Equals(S(x,"Email"),user.Email,StringComparison.OrdinalIgnoreCase));
+                if(e==null) return;
+                DateTime started, expires;
+                bool hasStarted=DateTime.TryParse(S(e,"TrialStartedUtc"),null,System.Globalization.DateTimeStyles.RoundtripKind,out started);
+                bool hasExpires=DateTime.TryParse(S(e,"TrialExpiresUtc"),null,System.Globalization.DateTimeStyles.RoundtripKind,out expires);
+                if(!hasStarted || !hasExpires)
+                {
+                    started=DateTime.UtcNow;
+                    expires=started.AddDays(60);
+                    e.SetElementValue("TrialStartedUtc",started.ToString("o"));
+                    e.SetElementValue("TrialExpiresUtc",expires.ToString("o"));
+                    e.SetElementValue("LicenseStatus","Active");
+                    SaveDoc(_accountsFile,d);
+                }
+                else if(expires<=DateTime.UtcNow && S(e,"LicenseStatus")=="Active")
+                {
+                    e.SetElementValue("LicenseStatus","Expired");
+                    SaveDoc(_accountsFile,d);
+                }
+            }
+        }
+
+        private string SellerTrialResponse(CentralUser user)
+        {
+            if(user==null || user.Role!="seller") return "ERROR|seller_account";
+            lock(_sync)
+            {
+                XDocument d=LoadFile(_accountsFile,"NexoMarketAccounts","Users");
+                XElement e=d.Root.Element("Users").Elements("User").FirstOrDefault(x=>string.Equals(S(x,"Email"),user.Email,StringComparison.OrdinalIgnoreCase));
+                if(e==null) return "ERROR|seller_account";
+                DateTime expires; DateTime started; DateTime.TryParse(S(e,"TrialExpiresUtc"),null,System.Globalization.DateTimeStyles.RoundtripKind,out expires); DateTime.TryParse(S(e,"TrialStartedUtc"),null,System.Globalization.DateTimeStyles.RoundtripKind,out started);
+                string status=S(e,"LicenseStatus"); if(string.IsNullOrWhiteSpace(status)) status=expires>DateTime.UtcNow?"Active":"Expired";
+                int days=expires> DateTime.UtcNow ? Math.Max(0,(int)(expires.Date-DateTime.UtcNow.Date).TotalDays) : 0;
+                return "OK|"+status+"|"+days.ToString(System.Globalization.CultureInfo.InvariantCulture)+"|"+started.ToString("o")+"|"+expires.ToString("o")+"|"+Escape(user.Email)+"|"+Escape(user.StoreId);
+            }
+        }
+
+        private CentralUser FindAccount(string email)
+        {
+            if(string.IsNullOrWhiteSpace(email)) return null;
+            lock(_sync)
+            {
+                XDocument d=LoadFile(_accountsFile,"NexoMarketAccounts","Users");
+                XElement e=d.Root.Element("Users").Elements("User").FirstOrDefault(x=>string.Equals(S(x,"Email"),email.Trim(),StringComparison.OrdinalIgnoreCase));
+                return e==null?null:CentralUser.From(e);
+            }
+        }
+
+        private bool VerifyAccount(string email,string password,out CentralUser user)
+        {
+            user=FindAccount(email); if(user==null) return false;
+            try
+            {
+                byte[] salt=Convert.FromBase64String(user.Salt); byte[] expected=Convert.FromBase64String(user.PasswordHash);
+                using(var kdf=new Rfc2898DeriveBytes(password??"",salt,50000))
+                {
+                    byte[] actual=kdf.GetBytes(32); if(actual.Length!=expected.Length)return false; int diff=0; for(int i=0;i<actual.Length;i++)diff|=actual[i]^expected[i]; return diff==0;
+                }
+            } catch { return false; }
+        }
+
+        private void CentralLogin(NetworkStream stream,string method,string body,string cookie)
+        {
+            if(method=="GET") { Write(stream,200,"text/html; charset=utf-8",AuthPage("Ingresar", "<form method='post' action='/login'><input name='email' type='email' placeholder='Correo electrónico' required/><input name='password' type='password' placeholder='Contraseña' required/><button class='btn' type='submit'>INGRESAR</button></form><p class='muted'>¿No tenés cuenta? <a href='/register'>Crear cuenta</a></p>")); return; }
+            CentralUser u; Dictionary<string,string> f=Form(body);
+            if(!VerifyAccount(Get(f,"email"),Get(f,"password"),out u)) { Write(stream,200,"text/html; charset=utf-8",AuthPage("Ingreso", "<div class='error'>Correo o contraseña incorrectos.</div><a class='btn' href='/login'>Volver a intentar</a>")); return; }
+            if (u.Role == "seller") EnsureSellerTrialForUser(u);
+            u = FindAccount(u.Email);
+            string token=Guid.NewGuid().ToString("N"); lock(_sync)_sessions[token]=u;
+            string dest=u.Role=="seller"?"/seller":"/buyer"; WriteRedirectCookie(stream,dest,"NexoCentralSession="+token+"; Path=/; HttpOnly; SameSite=Lax");
+        }
+
+        private void CentralRegister(NetworkStream stream,string method,string body)
+        {
+            if(method=="GET") { Write(stream,200,"text/html; charset=utf-8",AuthPage("Crear cuenta", "<form method='post' action='/register'><input name='name' placeholder='Nombre completo' required/><input name='email' type='email' placeholder='Correo electrónico' required/><input name='phone' placeholder='Teléfono'/><select name='role'><option value='buyer'>Soy comprador</option><option value='seller'>Soy vendedor</option></select><input name='storeId' placeholder='Store ID (solo vendedor, si ya tenés tienda)'/><input name='password' type='password' placeholder='Contraseña (mínimo 6 caracteres)' required/><button class='btn' type='submit'>CREAR CUENTA</button></form><p class='muted'>¿Ya tenés cuenta? <a href='/login'>Ingresar</a></p>")); return; }
+            Dictionary<string,string> f=Form(body); string email=Get(f,"email").Trim().ToLowerInvariant(); string password=Get(f,"password"); string role=Get(f,"role")=="seller"?"seller":"buyer";
+            if(password.Length<6||email.Length<3||email.IndexOf('@')<1) { Write(stream,200,"text/html; charset=utf-8",AuthPage("Crear cuenta","<div class='error'>Completá los datos y usá una contraseña de al menos 6 caracteres.</div><a class='btn' href='/register'>Volver</a>")); return; }
+            if(FindAccount(email)!=null) { Write(stream,200,"text/html; charset=utf-8",AuthPage("Crear cuenta","<div class='error'>Ese correo ya está registrado.</div><a class='btn' href='/login'>Ingresar</a>")); return; }
+            byte[] salt=new byte[16]; using(var rng=RandomNumberGenerator.Create())rng.GetBytes(salt); string salt64=Convert.ToBase64String(salt); byte[] hash; using(var kdf=new Rfc2898DeriveBytes(password,salt,50000))hash=kdf.GetBytes(32);
+            Dictionary<string,string> v=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){{"id",Guid.NewGuid().ToString("N")},{"name",Get(f,"name")},{"email",email},{"phone",Get(f,"phone")},{"role",role},{"storeId",Get(f,"storeId")},{"salt",salt64},{"passwordHash",Convert.ToBase64String(hash)},{"createdAt",DateTime.UtcNow.ToString("o")}};
+            AccountUpsert(v); CentralUser u=FindAccount(email); if (u != null && u.Role == "seller") EnsureSellerTrialForUser(u); u=FindAccount(email); string token=Guid.NewGuid().ToString("N"); lock(_sync)_sessions[token]=u; WriteRedirectCookie(stream,u.Role=="seller"?"/seller":"/buyer","NexoCentralSession="+token+"; Path=/; HttpOnly; SameSite=Lax");
+        }
+
+        private void CentralLogout(NetworkStream stream)
+        { lock(_sync){} WriteRedirectCookie(stream,"/","NexoCentralSession=deleted; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"); }
+
+        private CentralUser SessionUser(string cookie)
+        { if(string.IsNullOrWhiteSpace(cookie))return null; lock(_sync){CentralUser u; return _sessions.TryGetValue(cookie,out u)?u:null;} }
+
+        private void CentralSeller(NetworkStream stream,string cookie)
+        {
+            CentralUser u=SessionUser(cookie); if(u==null||u.Role!="seller"){WriteRedirect(stream,"/login");return;}
+            List<XElement> products=new List<XElement>(); lock(_sync){XDocument d=LoadFile(_catalogFile,"NexoMarketCatalog","Products"); products=d.Root.Element("Products").Elements("Product").Where(x=>S(x,"StoreId")==u.StoreId && S(x,"Active")!="0").OrderBy(x=>S(x,"Name")).ToList();}
+            StringBuilder b=new StringBuilder(AuthShellStart("Panel vendedor")); b.Append("<h1>Panel de vendedor</h1><p>Cuenta: <b>").Append(E(u.Email)).Append("</b> · Tienda: <b>").Append(E(u.StoreId)).Append("</b></p><p><a class='btn alt' href='/'>TIENDAS</a> <a class='btn alt' href='/logout'>SALIR</a></p><h2>Mis productos sincronizados</h2><div class='grid'>");
+            foreach(XElement x in products)b.Append("<div class='card'><h3>").Append(E(S(x,"Name"))).Append("</h3><p>").Append(E(S(x,"PublicDescription"))).Append("</p><strong>$ ").Append(E(S(x,"SalePrice")=="0"?S(x,"Price"):S(x,"SalePrice"))).Append("</strong><p>Stock: ").Append(E(S(x,"Stock"))).Append("</p></div>");
+            if(products.Count==0)b.Append("<div class='empty'>Todavía no hay productos sincronizados para esta tienda. Abrí el panel de Windows con esta misma cuenta y esperá la sincronización.</div>"); b.Append("</div>").Append(AuthShellEnd()); Write(stream,200,"text/html; charset=utf-8",b.ToString());
+        }
+
+        private void CentralBuyer(NetworkStream stream,string cookie)
+        {
+            CentralUser u=SessionUser(cookie); if(u==null||u.Role!="buyer"){WriteRedirect(stream,"/login");return;}
+            StringBuilder b=new StringBuilder(AuthShellStart("Mi cuenta")); b.Append("<h1>Mi cuenta de comprador</h1><p>Hola, <b>").Append(E(u.Name)).Append("</b>.</p><p>Correo: ").Append(E(u.Email)).Append("</p><p><a class='btn' href='/'>VER TIENDAS</a> <a class='btn alt' href='/logout'>SALIR</a></p><div class='empty'>Tu cuenta de comprador no requiere licencia. Tus compras se asocian a este correo.</div>").Append(AuthShellEnd()); Write(stream,200,"text/html; charset=utf-8",b.ToString());
+        }
+
+        private string AuthPage(string title,string content){return "<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>"+E(title)+" · NexoMarket</title><style>"+AuthCss()+"</style></head><body><div class='wrap'>"+content+"</div></body></html>";}
+        private string AuthShellStart(string title){return "<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>"+E(title)+" · NexoMarket</title><style>"+AuthCss()+"</style></head><body><div class='wrap'>";}
+        private string AuthShellEnd(){return "</div></body></html>";}
+        private string AuthCss(){return "body{font-family:'Segoe UI',Arial;background:#080b10;color:#fff;margin:0}.wrap{max-width:850px;margin:auto;padding:30px}.card,.empty{background:#0e1721;border:1px solid #2a4660;border-radius:18px;padding:20px;margin-top:16px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}input,select{display:block;width:100%;box-sizing:border-box;background:#0b131c;color:#fff;border:1px solid #2d4660;border-radius:10px;padding:12px;margin:10px 0}.btn{display:inline-block;background:#39ff66;color:#061009;text-decoration:none;border:0;border-radius:10px;padding:11px 16px;font-weight:900;cursor:pointer;margin-top:8px}.btn.alt{background:#13202c;color:#fff;border:1px solid #2d4660}.muted{color:#91a4b6}.error{background:#34151b;border:1px solid #6b2630;padding:14px;border-radius:12px;margin-bottom:14px}.empty{color:#9aabba}";}
+
+        private static string HeaderCookie(string request,string name){string c=HeaderValue(request,"Cookie");foreach(string part in c.Split(';')){string[] p=part.Trim().Split(new[]{'='},2);if(p.Length==2&&string.Equals(p[0],name,StringComparison.OrdinalIgnoreCase))return p[1];}return "";}
+        private static string HeaderValue(string request,string name){foreach(string line in (request??"").Split(new[]{"\r\n"},StringSplitOptions.None)){int i=line.IndexOf(':');if(i>0&&string.Equals(line.Substring(0,i).Trim(),name,StringComparison.OrdinalIgnoreCase))return line.Substring(i+1).Trim();}return "";}
+        private static void WriteRedirectCookie(NetworkStream stream,string location,string cookie){byte[] data=Encoding.UTF8.GetBytes("<html><body>Redirigiendo...</body></html>");string h="HTTP/1.1 302 Found\r\nLocation: "+location+"\r\nSet-Cookie: "+cookie+"\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nContent-Length: "+data.Length+"\r\nConnection: close\r\n\r\n";byte[] head=Encoding.ASCII.GetBytes(h);stream.Write(head,0,head.Length);stream.Write(data,0,data.Length);stream.Flush();}
+        private static void WriteRedirect(NetworkStream stream,string location){byte[] data=Encoding.UTF8.GetBytes("<html><body><a href='"+E(location)+"'>Continuar</a><script>location.replace("+JsonString(location)+");</script></body></html>");string h="HTTP/1.1 302 Found\r\nLocation: "+location+"\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nContent-Length: "+data.Length+"\r\nConnection: close\r\n\r\n";byte[] head=Encoding.ASCII.GetBytes(h);stream.Write(head,0,head.Length);stream.Write(data,0,data.Length);stream.Flush();}
+
         private double ParseDouble(string value) { double d; return double.TryParse(value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out d) ? d : 0d; }
 
+        private sealed class CentralUser
+        {
+            public string Id="",Name="",Email="",Phone="",Role="buyer",StoreId="",Salt="",PasswordHash="",TrialStartedUtc="",TrialExpiresUtc="",LicenseStatus="";
+            public static CentralUser From(XElement e){return new CentralUser{Id=S(e,"Id"),Name=S(e,"Name"),Email=S(e,"Email"),Phone=S(e,"Phone"),Role=S(e,"Role")=="seller"?"seller":"buyer",StoreId=S(e,"StoreId"),Salt=S(e,"Salt"),PasswordHash=S(e,"PasswordHash"),TrialStartedUtc=S(e,"TrialStartedUtc"),TrialExpiresUtc=S(e,"TrialExpiresUtc"),LicenseStatus=S(e,"LicenseStatus")};}
+        }
         private sealed class CentralStore
         {
             public string StoreId = ""; public string Name = ""; public string Category = ""; public string City = ""; public string Province = ""; public string PublicUrl = ""; public bool Delivery; public bool Pickup; public double Latitude; public double Longitude; public double Distance; public bool Active;

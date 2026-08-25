@@ -124,10 +124,16 @@ namespace NexoMarket.Admin.UI
                 if (existing != null)
                 {
                     if (existing.Role != "seller") { Fail("Ese correo ya pertenece a una cuenta de comprador. Usá otro correo para la cuenta de vendedor."); return; }
-                    if (!string.IsNullOrWhiteSpace(existing.StoreId) && !string.Equals(existing.StoreId, _store.StoreId, StringComparison.OrdinalIgnoreCase)) { Fail("Ese vendedor está vinculado a otra tienda."); return; }
                     _store.SetSetting("seller_account_email", email);
                     _store.SetSetting("seller_account_name", existing.Name ?? "");
-                    if (!string.IsNullOrWhiteSpace(existing.StoreId) && _store.VerifyWebUser(email, password, out existing)) { DialogResult = DialogResult.OK; Close(); return; }
+                    if (!string.IsNullOrWhiteSpace(existing.StoreId) && _store.VerifyWebUser(email, password, out existing))
+                    {
+                        // La cuenta es la identidad del vendedor. Si se abre en otra PC,
+                        // se adopta el Store ID de la cuenta para conservar la misma tienda.
+                        if (!string.Equals(existing.StoreId, _store.StoreId, StringComparison.OrdinalIgnoreCase))
+                            _store.SetSetting("store_id", existing.StoreId);
+                        DialogResult = DialogResult.OK; Close(); return;
+                    }
                     Fail("El correo ya está registrado. Cambiá a 'Iniciar sesión' para entrar."); return;
                 }
 
@@ -141,7 +147,8 @@ namespace NexoMarket.Admin.UI
 
             WebUser found;
             if (!_store.VerifyWebUser(email, password, out found) || found.Role != "seller") { Fail("Correo o contraseña incorrectos."); return; }
-            if (!string.IsNullOrWhiteSpace(found.StoreId) && !string.Equals(found.StoreId, _store.StoreId, StringComparison.OrdinalIgnoreCase)) { Fail("Esta cuenta de vendedor está vinculada a otra tienda."); return; }
+            if (!string.IsNullOrWhiteSpace(found.StoreId) && !string.Equals(found.StoreId, _store.StoreId, StringComparison.OrdinalIgnoreCase))
+                _store.SetSetting("store_id", found.StoreId);
             _store.SetSetting("seller_account_email", found.Email);
             _store.SetSetting("seller_account_name", found.Name ?? "");
             DialogResult = DialogResult.OK; Close();

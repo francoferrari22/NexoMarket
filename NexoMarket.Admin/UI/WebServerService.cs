@@ -203,6 +203,8 @@ namespace NexoMarket.Admin.UI
             if (path == "/") return Home(user, rawCookie);
             if (path == "/store") return StorePage(user, query);
             if (path == "/product") return ProductDetail(user, query);
+            if (path == "/login" && method == "GET") return Page("Ingreso", LoginForm() + "<p class='user'>¿Todavía no tenés cuenta? <a href='/register'>Crear cuenta</a></p>");
+            if (path == "/register" && method == "GET") return Page("Crear cuenta", RegisterForm() + "<p class='user'>¿Ya tenés cuenta? <a href='/login'>Ingresar</a></p>");
             if (path == "/onboarding" && method == "POST") return SaveOnboarding(body, out setCookie, out cookieValue);
             if (path == "/login" && method == "POST")
             {
@@ -942,7 +944,7 @@ namespace NexoMarket.Admin.UI
                 b.Append("<a href='/cart'>🛒 Carrito</a>");
                 if (!IsGuestUser(user)) b.Append("<a href='/messages'>Mensajes</a>");
             }
-            if (user != null) b.Append("<a href='/logout'>Salir</a>"); else b.Append("<a href='#login'>Ingresar</a>");
+            if (user != null) b.Append("<a href='/logout'>Salir</a>"); else b.Append("<a href='/login'>Ingresar</a><a href='/register'>Crear cuenta</a>");
             b.Append("</div></nav>"); return b.ToString();
         }
 
