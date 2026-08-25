@@ -27,7 +27,7 @@ namespace NexoMarket.Admin.UI
         public void Start()
         {
             if (_timer != null) return;
-            _timer = new Timer(delegate { SyncOnce(); }, null, 2000, 3000);
+            _timer = new Timer(delegate { SyncOnce(); }, null, 1200, 1800);
         }
         public void Dispose() { if (_timer != null) { try { _timer.Dispose(); } catch { } _timer = null; } }
         public void SyncOnce()
@@ -55,7 +55,7 @@ namespace NexoMarket.Admin.UI
                 // rechaza una versión local vieja; en ese caso el siguiente Pull recupera la nueva.
                 PublishStore(baseUrl);
                 List<Product> products = _store.GetProducts("");
-                foreach (Product p in products) PublishProduct(baseUrl, p);
+                foreach (Product p in products) { string result = PublishProduct(baseUrl, p); if (string.IsNullOrWhiteSpace(result) || !result.StartsWith("OK|", StringComparison.OrdinalIgnoreCase)) _store.SetSetting("central_sync_last_error", "product_publish:" + (result ?? "no_response")); }
 
                 List<Promotion> promotions = _store.GetPromotions();
                 foreach (Promotion p in promotions) PublishPromotion(baseUrl, p);
@@ -84,6 +84,7 @@ namespace NexoMarket.Admin.UI
                 }
                 _store.SetSetting("central_sync_last", DateTime.Now.ToString("o"));
                 _store.SetSetting("central_sync_status", "connected");
+                _store.SetSetting("central_sync_last_success", DateTime.UtcNow.ToString("o"));
                 if (changed) RaiseDataChanged();
             }
             catch (Exception ex)
