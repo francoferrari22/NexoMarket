@@ -6,8 +6,8 @@
     <Setting Key="pickup_enabled" Value="1" />
     <Setting Key="delivery_cost" Value="0" />
     <Setting Key="admin_username" Value="admin" />
-    <Setting Key="admin_password_salt" Value="gZxfYEbidnjPrj7Jqqzt8A==" />
-    <Setting Key="admin_password_hash" Value="ohzL3jJJgUNnJ/Em6AAlI5vZfLIOr0c51xs3Zci0T9U=" />
+    <Setting Key="admin_password_salt" Value="So+xKx9vLoN+mYYS74/R/A==" />
+    <Setting Key="admin_password_hash" Value="BhhisIEvWNpxartFS4YWfMbOGGqxZy7HfovCHPNS6eo=" />
     <Setting Key="admin_must_change_password" Value="1" />
     <Setting Key="admin_recovery_email" Value="" />
     <Setting Key="smtp_host" Value="smtp.gmail.com" />
@@ -22,13 +22,14 @@
     <Setting Key="master_password_legacy" Value="" />
     <Setting Key="ticket_header" Value="NexoMarket" />
     <Setting Key="ticket_footer" Value="Gracias por su compra" />
-    <Setting Key="web_public_url" Value="https://nexomarket-central.onrender.com" />
-    <Setting Key="web_api_url" Value="https://nexomarket-central.onrender.com" />
+    <Setting Key="web_public_url" Value="https://nexomarket-022.onrender.com" />
+    <Setting Key="web_api_url" Value="https://nexomarket-022.onrender.com" />
     <Setting Key="web_sync_enabled" Value="1" />
     <Setting Key="store_web_active" Value="1" />
     <Setting Key="central_endpoint_migrated_4120" Value="1" />
     <Setting Key="central_store_activation_migrated_4119" Value="1" />
-    <Setting Key="store_id" Value="26AFA4AC4D7749CD90F155CC5E8C5F5E" />
+    <Setting Key="store_id" Value="8B4B28D7B0CE46828899799B263A8C4C" />
+    <Setting Key="central_sync_key" Value="062ffd21fdb22b1093663e2f11e5f86fec69077efc9af10aedc29800fd887629" />
     <Setting Key="web_server_port" Value="8090" />
     <Setting Key="web_server_enabled" Value="0" />
     <Setting Key="seller_account_email" Value="" />
@@ -49,7 +50,6 @@
     <Setting Key="arca_regime" Value="Responsable Inscripto" />
     <Setting Key="arca_environment" Value="Homologación / Testing" />
     <Setting Key="demo_seeded" Value="1" />
-    <Setting Key="central_sync_last_error" Value="central_unreachable" />
   </Settings>
   <Products>
     <Product Id="1">
@@ -75,6 +75,9 @@
       <PublicDescription></PublicDescription>
       <VideoUrl></VideoUrl>
       <BarcodeImagePath></BarcodeImagePath>
+      <WebImageUrl></WebImageUrl>
+      <UpdatedAt>2026-08-25T16:33:17.1360588Z</UpdatedAt>
+      <Deleted>0</Deleted>
     </Product>
     <Product Id="2">
       <Name>Remera demo NexoMarket</Name>
@@ -99,6 +102,9 @@
       <PublicDescription>Producto de demostración para visualizar la tienda online.</PublicDescription>
       <VideoUrl></VideoUrl>
       <BarcodeImagePath></BarcodeImagePath>
+      <WebImageUrl></WebImageUrl>
+      <UpdatedAt>2026-08-25T16:33:17.1672710Z</UpdatedAt>
+      <Deleted>0</Deleted>
     </Product>
     <Product Id="3">
       <Name>Pantalón demo</Name>
@@ -123,6 +129,9 @@
       <PublicDescription></PublicDescription>
       <VideoUrl></VideoUrl>
       <BarcodeImagePath></BarcodeImagePath>
+      <WebImageUrl></WebImageUrl>
+      <UpdatedAt>2026-08-25T16:33:17.1672710Z</UpdatedAt>
+      <Deleted>0</Deleted>
     </Product>
   </Products>
   <Customers>
@@ -145,7 +154,7 @@
       <Notes></Notes>
       <Status>Pendiente</Status>
       <Total>47700</Total>
-      <CreatedAt>2026-08-24T23:09:48.7160519-03:00</CreatedAt>
+      <CreatedAt>2026-08-25T13:15:17.1672710-03:00</CreatedAt>
       <PaymentMethod>Mercado Pago</PaymentMethod>
       <Source>Web</Source>
       <ItemsJson>[]</ItemsJson>
@@ -172,7 +181,7 @@
       <Notes></Notes>
       <Status>Preparando</Status>
       <Total>15900</Total>
-      <CreatedAt>2026-08-24T21:27:48.7280940-03:00</CreatedAt>
+      <CreatedAt>2026-08-25T11:33:17.1828966-03:00</CreatedAt>
       <PaymentMethod>Débito</PaymentMethod>
       <Source>Mostrador</Source>
       <ItemsJson>[]</ItemsJson>
@@ -199,7 +208,7 @@
       <Notes></Notes>
       <Status>Listo</Status>
       <Total>32000</Total>
-      <CreatedAt>2026-08-24T19:27:48.7280940-03:00</CreatedAt>
+      <CreatedAt>2026-08-25T09:33:17.1828966-03:00</CreatedAt>
       <PaymentMethod>Efectivo</PaymentMethod>
       <Source>Web</Source>
       <ItemsJson>[]</ItemsJson>
@@ -226,8 +235,8 @@
       <ProductIds>2,3</ProductIds>
       <PromotionalPrice>42900</PromotionalPrice>
       <Active>1</Active>
-      <From>2026-08-24T00:00:00.0000000-03:00</From>
-      <To>2026-09-23T00:00:00.0000000-03:00</To>
+      <From>2026-08-25T00:00:00.0000000-03:00</From>
+      <To>2026-09-24T00:00:00.0000000-03:00</To>
     </Promotion>
   </Promotions>
   <Coupons />

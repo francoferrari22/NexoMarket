@@ -32,6 +32,7 @@ namespace NexoMarket.CentralServer
         private volatile bool _running;
         private XDocument _doc;
         private readonly R2ObjectStore _r2;
+        private readonly CentralDatabase _database;
 
         public CentralServerService(int port)
         {
@@ -43,6 +44,7 @@ namespace NexoMarket.CentralServer
             _accountsFile = Path.Combine(_root, "nexomarket_accounts.xml");
             Directory.CreateDirectory(_root);
             _r2 = new R2ObjectStore();
+            _database = new CentralDatabase();
             // Restaurar TODOS los datos persistentes antes de cargar o guardar cualquier documento.
             // En versiones anteriores Load() podía crear un registro vacío y subirlo a R2 antes
             // de restaurar los datos, borrando las tiendas al reiniciar Render.
@@ -52,6 +54,25 @@ namespace NexoMarket.CentralServer
             RestoreLatest(_accountsFile, "data/nexomarket_accounts.xml");
             Load();
             EnsureCentralDataFiles();
+            MigrateLegacyAccountsToPostgres();
+        }
+
+        private void MigrateLegacyAccountsToPostgres()
+        {
+            if(_database==null||!_database.Enabled)return;
+            try
+            {
+                lock(_sync)
+                {
+                    XDocument d=LoadFile(_accountsFile,"NexoMarketAccounts","Users"); XElement users=d.Root.Element("Users");
+                    if(users==null)return;
+                    foreach(XElement e in users.Elements("User"))
+                    {
+                        string email=S(e,"Email"); if(string.IsNullOrWhiteSpace(email)||_database.GetAccount(email)!=null)continue;
+                        _database.UpsertAccount(S(e,"Id"),S(e,"Name"),email,S(e,"Phone"),S(e,"Role"),S(e,"StoreId"),S(e,"Salt"),S(e,"PasswordHash"),S(e,"CreatedAt"));
+                    }
+                }
+            }catch{}
         }
 
         public bool Start()
@@ -90,7 +111,12 @@ namespace NexoMarket.CentralServer
             lock (_sync)
             {
                 RestoreIfMissing(_file, "data/nexomarket_stores.xml");
-                if (File.Exists(_file))
+                string central = _database == null ? null : _database.GetDocument("stores");
+                if (!string.IsNullOrWhiteSpace(central))
+                {
+                    try { _doc = XDocument.Parse(central); } catch { _doc = NewDoc(); }
+                }
+                else if (File.Exists(_file))
                 {
                     try { _doc = XDocument.Load(_file); } catch { _doc = NewDoc(); }
                 }
@@ -127,8 +153,10 @@ namespace NexoMarket.CentralServer
         {
             lock (_sync)
             {
+                string xml = _doc.ToString(SaveOptions.None);
                 _doc.Save(_file);
-                if (_r2 != null && _r2.Enabled) _r2.PutText("data/nexomarket_stores.xml", File.ReadAllText(_file, Encoding.UTF8));
+                if (_database != null && _database.Enabled) _database.SaveDocument("stores", xml);
+                if (_r2 != null && _r2.Enabled) _r2.PutText("data/nexomarket_stores.xml", xml);
             }
         }
 
@@ -157,12 +185,19 @@ namespace NexoMarket.CentralServer
                         string body = Body(request); string path = target; string query = ""; int q = path.IndexOf('?');
                         if (q >= 0) { query = path.Substring(q + 1); path = path.Substring(0, q); }
                         if (path == "/health") { Write(stream, 200, "text/plain", "NexoMarket Central OK\n"); return; }
+                        if (path == "/api/central/status" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", CentralDatabaseStatus()); return; }
                         if (path == "/api/accounts/upsert" && method == "POST") { Write(stream, 200, "text/plain", AccountUpsert(Form(body), true)); return; }
+                        if (path == "/api/auth/register-seller" && method == "POST") { Write(stream, 200, "text/plain; charset=utf-8", CentralRegisterSellerApi(Form(body))); return; }
+                        if (path == "/api/auth/login" && method == "POST") { Write(stream, 200, "text/plain; charset=utf-8", CentralLoginApi(Form(body))); return; }
+                        if (path == "/api/pair/start" && method == "POST") { Write(stream, 200, "text/plain; charset=utf-8", PairStart(Form(body))); return; }
+                        if (path == "/api/pair/complete" && method == "POST") { Write(stream, 200, "text/plain; charset=utf-8", PairComplete(Form(body))); return; }
+                        if (path == "/api/devices/validate" && method == "POST") { Write(stream, 200, "text/plain; charset=utf-8", DeviceValidate(Form(body))); return; }
                         if (path == "/login") { CentralLogin(stream, method, body, HeaderCookie(request, "NexoCentralSession")); return; }
                         if (path == "/seller-login") { CentralSellerStoreLogin(stream, method, body); return; }
                         if (path == "/register") { CentralRegister(stream, method, body); return; }
                         if (path == "/logout") { CentralLogout(stream); return; }
                         if (path == "/seller") { CentralSeller(stream, HeaderCookie(request, "NexoCentralSession"), query); return; }
+                        if (path == "/seller/devices") { CentralSellerDevices(stream, HeaderCookie(request, "NexoCentralSession"), method, body); return; }
                         if (path == "/seller/order-status" && method == "POST") { CentralSellerOrderStatus(stream, HeaderCookie(request, "NexoCentralSession"), Form(body)); return; }
                         if (path == "/seller/products/save" && method == "POST") { CentralSellerProductSave(stream, HeaderCookie(request, "NexoCentralSession"), Form(body)); return; }
                         if (path == "/seller/products/delete" && method == "POST") { CentralSellerProductDelete(stream, HeaderCookie(request, "NexoCentralSession"), Form(body)); return; }
@@ -183,6 +218,7 @@ namespace NexoMarket.CentralServer
                         if (path == "/api/catalog/live" && method == "GET") { Write(stream, 200, "application/json; charset=utf-8", CatalogLiveJson(QueryValue(query, "storeId"))); return; }
                         if (path == "/api/seller/live" && method == "GET") { CentralSellerLive(stream, HeaderCookie(request, "NexoCentralSession")); return; }
                         if (path == "/api/catalog/lines" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", CatalogLines(QueryValue(query, "storeId"), QueryValue(query, "syncKey"))); return; }
+                        if (path == "/api/sync/delta" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", SyncDelta(QueryValue(query, "storeId"), QueryValue(query, "syncKey"), QueryValue(query, "since"))); return; }
                         if (path == "/api/orders/create" && method == "POST") { Write(stream, 200, "text/plain; charset=utf-8", CreateOrder(Form(body))); return; }
                         if (path == "/api/orders/pending" && method == "GET") { Write(stream, 200, "application/json; charset=utf-8", PendingOrders(QueryValue(query, "storeId"))); return; }
                         if (path == "/api/orders/ack" && method == "POST") { Write(stream, 200, "text/plain", AckOrder(Form(body))); return; }
@@ -379,28 +415,78 @@ namespace NexoMarket.CentralServer
         {
             lock (_sync)
             {
-                // La restauración se realiza antes de Load(). Acá solamente creamos archivos
-                // que realmente no existen; jamás reemplazamos una copia persistente válida.
-                if (!File.Exists(_accountsFile))
-                    File.WriteAllText(_accountsFile, new XDocument(new XElement("NexoMarketAccounts", new XElement("Users"))).ToString(SaveOptions.None), Encoding.UTF8);
-                if (!File.Exists(_catalogFile))
-                    File.WriteAllText(_catalogFile, new XDocument(new XElement("NexoMarketCatalog", new XElement("Products"), new XElement("Promotions"))).ToString(SaveOptions.None), Encoding.UTF8);
-                if (!File.Exists(_ordersFile))
-                    File.WriteAllText(_ordersFile, new XDocument(new XElement("NexoMarketOrders", new XElement("Orders"))).ToString(SaveOptions.None), Encoding.UTF8);
-                // Subir los archivos recién creados o los existentes restaurados.
-                if (_r2 != null && _r2.Enabled)
-                {
-                    if (File.Exists(_accountsFile)) _r2.PutText("data/nexomarket_accounts.xml", File.ReadAllText(_accountsFile, Encoding.UTF8));
-                    if (File.Exists(_catalogFile)) _r2.PutText("data/nexomarket_catalog.xml", File.ReadAllText(_catalogFile, Encoding.UTF8));
-                    if (File.Exists(_ordersFile)) _r2.PutText("data/nexomarket_orders.xml", File.ReadAllText(_ordersFile, Encoding.UTF8));
-                }
+                EnsureDatasetFile(_accountsFile, "NexoMarketAccounts", "Users", "accounts", "data/nexomarket_accounts.xml");
+                EnsureDatasetFile(_catalogFile, "NexoMarketCatalog", "Products", "catalog", "data/nexomarket_catalog.xml");
+                EnsureDatasetFile(_ordersFile, "NexoMarketOrders", "Orders", "orders", "data/nexomarket_orders.xml");
             }
+        }
+
+        private void EnsureDatasetFile(string file, string rootName, string childName, string dataset, string r2Key)
+        {
+            string central = _database == null ? null : _database.GetDocument(dataset);
+            if (!string.IsNullOrWhiteSpace(central))
+            {
+                File.WriteAllText(file, central, Encoding.UTF8);
+                return;
+            }
+            if (!File.Exists(file))
+                File.WriteAllText(file, new XDocument(new XElement(rootName, new XElement(childName))).ToString(SaveOptions.None), Encoding.UTF8);
+            string text = File.ReadAllText(file, Encoding.UTF8);
+            if (_database != null && _database.Enabled) _database.SaveDocument(dataset, text);
+            if (_r2 != null && _r2.Enabled) _r2.PutText(r2Key, text);
         }
 
         private XDocument LoadFile(string file, string rootName, string childName)
         {
-            try { if (File.Exists(file)) return XDocument.Load(file); } catch { }
-            return new XDocument(new XElement(rootName, new XElement(childName)));
+            string dataset = DatasetForFile(file);
+            if (_database != null && _database.Enabled)
+            {
+                string central = _database.GetDocument(dataset);
+                if (!string.IsNullOrWhiteSpace(central))
+                {
+                    try { File.WriteAllText(file, central, Encoding.UTF8); return XDocument.Parse(central); } catch { }
+                }
+            }
+            try { if (File.Exists(file))
+                {
+                    XDocument d = XDocument.Load(file);
+                    if (_database != null && _database.Enabled) _database.SaveDocument(dataset, d.ToString(SaveOptions.None));
+                    return d;
+                }
+            } catch { }
+            XDocument fresh = new XDocument(new XElement(rootName, new XElement(childName)));
+            if (_database != null && _database.Enabled) _database.SaveDocument(dataset, fresh.ToString(SaveOptions.None));
+            return fresh;
+        }
+
+        private string DatasetForFile(string file)
+        {
+            string name = Path.GetFileName(file) ?? "";
+            if (name.IndexOf("stores", StringComparison.OrdinalIgnoreCase) >= 0) return "stores";
+            if (name.IndexOf("catalog", StringComparison.OrdinalIgnoreCase) >= 0) return "catalog";
+            if (name.IndexOf("orders", StringComparison.OrdinalIgnoreCase) >= 0) return "orders";
+            if (name.IndexOf("accounts", StringComparison.OrdinalIgnoreCase) >= 0) return "accounts";
+            return name;
+        }
+
+        private void SaveDoc(string file, XDocument doc)
+        {
+            string xml = doc.ToString(SaveOptions.None);
+            string temp = file + ".tmp";
+            doc.Save(temp);
+            if (File.Exists(file)) File.Delete(file);
+            File.Move(temp, file);
+            if (_database != null && _database.Enabled) _database.SaveDocument(DatasetForFile(file), xml);
+            if (_r2 != null && _r2.Enabled)
+            {
+                string key = "data/" + Path.GetFileName(file);
+                _r2.PutText(key, xml);
+            }
+        }
+
+        private string CentralDatabaseStatus()
+        {
+            return "OK|database=" + ((_database != null && _database.Enabled) ? _database.Status() : "disabled") + "|r2=" + ((_r2 != null && _r2.Enabled) ? "enabled" : "disabled");
         }
 
         private static string A(XElement e, string name) { XAttribute a = e == null ? null : e.Attribute(name); return a == null ? "" : a.Value; }
@@ -784,6 +870,41 @@ namespace NexoMarket.CentralServer
             return (value ?? "").Trim().Replace(" ", "").ToUpperInvariant();
         }
 
+        /// <summary>
+        /// Delta de sincronización para Windows. Devuelve únicamente productos modificados
+        /// desde el cursor indicado y un cursor central nuevo. Central sigue siendo la fuente
+        /// de verdad; Windows no vuelve a descargar el catálogo completo cada ciclo.
+        /// </summary>
+        private string SyncDelta(string storeId, string syncKey, string since)
+        {
+            storeId = NormalizeStoreId(storeId ?? "");
+            if (string.IsNullOrWhiteSpace(storeId) || !ValidateStoreSyncKey(storeId, syncKey)) return "ERROR|sync_key";
+            DateTime cursor = ParseUtcDate(since);
+            DateTime serverNow = DateTime.UtcNow;
+            StringBuilder b = new StringBuilder();
+            b.Append("SYNC|").Append(Escape(serverNow.ToString("o"))).Append('\n');
+            lock (_sync)
+            {
+                XDocument d = LoadFile(_catalogFile, "NexoMarketCatalog", "Products");
+                XElement products = d.Root.Element("Products");
+                if (products != null)
+                {
+                    foreach (XElement x in products.Elements("Product").Where(x => string.Equals(S(x, "StoreId"), storeId, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        DateTime updated = ParseUtcDate(S(x, "UpdatedAt"));
+                        if (cursor != DateTime.MinValue && updated <= cursor) continue;
+                        if (S(x, "Deleted") == "1")
+                        {
+                            b.Append("DELETED|").Append(Escape(S(x, "ProductId"))).Append('|').Append(Escape(S(x, "UpdatedAt"))).Append('\n');
+                            continue;
+                        }
+                        b.Append("PRODUCT|").Append(Escape(S(x,"ProductId"))).Append('|').Append(Escape(S(x,"Name"))).Append('|').Append(Escape(S(x,"Category"))).Append('|').Append(Escape(S(x,"Description"))).Append('|').Append(Escape(S(x,"Price"))).Append('|').Append(Escape(S(x,"SalePrice"))).Append('|').Append(Escape(S(x,"Stock"))).Append('|').Append(Escape(S(x,"MinimumStock"))).Append('|').Append(Escape(S(x,"SKU"))).Append('|').Append(Escape(S(x,"Brand"))).Append('|').Append(Escape(S(x,"Size"))).Append('|').Append(Escape(S(x,"Color"))).Append('|').Append(Escape(S(x,"Active"))).Append('|').Append(Escape(S(x,"OnlineEnabled"))).Append('|').Append(Escape(S(x,"ImagePath"))).Append('|').Append(Escape(S(x,"WebImageUrl"))).Append('|').Append(Escape(S(x,"Slug"))).Append('|').Append(Escape(S(x,"PublicDescription"))).Append('|').Append(Escape(S(x,"VideoUrl"))).Append('|').Append(Escape(S(x,"BarcodeImagePath"))).Append('|').Append(Escape(S(x,"Cost"))).Append('|').Append(Escape(S(x,"TaxRate"))).Append('|').Append(Escape(S(x,"UpdatedAt"))).Append('|').Append(Escape(S(x,"Deleted"))).Append('\n');
+                    }
+                }
+            }
+            return b.ToString();
+        }
+
         private string CatalogLines(string storeId, string syncKey)
         {
             storeId = NormalizeStoreId(storeId ?? "");
@@ -1059,6 +1180,10 @@ namespace NexoMarket.CentralServer
                     storeId=S(store,"StoreId");
                 }
             }
+            if (_database != null && _database.Enabled)
+            {
+                if (!_database.UpsertAccount(Get(f,"id"), Get(f,"name"), email, Get(f,"phone"), role, storeId, salt, hash, Get(f,"createdAt"))) return "ERROR|database";
+            }
             lock(_sync)
             {
                 XDocument d = LoadFile(_accountsFile,"NexoMarketAccounts","Users");
@@ -1124,6 +1249,11 @@ namespace NexoMarket.CentralServer
         private CentralUser FindAccount(string email)
         {
             if(string.IsNullOrWhiteSpace(email)) return null;
+            if (_database != null && _database.Enabled)
+            {
+                Dictionary<string,string> a = _database.GetAccount(email);
+                if (a != null) return CentralUser.From(a);
+            }
             lock(_sync)
             {
                 XDocument d=LoadFile(_accountsFile,"NexoMarketAccounts","Users");
@@ -1145,10 +1275,57 @@ namespace NexoMarket.CentralServer
             } catch { return false; }
         }
 
+        private string CentralRegisterSellerApi(Dictionary<string,string> f)
+        {
+            string email=Get(f,"email").Trim().ToLowerInvariant(), password=Get(f,"password"), name=Get(f,"name").Trim(), storeId=NormalizeStoreId(Get(f,"storeId"));
+            if(email.Length<3||email.IndexOf('@')<1||password.Length<6||name.Length<2)return "ERROR|invalid_data";
+            if(string.IsNullOrWhiteSpace(storeId)) return "ERROR|store_required";
+            if(!StoreExists(storeId)) return "ERROR|store_not_found";
+            CentralUser existing=FindAccount(email);
+            if(existing!=null) return string.Equals(existing.StoreId,storeId,StringComparison.OrdinalIgnoreCase)?"ERROR|account_exists":"ERROR|email_store_conflict";
+            byte[] salt=new byte[16]; using(var rng=RandomNumberGenerator.Create())rng.GetBytes(salt); string salt64=Convert.ToBase64String(salt); byte[] hash; using(var kdf=new Rfc2898DeriveBytes(password,salt,50000))hash=kdf.GetBytes(32);
+            string result=AccountUpsert(new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){{"id",existing==null?Guid.NewGuid().ToString("N"):existing.Id},{"name",name},{"email",email},{"phone",Get(f,"phone")},{"role","seller"},{"storeId",storeId},{"salt",salt64},{"passwordHash",Convert.ToBase64String(hash)},{"createdAt",DateTime.UtcNow.ToString("o")}},false);
+            if(!result.StartsWith("OK|",StringComparison.OrdinalIgnoreCase))return result;
+            return AccountAuthenticate(new Dictionary<string,string>{{"email",email},{"password",password}});
+        }
+        private string CentralLoginApi(Dictionary<string,string> f)
+        {
+            string email=Get(f,"email").Trim().ToLowerInvariant(), password=Get(f,"password"), requestedStore=NormalizeStoreId(Get(f,"storeId")); CentralUser u;
+            if(!VerifyAccount(email,password,out u)||u==null)return "ERROR|invalid_credentials";
+            if(!string.Equals(u.Role,"seller",StringComparison.OrdinalIgnoreCase))return "ERROR|not_seller";
+            if(!string.IsNullOrWhiteSpace(requestedStore)&&!string.Equals(requestedStore,u.StoreId,StringComparison.OrdinalIgnoreCase))return "ERROR|store_mismatch";
+            return "OK|"+Escape(u.Id)+"|"+Escape(u.Name)+"|"+Escape(u.Email)+"|"+Escape(u.Phone)+"|"+Escape(u.Role)+"|"+Escape(u.StoreId)+"|"+Escape(u.Salt)+"|"+Escape(u.PasswordHash)+"|"+Escape(u.CreatedAt);
+        }
+        private string PairStart(Dictionary<string,string> f)
+        {
+            string email=Get(f,"email").Trim().ToLowerInvariant(), password=Get(f,"password"), storeId=NormalizeStoreId(Get(f,"storeId")); CentralUser u;
+            if(!VerifyAccount(email,password,out u)||u==null||u.Role!="seller")return "ERROR|invalid_credentials";
+            if(!string.Equals(u.StoreId,storeId,StringComparison.OrdinalIgnoreCase))return "ERROR|store_mismatch";
+            string token=_database==null?null:_database.CreatePairing(storeId,email,10); if(string.IsNullOrWhiteSpace(token))return "ERROR|database";
+            return "OK|"+Escape(token)+"|"+Escape(storeId)+"|600";
+        }
+        private string PairComplete(Dictionary<string,string> f)
+        {
+            string token=Get(f,"pairingToken"), deviceId=Get(f,"deviceId").Trim(), deviceName=Get(f,"deviceName").Trim();
+            if(string.IsNullOrWhiteSpace(token)||string.IsNullOrWhiteSpace(deviceId))return "ERROR|missing";
+            Dictionary<string,string> d=_database==null?null:_database.CompletePairing(token,deviceId,string.IsNullOrWhiteSpace(deviceName)?"Windows":deviceName);
+            if(d==null)return "ERROR|pairing_invalid_or_expired";
+            return "OK|"+Escape(d["deviceId"])+"|"+Escape(d["deviceToken"])+"|"+Escape(d["storeId"])+"|"+Escape(d["email"]);
+        }
+        private string DeviceValidate(Dictionary<string,string> f)
+        {
+            string id=Get(f,"deviceId"), token=Get(f,"deviceToken"), store=NormalizeStoreId(Get(f,"storeId"));
+            return _database!=null&&_database.ValidateDevice(id,token,store)?"OK|device_valid":"ERROR|device_invalid";
+        }
+        private bool StoreExists(string storeId)
+        {
+            lock(_sync){XElement stores=_doc.Root.Element("Stores");return stores!=null&&stores.Elements("Store").Any(x=>string.Equals(S(x,"StoreId"),storeId,StringComparison.OrdinalIgnoreCase));}
+        }
+
         private void CentralLogin(NetworkStream stream,string method,string body,string cookie)
         {
             if(method=="GET") {
-                string html = "<div class='card'><div class='eyebrow'>VENDEDOR</div><h1>Ingresar como vendedor</h1><p class='muted'>Usá solamente el Store ID de tu tienda. No se solicita correo ni contraseña en este acceso.</p><a class='btn violet' href='/seller-login'>INGRESAR CON STORE ID</a></div>" +
+                string html = "<div class='card'><div class='eyebrow'>VENDEDOR</div><h1>Seller Center</h1><p class='muted'>Ingresá con tu correo, contraseña y Store ID. Los tres datos pertenecen a una única cuenta central.</p><a class='btn violet' href='/seller-login'>INGRESAR COMO VENDEDOR</a></div>" +
                     "<div class='card'><div class='eyebrow'>CUENTA</div><h2>Ingreso general</h2><form method='post' action='/login'><input name='email' type='email' placeholder='Correo electrónico' required/><input name='password' type='password' placeholder='Contraseña' required/><button class='btn' type='submit'>INGRESAR</button></form><p class='muted'>¿No tenés cuenta? <a href='/register'>Crear cuenta</a></p></div>";
                 Write(stream,200,"text/html; charset=utf-8",AuthPage("Ingresar", html)); return; }
             CentralUser u; Dictionary<string,string> f=Form(body);
@@ -1164,43 +1341,12 @@ namespace NexoMarket.CentralServer
         {
             if(method=="GET")
             {
-                string html = "<div class='card seller-login-card'><div class='brand'><span>NEXO</span>MARKET <small>SELLER CENTER</small></div><div class='eyebrow'>CONEXIÓN DE VENDEDOR</div><h1>Ingresar con Store ID</h1><p class='muted'>Ingresá únicamente el Store ID que te entrega NexoMarket Windows. Este código abre el panel de la misma tienda y utiliza el catálogo, inventario, pedidos y configuración centralizados.</p><form method='post' action='/seller-login'><label class='muted'>Store ID</label><input name='storeId' autocomplete='off' autocapitalize='characters' spellcheck='false' placeholder='Ej.: A0AC8EB125E349ED9BCA7D3EC511D631' required/><button class='btn violet' type='submit'>CONECTAR Y ENTRAR AL SELLER CENTER</button></form><p class='muted small'>¿Tenés una cuenta pero querés entrar como comprador? <a href='/login'>Ingreso general</a></p></div>";
-                Write(stream,200,"text/html; charset=utf-8",AuthPage("Vendedor · Store ID", html)); return;
+                string html="<div class='card seller-login-card'><div class='brand'><span>NEXO</span>MARKET <small>SELLER CENTER</small></div><div class='eyebrow'>CUENTA CENTRAL</div><h1>Ingresar como vendedor</h1><p class='muted'>La cuenta, el Store ID y los dispositivos autorizados pertenecen a una única identidad central.</p><form method='post' action='/seller-login'><label class='muted'>Correo</label><input name='email' type='email' autocomplete='username' required/><label class='muted'>Contraseña</label><input name='password' type='password' autocomplete='current-password' required/><label class='muted'>Store ID</label><input name='storeId' autocomplete='off' required/><button class='btn violet' type='submit'>INGRESAR AL SELLER CENTER</button></form><p class='muted small'>¿Todavía no vinculaste Windows? Entrá al Seller Center y usá <b>Herramientas → Dispositivos</b> para generar un QR/código temporal.</p></div>";
+                Write(stream,200,"text/html; charset=utf-8",AuthPage("Vendedor · Cuenta central",html)); return;
             }
-            Dictionary<string,string> f=Form(body); string storeId=NormalizeStoreId(Get(f,"storeId"));
-            if(string.IsNullOrWhiteSpace(storeId)) { Write(stream,200,"text/html; charset=utf-8",AuthPage("Vendedor · Store ID", "<div class='error'>Ingresá un Store ID válido.</div><a class='btn violet' href='/seller-login'>Volver</a>")); return; }
-            XElement store=null;
-            lock(_sync)
-            {
-                XElement stores=_doc.Root.Element("Stores");
-                if(stores!=null) store=stores.Elements("Store").FirstOrDefault(x=>string.Equals(S(x,"StoreId"),storeId,StringComparison.OrdinalIgnoreCase));
-            }
-            if(store==null)
-            {
-                Write(stream,200,"text/html; charset=utf-8",AuthPage("Store ID no encontrado", "<div class='error'><b>No encontramos esa tienda en NexoMarket Central.</b><p>Verificá que el Store ID sea exactamente el que muestra NexoMarket Windows y que la tienda haya sido publicada/sincronizada.</p></div><a class='btn violet' href='/seller-login'>Volver a intentar</a>")); return;
-            }
-            if(S(store,"Active")!="1")
-            {
-                Write(stream,200,"text/html; charset=utf-8",AuthPage("Tienda inactiva", "<div class='error'><b>La tienda existe pero está inactiva.</b><p>Activala desde NexoMarket Windows y volvé a intentar.</p></div><a class='btn violet' href='/seller-login'>Volver</a>")); return;
-            }
-            CentralUser u=null;
-            lock(_sync)
-            {
-                XDocument d=LoadFile(_accountsFile,"NexoMarketAccounts","Users"); XElement users=d.Root.Element("Users");
-                if(users!=null)
-                {
-                    XElement e=users.Elements("User").FirstOrDefault(x=>S(x,"Role")=="seller" && string.Equals(S(x,"StoreId"),storeId,StringComparison.OrdinalIgnoreCase));
-                    if(e!=null) u=CentralUser.From(e);
-                }
-            }
-            // Si todavía no existe una cuenta web, el Store ID sigue siendo suficiente
-            // para entrar al panel operativo de esa tienda. Se utiliza una identidad de
-            // sesión efímera, sin crear una cuenta paralela.
-            if(u==null)
-            {
-                string name=string.IsNullOrWhiteSpace(S(store,"Name"))?"Vendedor":S(store,"Name");
-                u=new CentralUser{Id="store:"+storeId,Name=name,Email="store-"+storeId.ToLowerInvariant()+"@nexomarket.local",Phone="",Role="seller",StoreId=storeId,Salt="",PasswordHash="",CreatedAt=DateTime.UtcNow.ToString("o")};
-            }
+            Dictionary<string,string> f=Form(body); string email=Get(f,"email").Trim().ToLowerInvariant(), password=Get(f,"password"), storeId=NormalizeStoreId(Get(f,"storeId")); CentralUser u;
+            if(!VerifyAccount(email,password,out u)||u==null||u.Role!="seller") { Write(stream,200,"text/html; charset=utf-8",AuthPage("Ingreso vendedor","<div class='error'>Correo, contraseña o cuenta de vendedor incorrectos.</div><a class='btn violet' href='/seller-login'>Volver a intentar</a>")); return; }
+            if(!string.Equals(u.StoreId,storeId,StringComparison.OrdinalIgnoreCase)) { Write(stream,200,"text/html; charset=utf-8",AuthPage("Ingreso vendedor","<div class='error'>El Store ID no pertenece a esta cuenta.</div><p class='muted'>Usá el Store ID que aparece en tu Seller Center y en NexoMarket Windows.</p><a class='btn violet' href='/seller-login'>Volver</a>")); return; }
             string token=Guid.NewGuid().ToString("N"); lock(_sync)_sessions[token]=u;
             WriteRedirectCookie(stream,"/seller","NexoCentralSession="+token+"; Path=/; HttpOnly; SameSite=Lax");
         }
@@ -1288,7 +1434,7 @@ namespace NexoMarket.CentralServer
             b.Append(SellerCenterCss());
             b.Append("<header class='sc-top'><div class='brand'><span>NEXO</span>MARKET <small>SELLER CENTER</small></div><div class='top-actions'><a href='/' class='btn ghost'>Tiendas</a><a href='/store/"+Uri.EscapeDataString(u.StoreId??"")+"' class='btn ghost'>Mi tienda</a><a href='/logout' class='btn ghost'>Salir</a></div></header>");
             b.Append("<aside class='sc-side'><div class='account-box'><div class='avatar'>"+E((u.Name??"V").Length>0?(u.Name??"V").Substring(0,1).ToUpperInvariant():"V")+"</div><b>"+E(u.Name)+"</b><small>"+E(u.Email)+"</small><small>Store ID: "+E(u.StoreId)+"</small></div>");
-            b.Append(SellerLink("Resumen","",view)+SellerLink("Pedidos","orders",view)+SellerLink("Productos e inventario","products",view)+SellerLink("Clientes","customers",view)+SellerLink("Analítica","analytics",view)+SellerLink("Finanzas y caja","finance",view)+SellerLink("Marketing","marketing",view)+SellerLink("Reputación","reputation",view)+SellerLink("Herramientas","tools",view)+"</aside>");
+            b.Append(SellerLink("Resumen","",view)+SellerLink("Pedidos","orders",view)+SellerLink("Productos e inventario","products",view)+SellerLink("Clientes","customers",view)+SellerLink("Analítica","analytics",view)+SellerLink("Finanzas y caja","finance",view)+SellerLink("Marketing","marketing",view)+SellerLink("Reputación","reputation",view)+SellerLink("Herramientas","tools",view)+SellerLink("Dispositivos / QR","devices",view)+"</aside>");
             b.Append("<main class='sc-main'>");
             b.Append("<div class='welcome'><div><span class='eyebrow'>CENTRAL DE VENTAS</span><h1>Hola, "+E(u.Name)+" 👋</h1><p>Tu Seller Center está conectado por Store ID con NexoMarket Windows. Los cambios se sincronizan automáticamente.</p></div><div class='account-mini'><b>STORE ID</b><strong>"+E(u.StoreId)+"</strong><small>"+E(u.Email)+"</small></div></div>");
             int pending=orders.Count(x=>S(x,"Status")=="Pendiente"); int delivery=orders.Count(x=>(S(x,"Fulfillment")=="Delivery"||S(x,"Fulfillment")=="En reparto")&&S(x,"Status")!="Entregado"&&S(x,"Status")!="Cancelado");
@@ -1302,6 +1448,7 @@ namespace NexoMarket.CentralServer
             else if(view=="marketing") b.Append(SellerMarketingView(promotions));
             else if(view=="reputation") b.Append(SellerReputationView(orders));
             else if(view=="tools") b.Append(SellerToolsView(u,products,orders));
+            else if(view=="devices") b.Append("<section class='card'><h2>Dispositivos y QR</h2><p>Administrá las PCs autorizadas desde la misma cuenta central.</p><a class='btn violet' href='/seller/devices'>ABRIR VINCULACIÓN DE WINDOWS</a></section>");
             else b.Append(SellerSummaryView(orders,products));
             b.Append("<script>(function(){var last='';function live(){var x=new XMLHttpRequest();x.open('GET','/api/seller/live',true);x.onreadystatechange=function(){if(x.readyState===4&&x.status===200){try{var d=JSON.parse(x.responseText);var v=d.updatedAt||'';if(last&&v!==last&& !document.querySelector('details[open]'))location.reload();last=v;}catch(e){}}};x.send();}setTimeout(live,700);setInterval(live,1800);})();</script>");
             b.Append("</main>").Append(AuthShellEnd()); Write(stream,200,"text/html; charset=utf-8",b.ToString());
@@ -1346,6 +1493,20 @@ namespace NexoMarket.CentralServer
         private string SellerFinanceView(List<XElement> orders){decimal total=orders.Where(x=>S(x,"Status")!="Cancelado").Sum(x=>Money(S(x,"Total")));decimal cash=orders.Where(x=>S(x,"PaymentMethod")=="Efectivo"&&S(x,"Status")!="Cancelado").Sum(x=>Money(S(x,"Total")));decimal mp=orders.Where(x=>S(x,"PaymentMethod")=="Mercado Pago"&&S(x,"Status")!="Cancelado").Sum(x=>Money(S(x,"Total")));decimal tr=orders.Where(x=>S(x,"PaymentMethod")=="Transferencia"&&S(x,"Status")!="Cancelado").Sum(x=>Money(S(x,"Total")));return "<div class='section-title'><div><span class='eyebrow'>FINANZAS</span><h2>Ventas y medios de cobro</h2><p>Resumen central de las operaciones web. La apertura/cierre física de caja continúa en Windows.</p></div></div><div class='kpis mini-kpis'>"+KpiC("Total vendido","$ "+total.ToString("N2"),"operaciones web","green")+KpiC("Efectivo","$ "+cash.ToString("N2"),"ventas","green")+KpiC("Mercado Pago","$ "+mp.ToString("N2"),"ventas","green")+KpiC("Transferencias","$ "+tr.ToString("N2"),"ventas","green")+"</div><section class='card'><h3>Conciliación</h3><p>Los números del Seller Center se alimentan de los pedidos centralizados. La caja de mostrador, apertura, arqueo y retenciones se mantienen sincronizados desde NexoMarket Windows.</p></section>";}
         private string SellerMarketingView(List<XElement> promotions){StringBuilder b=new StringBuilder();b.Append("<div class='section-title'><div><span class='eyebrow'>CRECIMIENTO</span><h2>Marketing y promociones</h2><p>Promociones publicadas desde NexoMarket Windows.</p></div></div><section class='card table-wrap'><table class='table'><tr><th>Promoción</th><th>Precio</th><th>Estado</th><th>Vigencia</th></tr>");foreach(XElement p in promotions)b.Append("<tr><td><b>"+E(S(p,"Name"))+"</b></td><td>$ "+Money(S(p,"PromotionalPrice")).ToString("N2")+"</td><td>"+BadgeC(S(p,"Active")=="0"?"Pausada":"Activa")+"</td><td>"+E(S(p,"From"))+" → "+E(S(p,"To"))+"</td></tr>");if(promotions.Count==0)b.Append("<tr><td colspan='4' class='muted'>No hay promociones sincronizadas.</td></tr>");b.Append("</table></section>");return b.ToString();}
         private string SellerReputationView(List<XElement> orders){int delivered=orders.Count(x=>S(x,"Status")=="Entregado"),cancel=orders.Count(x=>S(x,"Status")=="Cancelado"||S(x,"Status")=="Rechazado");return "<div class='section-title'><div><span class='eyebrow'>REPUTACIÓN</span><h2>Salud de la operación</h2><p>Indicadores construidos con pedidos centralizados.</p></div></div><div class='kpis mini-kpis'>"+KpiC("Entregados",delivered.ToString(),"pedidos finalizados","green")+KpiC("Cancelados/Rechazados",cancel.ToString(),"incidencias","red")+KpiC("Pendientes",orders.Count(x=>S(x,"Status")=="Pendiente").ToString(),"atención","yellow")+"</div><section class='card'><h3>Buenas prácticas</h3><div class='insights'><div>🟢 Actualizá estados rápidamente para que el comprador vea el seguimiento.</div><div>🟡 Mantené stock y precios sincronizados con Windows.</div><div>🔴 Revisá pedidos rechazados o cancelados para detectar problemas.</div></div></section>";}
+        private void CentralSellerDevices(NetworkStream stream,string cookie,string method,string body)
+        {
+            CentralUser u=SessionUser(cookie); if(u==null||u.Role!="seller"){WriteRedirect(stream,"/seller-login");return;}
+            if(method=="POST")
+            {
+                Dictionary<string,string> f=Form(body); string token=PairStart(new Dictionary<string,string>{{"email",u.Email},{"password",Get(f,"password")},{"storeId",u.StoreId}});
+                if(!token.StartsWith("OK|",StringComparison.OrdinalIgnoreCase)){Write(stream,200,"text/html; charset=utf-8",AuthPage("Vincular Windows","<div class='error'>No se pudo generar el código de vinculación. Verificá tu contraseña.</div><a class='btn violet' href='/seller/devices'>Volver</a>"));return;}
+                string pair=Decode(token.Split('|')[1]); string payload=PairPayload(u.StoreId,pair); string qr="<div id='qrcode' style='width:260px;height:260px;background:#fff;padding:12px;border-radius:16px;margin:15px auto'></div><script src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'></script><script>new QRCode(document.getElementById('qrcode'),{text:'"+E(payload)+"',width:236,height:236,colorDark:'#000000',colorLight:'#ffffff'});</script>";
+                Write(stream,200,"text/html; charset=utf-8",AuthPage("Vincular Windows","<div class='card seller-login-card'><div class='eyebrow'>VINCULACIÓN SEGURA</div><h1>Conectar Windows</h1><p class='muted'>Este código vence en 10 minutos y solo puede utilizarse una vez.</p><div style='font-size:28px;font-weight:900;letter-spacing:4px;padding:18px;border:1px solid #9b5cff;border-radius:14px;background:#0b1118;text-align:center'>"+E(pair)+"</div><p class='muted'>En Windows elegí <b>Vincular con código</b>. También podés escanear el QR desde un dispositivo compatible.</p>"+qr+"<p class='muted small'>Cuenta: "+E(u.Email)+" · Store ID: "+E(u.StoreId)+"</p><a class='btn violet' href='/seller/devices'>Generar otro código</a></div>"));return;
+            }
+            StringBuilder b=new StringBuilder(AuthShellStart("Dispositivos · NexoMarket")); b.Append(SellerCenterCss()); b.Append("<header class='sc-top'><div class='brand'><span>NEXO</span>MARKET <small>SELLER CENTER</small></div><div class='top-actions'><a href='/seller' class='btn ghost'>Volver</a></div></header><main class='sc-main' style='margin-left:0'><div class='welcome'><div><span class='eyebrow'>SEGURIDAD</span><h1>Vincular Windows</h1><p>Tu cuenta, Store ID y dispositivos autorizados quedan administrados por la misma identidad central.</p></div><div class='account-mini'><b>STORE ID</b><strong>"+E(u.StoreId)+"</strong><small>"+E(u.Email)+"</small></div></div><section class='card'><h2>Generar vínculo</h2><p>Generá un código temporal desde tu cuenta Web y colocá el código en NexoMarket Windows.</p><form method='post' action='/seller/devices'><input name='password' type='password' placeholder='Confirmá tu contraseña' style='background:#0a121a;color:#fff;border:1px solid #2b4056;border-radius:8px;padding:10px;width:320px'/><button class='btn violet' type='submit'>GENERAR QR Y CÓDIGO</button></form></section></main>"); b.Append(AuthShellEnd()); Write(stream,200,"text/html; charset=utf-8",b.ToString());
+        }
+        private string PairPayload(string storeId,string token){return "NEXOMARKETPAIR:"+storeId+"|"+token;}
+
         private string SellerToolsView(CentralUser u,List<XElement> products,List<XElement> orders){return "<div class='section-title'><div><span class='eyebrow'>HERRAMIENTAS</span><h2>Herramientas del vendedor</h2><p>Accesos rápidos para operar tu cuenta centralizada.</p></div></div><div class='quick-grid'><a href='/store/"+Uri.EscapeDataString(u.StoreId??"")+"'>🌐 Ver escaparate público</a><a href='/seller?view=products'>📦 Catálogo ("+products.Count+")</a><a href='/seller?view=orders'>🧾 Pedidos ("+orders.Count+")</a><a href='/seller?view=customers'>👥 Clientes</a><a href='/seller?view=analytics'>📊 Analítica</a><a href='/seller?view=finance'>💰 Finanzas</a></div><section class='card'><h3>Sincronización</h3><p>La PC con NexoMarket Windows publica productos, promociones, cuentas y recibe pedidos del marketplace cada pocos segundos. El Store ID identifica al comercio y evita cambiar IP por cliente.</p><div class='sync-pill'>● CUENTA: "+E(u.Email)+"</div></section>";}
         private string SellerCenterCss(){return "<style>body{font-family:'Segoe UI',Arial,sans-serif;background:#070b10;color:#fff;margin:0}.wrap{max-width:1500px;margin:auto;padding:18px}.sc-top{display:flex;justify-content:space-between;align-items:center;padding:8px 0 18px}.brand{font-weight:900;font-size:23px}.brand span{color:#39ff66}.brand small{color:#a978ff}.brand small{color:#8292a3;font-size:10px;letter-spacing:2px;margin-left:8px}.top-actions{display:flex;gap:8px}.sc-side{position:fixed;width:230px;top:78px;bottom:18px;background:#0c131c;border:1px solid #23364b;border-radius:18px;padding:14px;box-sizing:border-box}.account-box{border-bottom:1px solid #223246;padding:8px 5px 15px;margin-bottom:10px}.avatar{width:42px;height:42px;border-radius:12px;background:#39ff66;color:#061009;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:20px;margin-bottom:8px}.account-box b,.account-box small{display:block}.account-box small{color:#788b9e;margin-top:4px;font-size:11px;word-break:break-word}.sc-link{display:block;color:#a8b8c8;text-decoration:none;padding:11px 12px;border-radius:10px;margin:3px 0;font-weight:700;font-size:13px}.sc-link:hover,.sc-link.active{background:linear-gradient(90deg,#17231f,#1a1230);color:#b98cff;border-left:2px solid #9b5cff}.sc-main{margin-left:248px}.welcome{display:flex;justify-content:space-between;gap:15px;align-items:center;padding:24px;border:1px solid #26384e;border-radius:20px;background:linear-gradient(135deg,#101923,#0b1118)}.welcome h1{margin:6px 0;font-size:31px}.welcome p,.section-title p,.card p{color:#899bac;line-height:1.5}.account-mini{min-width:180px;padding:14px;border:1px solid #2c445c;border-radius:14px;background:#0b141d}.account-mini b,.account-mini strong,.account-mini small{display:block}.account-mini strong{color:#39ff66;margin:5px 0}.account-mini small{color:#8292a3;word-break:break-word}.eyebrow{color:#b98cff;font-size:10px;letter-spacing:2px;font-weight:900}.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:15px 0}.kpi{padding:17px;border:1px solid #26384e;border-radius:16px;background:#0e1721}.kpi span,.kpi small{display:block;color:#8293a5;font-size:11px}.kpi strong{display:block;font-size:25px;margin:8px 0}.kpi.green{border-top:2px solid #39ff66}.kpi.yellow{border-top:2px solid #ffd34d}.kpi.red{border-top:2px solid #ff5967}.section-title{display:flex;justify-content:space-between;align-items:end;margin:22px 2px 12px}.section-title h2{margin:4px 0}.two-col{display:grid;grid-template-columns:1.3fr .7fr;gap:14px}.card{background:#0e1721;border:1px solid #26384e;border-radius:18px;padding:18px;margin-bottom:14px}.table-wrap{overflow:auto}.table{width:100%;border-collapse:collapse}.table th,.table td{padding:12px 10px;border-bottom:1px solid #223144;text-align:left;font-size:12px;vertical-align:middle}.table th{color:#7f92a6;font-size:10px;text-transform:uppercase;letter-spacing:1px}.table td small{display:block;color:#718397;margin-top:4px}.badge{display:inline-block;padding:5px 8px;border-radius:999px;font-size:10px;font-weight:900}.badge.green{background:#153a22;color:#69ff91}.badge.yellow{background:#403816;color:#ffe36b}.badge.red{background:#401b22;color:#ff7380}.stock.low{color:#ff6572;font-weight:900}.mini-list{display:grid;gap:4px}.mini-row{display:flex;justify-content:space-between;gap:10px;padding:11px;border-bottom:1px solid #223144}.mini-row small{display:block;color:#718397;margin-top:4px}.quick-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.quick-grid a{display:block;text-decoration:none;color:#dce8f2;background:#0a121a;border:1px solid #273b50;border-radius:12px;padding:14px;font-weight:800}.quick-grid a:hover{border-color:#39ff66}.sync-pill{color:#8dffac;font-size:11px;font-weight:900}.form-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.product-form input,.product-form textarea,.edit-form input,.edit-form textarea{box-sizing:border-box;background:#0a121a;color:#fff;border:1px solid #2b4056;border-radius:8px;padding:9px;width:100%;margin:4px 0}.product-form textarea,.edit-form textarea{min-height:70px;grid-column:1/-1}.edit-form{min-width:650px;background:#091018;padding:10px;border:1px solid #26384e;border-radius:12px}.danger{background:#401b22;color:#ff7380}@media(max-width:900px){.form-grid{grid-template-columns:repeat(2,1fr)}}.inline-form{display:flex;gap:5px}.inline-form select{min-width:115px;background:#0a121a;color:#fff;border:1px solid #2b4056;border-radius:8px;padding:7px}.btn.violet{background:#9b5cff;color:#fff}.small{font-size:12px}.btn{display:inline-block;background:#39ff66;color:#061009;border:0;border-radius:9px;padding:9px 13px;font-weight:900;text-decoration:none;cursor:pointer}.btn.small{padding:7px 9px;font-size:10px}.btn.ghost{background:#101a24;color:#d9e5ef;border:1px solid #2a4056}.metric-list{display:grid;gap:10px}.metric-list div{padding:12px;border:1px solid #24374b;border-radius:10px;color:#91a1b0}.metric-list b{float:right;color:#fff}.insights{display:grid;gap:8px}.insights div{padding:12px;border-radius:10px;background:#0a121a;border:1px solid #223448}@media(max-width:1050px){.kpis{grid-template-columns:repeat(2,1fr)}.sc-side{position:static;width:auto;margin-bottom:14px}.sc-main{margin-left:0}.two-col{grid-template-columns:1fr}}@media(max-width:650px){.wrap{padding:10px}.welcome,.sc-top{align-items:flex-start;flex-direction:column}.kpis,.quick-grid{grid-template-columns:1fr}.top-actions{flex-wrap:wrap}}</style>";}
 
@@ -1428,6 +1589,7 @@ namespace NexoMarket.CentralServer
         {
             public string Id="",Name="",Email="",Phone="",Role="buyer",StoreId="",Salt="",PasswordHash="",CreatedAt="";
             public static CentralUser From(XElement e){return new CentralUser{Id=S(e,"Id"),Name=S(e,"Name"),Email=S(e,"Email"),Phone=S(e,"Phone"),Role=S(e,"Role")=="seller"?"seller":"buyer",StoreId=S(e,"StoreId"),Salt=S(e,"Salt"),PasswordHash=S(e,"PasswordHash"),CreatedAt=S(e,"CreatedAt")};}
+            public static CentralUser From(Dictionary<string,string> d){return new CentralUser{Id=d.ContainsKey("id")?d["id"]:"",Name=d.ContainsKey("name")?d["name"]:"",Email=d.ContainsKey("email")?d["email"]:"",Phone=d.ContainsKey("phone")?d["phone"]:"",Role=d.ContainsKey("role")&&d["role"]=="seller"?"seller":"buyer",StoreId=d.ContainsKey("storeId")?d["storeId"]:"",Salt=d.ContainsKey("salt")?d["salt"]:"",PasswordHash=d.ContainsKey("passwordHash")?d["passwordHash"]:"",CreatedAt=d.ContainsKey("createdAt")?d["createdAt"]:""};}
         }
         private sealed class CentralStore
         {

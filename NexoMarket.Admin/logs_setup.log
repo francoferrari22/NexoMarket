@@ -1,0 +1,64 @@
+Inno Setup 6 Command-Line Compiler
+Copyright (C) 1997-2026 Jordan Russell. All rights reserved.
+Portions Copyright (C) 2000-2026 Martijn Laan. All rights reserved.
+Portions Copyright (C) 2001-2004 Alex Yackimoff. All rights reserved.
+https://www.innosetup.com
+
+Compiler engine version: Inno Setup 6.7.3
+Non-commercial use only
+
+Preprocessing
+   Reading file: C:\Program Files (x86)\Inno Setup 6\ISPPBuiltins.iss
+Parsing [Setup] section, line 7
+Parsing [Setup] section, line 8
+Parsing [Setup] section, line 9
+Parsing [Setup] section, line 10
+Parsing [Setup] section, line 11
+Parsing [Setup] section, line 12
+Parsing [Setup] section, line 13
+Parsing [Setup] section, line 14
+Parsing [Setup] section, line 15
+Parsing [Setup] section, line 16
+Parsing [Setup] section, line 17
+Parsing [Setup] section, line 18
+Parsing [Setup] section, line 19
+Parsing [Setup] section, line 20
+Reading file (WizardImageFile)
+Reading file (WizardSmallImageFile)
+Preparing Setup program executable
+   Verification successful
+   Updating icons (Setup.e32)
+   Updating version info (Setup.e32)
+Determining language code pages
+   Reading file: C:\Program Files (x86)\Inno Setup 6\Default.isl
+   Messages in script file
+Reading default messages from Default.isl
+Parsing [LangOptions], [Messages], and [CustomMessages] sections
+   Reading file: C:\Program Files (x86)\Inno Setup 6\Default.isl
+   Messages in script file
+Reading [Code] section
+Parsing [Icons] section, line 26
+Parsing [Icons] section, line 27
+Parsing [Run] section, line 30
+Parsing [Files] section, line 23
+Creating setup files
+   Verification successful
+   Updating icons (Setup.exe)
+   Compressing: C:\Users\FRANCO\Desktop\CS100\Installer\..\NexoMarket.Admin\SALIDA\mscorlib.dll
+   Compressing: C:\Users\FRANCO\Desktop\CS100\Installer\..\NexoMarket.Admin\SALIDA\NexoMarket.Admin.exe
+   Compressing: C:\Users\FRANCO\Desktop\CS100\Installer\..\NexoMarket.Admin\SALIDA\NexoMarket.Admin.pdb
+   Compressing: C:\Users\FRANCO\Desktop\CS100\Installer\..\NexoMarket.Admin\SALIDA\NexoMarketCentral.url
+   Compressing: C:\Users\FRANCO\Desktop\CS100\Installer\..\NexoMarket.Admin\SALIDA\normidna.nlp
+   Compressing: C:\Users\FRANCO\Desktop\CS100\Installer\..\NexoMarket.Admin\SALIDA\normnfc.nlp
+   Compressing: C:\Users\FRANCO\Desktop\CS100\Installer\..\NexoMarket.Admin\SALIDA\normnfd.nlp
+   Compressing: C:\Users\FRANCO\Desktop\CS100\Installer\..\NexoMarket.Admin\SALIDA\normnfkc.nlp
+   Compressing: C:\Users\FRANCO\Desktop\CS100\Installer\..\NexoMarket.Admin\SALIDA\normnfkd.nlp
+   Compressing: C:\Users\FRANCO\Desktop\CS100\Installer\..\NexoMarket.Admin\SALIDA\Assets\NexoMarket.ico
+   Compressing: C:\Users\FRANCO\Desktop\CS100\Installer\..\NexoMarket.Admin\SALIDA\es\mscorlib.resources.dll
+   Compressing Setup program executable
+   Updating version info (Setup.exe)
+   Updating manifest (Setup.exe)
+
+
+Successful compile (5,313 sec). Resulting Setup program filename is:
+C:\Users\FRANCO\Desktop\CS100\Installer\Output\Admin\NexoMarket_Setup.exe

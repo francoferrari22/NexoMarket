@@ -1,13 +1,14 @@
-C:\Users\FRANCO\Desktop\NEEEX CS 150\NexoMarket.Admin\bin\Release\Assets\NexoMarket.ico
-C:\Users\FRANCO\Desktop\NEEEX CS 150\NexoMarket.Admin\bin\Release\NexoMarket.Admin.exe
-C:\Users\FRANCO\Desktop\NEEEX CS 150\NexoMarket.Admin\bin\Release\NexoMarket.Admin.pdb
-C:\Users\FRANCO\Desktop\NEEEX CS 150\NexoMarket.Admin\bin\Release\mscorlib.dll
-C:\Users\FRANCO\Desktop\NEEEX CS 150\NexoMarket.Admin\bin\Release\es\mscorlib.resources.dll
-C:\Users\FRANCO\Desktop\NEEEX CS 150\NexoMarket.Admin\bin\Release\normidna.nlp
-C:\Users\FRANCO\Desktop\NEEEX CS 150\NexoMarket.Admin\bin\Release\normnfc.nlp
-C:\Users\FRANCO\Desktop\NEEEX CS 150\NexoMarket.Admin\bin\Release\normnfd.nlp
-C:\Users\FRANCO\Desktop\NEEEX CS 150\NexoMarket.Admin\bin\Release\normnfkc.nlp
-C:\Users\FRANCO\Desktop\NEEEX CS 150\NexoMarket.Admin\bin\Release\normnfkd.nlp
-C:\Users\FRANCO\Desktop\NEEEX CS 150\NexoMarket.Admin\obj\Release\NexoMarket.Admin.csprojResolveAssemblyReference.cache
-C:\Users\FRANCO\Desktop\NEEEX CS 150\NexoMarket.Admin\obj\Release\NexoMarket.Admin.exe
-C:\Users\FRANCO\Desktop\NEEEX CS 150\NexoMarket.Admin\obj\Release\NexoMarket.Admin.pdb
+C:\Users\FRANCO\Desktop\CS100\NexoMarket.Admin\bin\Release\Assets\NexoMarket.ico
+C:\Users\FRANCO\Desktop\CS100\NexoMarket.Admin\bin\Release\NexoMarketCentral.url
+C:\Users\FRANCO\Desktop\CS100\NexoMarket.Admin\bin\Release\NexoMarket.Admin.exe
+C:\Users\FRANCO\Desktop\CS100\NexoMarket.Admin\bin\Release\NexoMarket.Admin.pdb
+C:\Users\FRANCO\Desktop\CS100\NexoMarket.Admin\bin\Release\mscorlib.dll
+C:\Users\FRANCO\Desktop\CS100\NexoMarket.Admin\bin\Release\es\mscorlib.resources.dll
+C:\Users\FRANCO\Desktop\CS100\NexoMarket.Admin\bin\Release\normidna.nlp
+C:\Users\FRANCO\Desktop\CS100\NexoMarket.Admin\bin\Release\normnfc.nlp
+C:\Users\FRANCO\Desktop\CS100\NexoMarket.Admin\bin\Release\normnfd.nlp
+C:\Users\FRANCO\Desktop\CS100\NexoMarket.Admin\bin\Release\normnfkc.nlp
+C:\Users\FRANCO\Desktop\CS100\NexoMarket.Admin\bin\Release\normnfkd.nlp
+C:\Users\FRANCO\Desktop\CS100\NexoMarket.Admin\obj\Release\NexoMarket.Admin.csprojResolveAssemblyReference.cache
+C:\Users\FRANCO\Desktop\CS100\NexoMarket.Admin\obj\Release\NexoMarket.Admin.exe
+C:\Users\FRANCO\Desktop\CS100\NexoMarket.Admin\obj\Release\NexoMarket.Admin.pdb

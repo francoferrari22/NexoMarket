@@ -16,7 +16,7 @@ namespace NexoMarket.Admin.UI
     public sealed class StoreDirectoryClient
     {
         private readonly AppDataStore _store;
-        private const string DefaultCentralUrl = "https://nexomarket-central.onrender.com";
+        private const string DefaultCentralUrl = "https://nexomarket-022.onrender.com";
         public StoreDirectoryClient(AppDataStore store) { _store = store; }
 
         public bool IsConfigured
@@ -175,9 +175,15 @@ namespace NexoMarket.Admin.UI
         private string CentralUrl()
         {
             string configured = (_store.GetSetting("web_api_url", "") ?? "").Trim();
-            if (IsLocalUrl(configured) || string.IsNullOrWhiteSpace(configured) || configured.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0)
+            if (IsLocalUrl(configured) || IsKnownLegacyCentralUrl(configured) || string.IsNullOrWhiteSpace(configured) || configured.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0)
                 return GetCentralUrl();
             return configured;
+        }
+
+        private static bool IsKnownLegacyCentralUrl(string url)
+        {
+            string u = (url ?? "").Trim().TrimEnd('/').ToLowerInvariant();
+            return u == "https://nexomarket-central.onrender.com";
         }
 
         private static string GetCentralUrl()

@@ -1,3 +1,11 @@
+# NexoMarket 5.0.0 — Central PostgreSQL
+
+Esta versión establece la nueva arquitectura central: PostgreSQL es la fuente de verdad para Web y Windows; XML/R2 quedan como respaldo y migración.
+
+Ver `README_NEXOMARKET_5_0_0_CENTRAL_POSTGRES.md` para el despliegue.
+
+NexoMarket 4.1.32 — sincronización central inteligente cada 20 segundos.
+
 # NexoMarket 4.1.30 — Seller Web Store ID + Render Build Fix
 
 Windows y Web usan el mismo Store ID como identidad de la tienda. Windows puede crear la cuenta local y continuar sin esperar a Render; la cuenta Web se vincula posteriormente pegando el mismo Store ID. Central mantiene una sola tienda y una sola identidad vendedora canónica por Store ID.

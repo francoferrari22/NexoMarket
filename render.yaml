@@ -1,12 +1,12 @@
 services:
   - type: web
-    name: nexomarket-central
+    name: nexomarket-022
     runtime: docker
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health
     envVars:
       - key: PUBLIC_BASE_URL
-        value: https://nexomarket-central.onrender.com
+        value: https://nexomarket-022.onrender.com
       - key: R2_ACCOUNT_ID
         sync: false
       - key: R2_ACCESS_KEY_ID
@@ -16,4 +16,8 @@ services:
       - key: R2_BUCKET
         value: nexomarket
       - key: R2_PUBLIC_BASE_URL
+        sync: false
+      # PostgreSQL es la fuente de verdad central. En Render, crear/usar el Postgres
+      # de NexoMarket y colocar su Internal Connection String aquí.
+      - key: NEXOMARKET_DATABASE_URL
         sync: false

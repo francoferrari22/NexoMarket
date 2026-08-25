@@ -124,16 +124,20 @@ namespace NexoMarket.Admin.Data
 
             SetDefault("ticket_header", "NexoMarket");
             SetDefault("ticket_footer", "Gracias por su compra");
-            SetDefault("web_public_url", "https://nexomarket-central.onrender.com");
-            SetDefault("web_api_url", "https://nexomarket-central.onrender.com");
+            SetDefault("web_public_url", "https://nexomarket-022.onrender.com");
+            SetDefault("web_api_url", "https://nexomarket-022.onrender.com");
+            // Corrección inmediata para instalaciones que ya tenían guardada la URL anterior.
+            // No depende de que la migración 4.1.20 se ejecute otra vez.
+            if (IsKnownLegacyCentralUrl(GetSetting("web_api_url", ""))) SetSetting("web_api_url", "https://nexomarket-022.onrender.com");
+            if (IsKnownLegacyCentralUrl(GetSetting("web_public_url", ""))) SetSetting("web_public_url", "https://nexomarket-022.onrender.com");
             // Migración 4.1.20: instalaciones antiguas podían conservar localhost/LAN y
             // terminar sincronizando contra una web distinta a Render. Se corrige una sola vez.
             if (GetSetting("central_endpoint_migrated_4120", "0") != "1")
             {
                 string api = GetSetting("web_api_url", "");
                 string pub = GetSetting("web_public_url", "");
-                if (IsLocalEndpoint(api) || string.IsNullOrWhiteSpace(api)) SetSetting("web_api_url", "https://nexomarket-central.onrender.com");
-                if (IsLocalEndpoint(pub) || string.IsNullOrWhiteSpace(pub)) SetSetting("web_public_url", "https://nexomarket-central.onrender.com");
+                if (IsLocalEndpoint(api) || string.IsNullOrWhiteSpace(api) || IsKnownLegacyCentralUrl(api)) SetSetting("web_api_url", "https://nexomarket-022.onrender.com");
+                if (IsLocalEndpoint(pub) || string.IsNullOrWhiteSpace(pub) || IsKnownLegacyCentralUrl(pub)) SetSetting("web_public_url", "https://nexomarket-022.onrender.com");
                 SetSetting("web_sync_enabled", "1");
                 SetSetting("store_web_active", "1");
                 SetSetting("central_endpoint_migrated_4120", "1");
@@ -332,6 +336,12 @@ namespace NexoMarket.Admin.Data
                 byte[] hash = sha.ComputeHash(data); StringBuilder b = new StringBuilder(hash.Length * 2);
                 foreach (byte x in hash) b.Append(x.ToString("x2")); return b.ToString();
             }
+        }
+
+        private static bool IsKnownLegacyCentralUrl(string value)
+        {
+            string u = (value ?? "").Trim().TrimEnd('/').ToLowerInvariant();
+            return u == "https://nexomarket-central.onrender.com";
         }
 
         private static bool IsLocalEndpoint(string value)

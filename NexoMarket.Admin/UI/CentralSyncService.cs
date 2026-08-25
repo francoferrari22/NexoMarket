@@ -22,12 +22,12 @@ namespace NexoMarket.Admin.UI
         private Timer _timer;
         private volatile bool _busy;
         public event Action DataChanged;
-        private const string DefaultCentralUrl = "https://nexomarket-central.onrender.com";
+        private const string DefaultCentralUrl = "https://nexomarket-022.onrender.com";
         public CentralSyncService(AppDataStore store) { _store = store; }
         public void Start()
         {
             if (_timer != null) return;
-            _timer = new Timer(delegate { SyncOnce(); }, null, 1200, 1800);
+            _timer = new Timer(delegate { SyncOnce(); }, null, 1500, 20000);
         }
         public void Dispose() { if (_timer != null) { try { _timer.Dispose(); } catch { } _timer = null; } }
         public void SyncOnce()
@@ -45,23 +45,53 @@ namespace NexoMarket.Admin.UI
                     string connectedName, connectedEmail, connectedSeller;
                     if (!ConnectByStoreId(_store.StoreId, out connectedName, out connectedEmail, out connectedSeller)) return;
                 }
+                // Si la PC ya fue vinculada, validamos Device ID + token en Central.
+                // El Store ID identifica la tienda; el Device ID identifica esta instalación.
+                string deviceToken=_store.GetSetting("central_device_token", "") ?? "";
+                string deviceId=_store.GetSetting("central_device_id", "") ?? "";
+                if (!string.IsNullOrWhiteSpace(deviceToken) && !string.IsNullOrWhiteSpace(deviceId))
+                {
+                    string dv=Request(baseUrl+"/api/devices/validate","POST",Form(new Dictionary<string,string>{{"deviceId",deviceId},{"deviceToken",deviceToken},{"storeId",_store.StoreId}}));
+                    if (string.IsNullOrWhiteSpace(dv) || !dv.StartsWith("OK|",StringComparison.OrdinalIgnoreCase))
+                    {
+                        _store.SetSetting("central_sync_last_error","device_not_authorized");
+                        _store.SetSetting("central_sync_status","device_not_authorized");
+                        return;
+                    }
+                }
 
-                // Central es la fuente común. Primero traemos los cambios remotos para no
-                // sobrescribir desde Windows una edición más nueva hecha en el Seller Center.
-                PullProducts(baseUrl, ref changed);
-                PullAccounts(baseUrl);
+                // Arquitectura de sincronización profesional: Central es la fuente de verdad.
+                // Cada 20 segundos enviamos solamente lo que Windows cambió desde el último
+                // cursor y recibimos solamente los cambios hechos en Web/Central.
+                string cursor = _store.GetSetting("central_sync_cursor", "") ?? "";
 
-                // Después publicamos los cambios locales. El servidor compara UpdatedAt y
-                // rechaza una versión local vieja; en ese caso el siguiente Pull recupera la nueva.
-                PublishStore(baseUrl);
-                List<Product> products = _store.GetProducts("");
-                foreach (Product p in products) { string result = PublishProduct(baseUrl, p); if (string.IsNullOrWhiteSpace(result) || !result.StartsWith("OK|", StringComparison.OrdinalIgnoreCase)) _store.SetSetting("central_sync_last_error", "product_publish:" + (result ?? "no_response")); }
+                // Primero adoptamos cualquier cambio de configuración que haya hecho la Web.
+                // Esto evita que una PC con valores antiguos sobrescriba la tienda central.
+                PullStoreState(baseUrl);
 
+                // Recién después publicamos si Windows tiene una modificación local pendiente.
+                PublishStoreIfChanged(baseUrl);
+
+                List<Product> localProducts = _store.GetProducts("");
+                foreach (Product p in localProducts)
+                {
+                    DateTime updated = p.UpdatedAt == DateTime.MinValue ? DateTime.MinValue : p.UpdatedAt.ToUniversalTime();
+                    DateTime last = ParseDate(cursor);
+                    if (last != DateTime.MinValue && updated <= last) continue;
+                    string result = PublishProduct(baseUrl, p);
+                    if (string.IsNullOrWhiteSpace(result) || !result.StartsWith("OK|", StringComparison.OrdinalIgnoreCase))
+                        _store.SetSetting("central_sync_last_error", "product_publish:" + (result ?? "no_response"));
+                }
+
+                // Las promociones son pocas y se mantienen por compatibilidad con el modelo
+                // actual; su publicación sigue siendo idempotente.
                 List<Promotion> promotions = _store.GetPromotions();
                 foreach (Promotion p in promotions) PublishPromotion(baseUrl, p);
 
-                PullProducts(baseUrl, ref changed);
+                // Pull incremental: si no existe cursor, el servidor entrega el catálogo inicial.
+                string newCursor = PullProductsDelta(baseUrl, cursor, ref changed);
                 PullAccounts(baseUrl);
+                if (!string.IsNullOrWhiteSpace(newCursor)) _store.SetSetting("central_sync_cursor", newCursor);
 
                 string pending = Request(baseUrl + "/api/orders/pending?storeId=" + Uri.EscapeDataString(_store.StoreId), "GET", null);
                 foreach (Dictionary<string,string> order in ParseObjects(pending))
@@ -105,20 +135,53 @@ namespace NexoMarket.Admin.UI
         }
         private bool Enabled() { return true; }
         private bool AlreadyImported(string id) { foreach (Order o in _store.GetOrders("")) if (string.Equals(o.CentralOrderId,id,StringComparison.OrdinalIgnoreCase)) return true; return false; }
-        private void PublishStore(string baseUrl)
+        private void PublishStoreIfChanged(string baseUrl)
         {
             try
             {
+                string signature = BuildStoreSignature();
+                string last = _store.GetSetting("central_store_published_signature", "") ?? "";
+                if (string.Equals(signature, last, StringComparison.Ordinal)) return;
                 StoreDirectoryClient client = new StoreDirectoryClient(_store);
-                if (!client.PublishStore(_store.GetSetting("web_public_url", "")))
-                    _store.SetSetting("central_sync_last_error", "store_publish_failed");
-                else
+                if (client.PublishStore(_store.GetSetting("web_public_url", "")))
+                {
+                    _store.SetSetting("central_store_published_signature", signature);
                     _store.SetSetting("central_sync_last_error", "");
+                }
+                else _store.SetSetting("central_sync_last_error", "store_publish_failed");
             }
-            catch (Exception ex)
+            catch (Exception ex) { _store.SetSetting("central_sync_last_error", "store_publish:" + ex.GetType().Name); }
+        }
+
+        private string BuildStoreSignature()
+        {
+            StringBuilder b = new StringBuilder();
+            string[] keys = { "store_name", "store_legal_name", "store_category", "store_address", "store_city", "store_province", "store_description", "store_logo", "store_slug", "web_public_url", "store_web_active", "delivery_enabled", "pickup_enabled", "store_latitude", "store_longitude" };
+            foreach (string key in keys) { b.Append(key).Append('=').Append(_store.GetSetting(key, "") ?? "").Append(';'); }
+            using (SHA256 sha = SHA256.Create()) return Convert.ToBase64String(sha.ComputeHash(Encoding.UTF8.GetBytes(b.ToString())));
+        }
+
+        private void PullStoreState(string baseUrl)
+        {
+            try
             {
-                _store.SetSetting("central_sync_last_error", "store_publish:" + ex.GetType().Name);
+                string response = Request(baseUrl + "/api/stores/connect?storeId=" + Uri.EscapeDataString(_store.StoreId), "GET", null);
+                string[] p = (response ?? "").Split('|');
+                if (p.Length < 22 || !string.Equals(p[0], "OK", StringComparison.OrdinalIgnoreCase)) return;
+                string centralUpdated = Decode(p[7]);
+                string localReceived = _store.GetSetting("central_store_last_received", "") ?? "";
+                DateTime c = ParseDate(centralUpdated), l = ParseDate(localReceived);
+                if (c != DateTime.MinValue && l != DateTime.MinValue && c <= l) return;
+                SetCentralSetting(p, 8, "store_legal_name"); SetCentralSetting(p, 9, "store_category");
+                SetCentralSetting(p, 10, "store_address"); SetCentralSetting(p, 11, "store_city"); SetCentralSetting(p, 12, "store_province");
+                SetCentralSetting(p, 13, "store_description"); SetCentralSetting(p, 14, "store_logo"); SetCentralSetting(p, 15, "store_slug");
+                SetCentralSetting(p, 16, "web_public_url"); SetCentralSetting(p, 17, "store_web_active"); SetCentralSetting(p, 18, "delivery_enabled");
+                SetCentralSetting(p, 19, "pickup_enabled"); SetCentralSetting(p, 20, "store_latitude"); SetCentralSetting(p, 21, "store_longitude");
+                _store.SetSetting("store_name", Decode(p[2]));
+                _store.SetSetting("central_store_last_received", centralUpdated);
+                _store.SetSetting("central_store_published_signature", BuildStoreSignature());
             }
+            catch { }
         }
 
         /// <summary>
@@ -134,7 +197,7 @@ namespace NexoMarket.Admin.UI
                 string id = NormalizeStoreId(storeId);
                 if (id.Length == 0) return false;
                 string configuredUrl = (_store.GetSetting("web_api_url", "") ?? "").Trim();
-                if (IsLegacyLocalUrl(configuredUrl) || string.IsNullOrWhiteSpace(configuredUrl) || configuredUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0)
+                if (IsLegacyLocalUrl(configuredUrl) || IsKnownLegacyCentralUrl(configuredUrl) || string.IsNullOrWhiteSpace(configuredUrl) || configuredUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0)
                     configuredUrl = GetCentralUrl();
                 string baseUrl = Normalize(configuredUrl);
                 if (baseUrl.Length == 0) return false;
@@ -244,7 +307,7 @@ namespace NexoMarket.Admin.UI
             try
             {
                 string configuredUrl = (_store.GetSetting("web_api_url", "") ?? "").Trim();
-                if (IsLegacyLocalUrl(configuredUrl) || string.IsNullOrWhiteSpace(configuredUrl) || configuredUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0) configuredUrl = GetCentralUrl();
+                if (IsLegacyLocalUrl(configuredUrl) || IsKnownLegacyCentralUrl(configuredUrl) || string.IsNullOrWhiteSpace(configuredUrl) || configuredUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0) configuredUrl = GetCentralUrl();
                 string baseUrl = Normalize(configuredUrl);
                 if (baseUrl.Length == 0 || user == null) return false;
                 // Publicar primero la tienda para que el servidor pueda validar la relación cuenta -> StoreId.
@@ -320,7 +383,7 @@ namespace NexoMarket.Admin.UI
             try
             {
                 string configuredUrl = (_store.GetSetting("web_api_url", "") ?? "").Trim();
-                if (IsLegacyLocalUrl(configuredUrl) || string.IsNullOrWhiteSpace(configuredUrl) || configuredUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0) configuredUrl = GetCentralUrl();
+                if (IsLegacyLocalUrl(configuredUrl) || IsKnownLegacyCentralUrl(configuredUrl) || string.IsNullOrWhiteSpace(configuredUrl) || configuredUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0) configuredUrl = GetCentralUrl();
                 string baseUrl = Normalize(configuredUrl);
                 string response = Request(baseUrl + "/api/accounts/auth", "POST", Form(new Dictionary<string,string>
                 { {"email", (email ?? "").Trim().ToLowerInvariant()}, {"password", password ?? ""} }));
@@ -345,6 +408,37 @@ namespace NexoMarket.Admin.UI
             }
             catch { return false; }
         }
+        public bool RegisterSellerCentral(string name,string email,string password,string storeId,out WebUser user)
+        {
+            user=null;
+            try
+            {
+                string baseUrl=ResolveCentralBaseUrl();
+                string cn,ce,cs;
+                if(!ConnectByStoreId(storeId,out cn,out ce,out cs)) return false;
+                string response=Request(baseUrl+"/api/auth/register-seller","POST",Form(new Dictionary<string,string>{{"name",name},{"email",email},{"password",password},{"storeId",storeId}}));
+                string[] p=(response??"").Split('|'); if(p.Length<10||!string.Equals(p[0],"OK",StringComparison.OrdinalIgnoreCase)) return false;
+                user=new WebUser{Name=Decode(p[2]),Email=Decode(p[3]),Phone=Decode(p[4]),Role=Decode(p[5])=="seller"?"seller":"buyer",StoreId=Decode(p[6]),Salt=Decode(p[7]),PasswordHash=Decode(p[8]),CreatedAt=ParseDate(Decode(p[9]))};
+                _store.SetSetting("central_device_id",DeviceIdentity.GetDeviceId());
+                return !string.IsNullOrWhiteSpace(user.StoreId);
+            }
+            catch{return false;}
+        }
+        public bool PairWindowsDevice(string code,string deviceId,string deviceName,out string error)
+        {
+            error="No se pudo completar la vinculación.";
+            try
+            {
+                string raw=(code??"").Trim(); string token=raw;
+                if(raw.StartsWith("NEXOMARKETPAIR:",StringComparison.OrdinalIgnoreCase)) raw=raw.Substring("NEXOMARKETPAIR:".Length);
+                if(raw.IndexOf('|')>=0){string[] pair=raw.Split(new[]{'|'},2); if(pair.Length==2){_store.SetSetting("store_id",NormalizeStoreId(pair[0])); token=pair[1];}}
+                string baseUrl=ResolveCentralBaseUrl(); string response=Request(baseUrl+"/api/pair/complete","POST",Form(new Dictionary<string,string>{{"pairingToken",token},{"deviceId",deviceId},{"deviceName",deviceName}}));
+                string[] p=(response??"").Split('|'); if(p.Length<5||!string.Equals(p[0],"OK",StringComparison.OrdinalIgnoreCase)){error=p.Length>1?Decode(p[1]):"Código inválido o vencido.";return false;}
+                _store.SetSetting("central_device_id",Decode(p[1])); _store.SetSetting("central_device_token",Decode(p[2])); _store.SetSetting("store_id",NormalizeStoreId(Decode(p[3]))); _store.SetSetting("seller_account_email",Decode(p[4])); _store.SetSetting("seller_account_locked","1"); _store.SetSetting("web_sync_enabled","1"); _store.SetSetting("store_web_active","1"); error=""; return true;
+            }
+            catch(Exception ex){error="Error de conexión: "+ex.Message;return false;}
+        }
+
         public bool PublishProductNow(Product p)
         {
             try
@@ -397,7 +491,7 @@ namespace NexoMarket.Admin.UI
         private string ResolveCentralBaseUrl()
         {
             string configuredUrl = (_store.GetSetting("web_api_url", "") ?? "").Trim();
-            if (IsLegacyLocalUrl(configuredUrl) || string.IsNullOrWhiteSpace(configuredUrl) || configuredUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0) configuredUrl = GetCentralUrl();
+            if (IsLegacyLocalUrl(configuredUrl) || IsKnownLegacyCentralUrl(configuredUrl) || string.IsNullOrWhiteSpace(configuredUrl) || configuredUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0) configuredUrl = GetCentralUrl();
             return Normalize(configuredUrl);
         }
 
@@ -427,6 +521,37 @@ namespace NexoMarket.Admin.UI
         }
         private void PublishPromotion(string baseUrl, Promotion p)
         { Request(baseUrl+"/api/promotions/publish","POST",Form(new Dictionary<string,string>{{"storeId",_store.StoreId},{"syncKey",_store.GetSetting("central_sync_key","")},{"promotionId",p.Id.ToString(CultureInfo.InvariantCulture)},{"name",p.Name},{"productIds",p.ProductIds},{"promotionalPrice",p.PromotionalPrice.ToString(CultureInfo.InvariantCulture)},{"active",p.Active?"1":"0"},{"from",p.From.ToString("o")},{"to",p.To.ToString("o")},{"updatedAt",DateTime.UtcNow.ToString("o")}})); }
+
+        private string PullProductsDelta(string baseUrl, string since, ref bool changed)
+        {
+            string response = Request(baseUrl + "/api/sync/delta?storeId=" + Uri.EscapeDataString(_store.StoreId) + "&syncKey=" + Uri.EscapeDataString(_store.GetSetting("central_sync_key", "") ?? "") + "&since=" + Uri.EscapeDataString(since ?? ""), "GET", null);
+            string serverCursor = "";
+            using (StringReader reader = new StringReader(response ?? ""))
+            {
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    if (line.StartsWith("SYNC|", StringComparison.OrdinalIgnoreCase)) { string[] sp=line.Split('|'); if(sp.Length>1) serverCursor=Decode(sp[1]); continue; }
+                    if (line.StartsWith("DELETED|", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string[] d=line.Split('|'); long id; if(d.Length>1&&long.TryParse(Decode(d[1]),out id)){_store.DeleteProductFromCentral(id);changed=true;} continue;
+                    }
+                    if (!line.StartsWith("PRODUCT|", StringComparison.OrdinalIgnoreCase)) continue;
+                    string[] p=line.Split('|'); if(p.Length<21)continue;
+                    Product product=new Product(); long productId; if(!long.TryParse(Decode(p[1]),out productId))continue; product.Id=productId;
+                    product.Name=Decode(p[2]); product.Category=Decode(p[3]); product.Description=Decode(p[4]); decimal dec; int integer;
+                    decimal.TryParse(Decode(p[5]),NumberStyles.Any,CultureInfo.InvariantCulture,out dec);product.Price=dec; decimal.TryParse(Decode(p[6]),NumberStyles.Any,CultureInfo.InvariantCulture,out dec);product.SalePrice=dec;
+                    int.TryParse(Decode(p[7]),NumberStyles.Any,CultureInfo.InvariantCulture,out integer);product.Stock=integer; int.TryParse(Decode(p[8]),NumberStyles.Any,CultureInfo.InvariantCulture,out integer);product.MinimumStock=integer;
+                    product.SKU=Decode(p[9]);product.Brand=Decode(p[10]);product.Size=Decode(p[11]);product.Color=Decode(p[12]);product.Active=Decode(p[13])!="0";product.OnlineEnabled=Decode(p[14])!="0";product.ImagePath=Decode(p[15]);
+                    int idx=16; product.WebImageUrl=Decode(p[idx++]);product.Slug=Decode(p[idx++]);product.PublicDescription=Decode(p[idx++]);product.VideoUrl=Decode(p[idx++]);product.BarcodeImagePath=Decode(p[idx++]);
+                    decimal.TryParse(Decode(p[idx++]),NumberStyles.Any,CultureInfo.InvariantCulture,out dec);product.Cost=dec;decimal.TryParse(Decode(p[idx++]),NumberStyles.Any,CultureInfo.InvariantCulture,out dec);product.TaxRate=dec;product.UpdatedAt=ParseDate(Decode(p[idx++]));product.Deleted=Decode(p[idx++])=="1";
+                    if(product.Deleted){_store.DeleteProductFromCentral(product.Id);changed=true;continue;}
+                    Product local=_store.GetProducts("").Find(x=>x.Id==product.Id);
+                    if(local==null||product.UpdatedAt>local.UpdatedAt.ToUniversalTime().AddMilliseconds(10)){_store.UpsertProductFromCentral(product);changed=true;}
+                }
+            }
+            return serverCursor;
+        }
 
         private void PullProducts(string baseUrl, ref bool changed)
         {
@@ -516,6 +641,12 @@ namespace NexoMarket.Admin.UI
         /// Detecta endpoints antiguos/locales para evitar que una instalación de Windows
         /// siga sincronizando contra localhost o una IP LAN en vez del servidor central.
         /// </summary>
+        private static bool IsKnownLegacyCentralUrl(string url)
+        {
+            string u = (url ?? "").Trim().TrimEnd('/').ToLowerInvariant();
+            return u == "https://nexomarket-central.onrender.com";
+        }
+
         private static string GetCentralUrl()
         {
             try

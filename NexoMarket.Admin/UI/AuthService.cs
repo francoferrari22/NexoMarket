@@ -1,9 +1,21 @@
 using System;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Win32;
 
 namespace NexoMarket.Admin.UI
 {
+    public static class DeviceIdentity
+    {
+        public static string GetDeviceId()
+        {
+            string machineGuid="";
+            try { using(RegistryKey k=Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Cryptography")) machineGuid=Convert.ToString(k==null?null:k.GetValue("MachineGuid")); } catch { }
+            string raw=(Environment.MachineName+"|"+machineGuid+"|NexoMarket").Trim();
+            using(SHA256 sha=SHA256.Create()) return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(raw))).Replace("-","").Substring(0,32).ToUpperInvariant();
+        }
+    }
+
     public static class AuthService
     {
         private const int SaltSize = 16;
