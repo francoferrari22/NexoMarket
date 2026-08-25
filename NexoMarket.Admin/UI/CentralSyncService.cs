@@ -66,37 +66,43 @@ namespace NexoMarket.Admin.UI
                 // cursor y recibimos solamente los cambios hechos en Web/Central.
                 string cursor = _store.GetSetting("central_sync_cursor", "") ?? "";
 
-                // Primero adoptamos cualquier cambio de configuración que haya hecho la Web.
-                // Esto evita que una PC con valores antiguos sobrescriba la tienda central.
+                // PRIMERO sincronizamos desde Central. Esto evita que una copia local vieja
+                // sobrescriba inmediatamente un cambio recién hecho en la Web.
                 PullStoreState(baseUrl);
+                string newCursor = PullProductsDelta(baseUrl, cursor, ref changed);
+                PullAccounts(baseUrl);
+                PullCoupons(baseUrl);
+                if (!string.IsNullOrWhiteSpace(newCursor))
+                {
+                    _store.SetSetting("central_sync_cursor", newCursor);
+                    cursor = newCursor;
+                }
 
-                // Recién después publicamos si Windows tiene una modificación local pendiente.
+                // DESPUÉS publicamos únicamente cambios locales nuevos.
                 PublishStoreIfChanged(baseUrl);
-
                 List<Product> localProducts = _store.GetProducts("");
+                DateTime lastLocalPublish = ParseDate(_store.GetSetting("central_local_publish_cursor", ""));
+                DateTime publishNow = DateTime.UtcNow;
+                bool localPublishOk = true;
                 foreach (Product p in localProducts)
                 {
                     DateTime updated = p.UpdatedAt == DateTime.MinValue ? DateTime.MinValue : p.UpdatedAt.ToUniversalTime();
-                    DateTime last = ParseDate(cursor);
                     bool imageRepair=NeedsWebImageRepair(p);
-                    if (last != DateTime.MinValue && updated <= last && !imageRepair) continue;
+                    if (lastLocalPublish != DateTime.MinValue && updated <= lastLocalPublish && !imageRepair) continue;
                     string result = PublishProduct(baseUrl, p);
                     if (string.IsNullOrWhiteSpace(result) || !result.StartsWith("OK|", StringComparison.OrdinalIgnoreCase))
+                    {
+                        localPublishOk = false;
                         _store.SetSetting("central_sync_last_error", "product_publish:" + (result ?? "no_response"));
+                    }
                 }
+                if (localPublishOk) _store.SetSetting("central_local_publish_cursor", publishNow.ToString("o"));
 
-                // Las promociones son pocas y se mantienen por compatibilidad con el modelo
-                // actual; su publicación sigue siendo idempotente.
+                // Promociones y cupones siguen siendo idempotentes.
                 List<Promotion> promotions = _store.GetPromotions();
                 foreach (Promotion p in promotions) PublishPromotion(baseUrl, p);
                 List<Coupon> coupons = _store.GetCoupons();
                 foreach (Coupon c in coupons) PublishCoupon(baseUrl, c);
-
-                // Pull incremental: si no existe cursor, el servidor entrega el catálogo inicial.
-                string newCursor = PullProductsDelta(baseUrl, cursor, ref changed);
-                PullAccounts(baseUrl);
-                PullCoupons(baseUrl);
-                if (!string.IsNullOrWhiteSpace(newCursor)) _store.SetSetting("central_sync_cursor", newCursor);
 
                 string pending = Request(baseUrl + "/api/orders/pending?storeId=" + Uri.EscapeDataString(_store.StoreId), "GET", null);
                 foreach (Dictionary<string,string> order in ParseObjects(pending))
@@ -367,6 +373,7 @@ namespace NexoMarket.Admin.UI
                             _store.SetSetting("seller_account_email", u.Email);
                             _store.SetSetting("seller_account_name", u.Name ?? "");
                             _store.SetSetting("seller_account_locked", "1");
+                    _store.SetSetting("web_sync_enabled", "1");
                         }
                     }
                 }
