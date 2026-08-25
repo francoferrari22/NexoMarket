@@ -24,7 +24,7 @@ namespace NexoMarket.Admin.UI
         public void Start()
         {
             if (_timer != null) return;
-            _timer = new Timer(delegate { SyncOnce(); }, null, 5000, 30000);
+            _timer = new Timer(delegate { SyncOnce(); }, null, 3000, 5000);
         }
         public void Dispose() { if (_timer != null) { try { _timer.Dispose(); } catch { } _timer = null; } }
         public void SyncOnce()
@@ -98,16 +98,27 @@ namespace NexoMarket.Admin.UI
             storeName = ""; sellerEmail = ""; sellerName = "";
             try
             {
-                string id = (storeId ?? "").Trim();
+                string id = NormalizeStoreId(storeId);
                 if (id.Length == 0) return false;
                 string configuredUrl = (_store.GetSetting("web_api_url", "") ?? "").Trim();
                 if (IsLegacyLocalUrl(configuredUrl) || string.IsNullOrWhiteSpace(configuredUrl) || configuredUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0)
                     configuredUrl = "https://nexomarket-central.onrender.com";
                 string baseUrl = Normalize(configuredUrl);
                 if (baseUrl.Length == 0) return false;
+                string health = Request(baseUrl + "/health", "GET", null);
+                if (string.IsNullOrWhiteSpace(health) || health.IndexOf("NexoMarket Central", StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    _store.SetSetting("central_sync_last_error", "central_unreachable");
+                    return false;
+                }
                 string response = Request(baseUrl + "/api/stores/connect?storeId=" + Uri.EscapeDataString(id), "GET", null);
                 string[] p = (response ?? "").Split('|');
-                if (p.Length < 6 || !string.Equals(p[0], "OK", StringComparison.OrdinalIgnoreCase)) return false;
+                if (p.Length < 5 || !string.Equals(p[0], "OK", StringComparison.OrdinalIgnoreCase))
+                {
+                    string reason = p.Length > 1 ? Decode(p[1]) : "no_response";
+                    _store.SetSetting("central_sync_last_error", "store_connect:" + reason);
+                    return false;
+                }
                 if (!string.Equals(Decode(p[1]), id, StringComparison.OrdinalIgnoreCase)) return false;
                 storeName = Decode(p[2]);
                 string active = Decode(p[3]);
@@ -357,6 +368,11 @@ namespace NexoMarket.Admin.UI
         /// Detecta endpoints antiguos/locales para evitar que una instalación de Windows
         /// siga sincronizando contra localhost o una IP LAN en vez del servidor central.
         /// </summary>
+        private static string NormalizeStoreId(string value)
+        {
+            return (value ?? "").Trim().Replace(" ", "").ToUpperInvariant();
+        }
+
         private static bool IsLegacyLocalUrl(string url)
         {
             if (string.IsNullOrWhiteSpace(url)) return true;
@@ -386,7 +402,7 @@ namespace NexoMarket.Admin.UI
 
         private static string Normalize(string u){string v=(u??"").Trim().TrimEnd('/');if(v.EndsWith("/api",StringComparison.OrdinalIgnoreCase))v=v.Substring(0,v.Length-4).TrimEnd('/');return v;}
         private static string Form(Dictionary<string,string> v){StringBuilder b=new StringBuilder();foreach(KeyValuePair<string,string> x in v){if(b.Length>0)b.Append('&');b.Append(Uri.EscapeDataString(x.Key??""));b.Append('=').Append(Uri.EscapeDataString(x.Value??""));}return b.ToString();}
-        private static string Request(string url,string method,string body){try{ServicePointManager.SecurityProtocol=SecurityProtocolType.Tls12;}catch{} HttpWebRequest r=(HttpWebRequest)WebRequest.Create(url);r.Method=method;r.Timeout=20000;r.ReadWriteTimeout=20000;r.UserAgent="NexoMarket Central Sync/4.0";if(method=="POST"){byte[] d=Encoding.UTF8.GetBytes(body??"");r.ContentType="application/x-www-form-urlencoded";r.ContentLength=d.Length;using(Stream s=r.GetRequestStream())s.Write(d,0,d.Length);}using(WebResponse x=r.GetResponse())using(StreamReader sr=new StreamReader(x.GetResponseStream(),Encoding.UTF8))return sr.ReadToEnd();}
+        private static string Request(string url,string method,string body){try{ServicePointManager.SecurityProtocol=SecurityProtocolType.Tls12;HttpWebRequest r=(HttpWebRequest)WebRequest.Create(url);r.Method=method;r.Timeout=20000;r.ReadWriteTimeout=20000;r.UserAgent="NexoMarket Central Sync/4.1.23";r.KeepAlive=false;if(method=="POST"){byte[] d=Encoding.UTF8.GetBytes(body??"");r.ContentType="application/x-www-form-urlencoded; charset=utf-8";r.ContentLength=d.Length;using(Stream s=r.GetRequestStream())s.Write(d,0,d.Length);}using(WebResponse x=r.GetResponse())using(StreamReader sr=new StreamReader(x.GetResponseStream(),Encoding.UTF8))return sr.ReadToEnd();}catch(WebException ex){try{if(ex.Response!=null)using(StreamReader sr=new StreamReader(ex.Response.GetResponseStream(),Encoding.UTF8))return sr.ReadToEnd();}catch{}return null;}catch{return null;}}
         private static long ParseLong(string s){long v;return long.TryParse(s,out v)?v:0;}
         private static decimal ParseDecimal(string s){decimal v;return decimal.TryParse(s,NumberStyles.Any,CultureInfo.InvariantCulture,out v)?v:0m;}
         private static DateTime ParseDate(string s){DateTime v;return DateTime.TryParse(s,null,DateTimeStyles.RoundtripKind,out v)?v.ToLocalTime():DateTime.Now;}

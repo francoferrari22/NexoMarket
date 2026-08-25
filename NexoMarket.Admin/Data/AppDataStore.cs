@@ -842,7 +842,7 @@ namespace NexoMarket.Admin.Data
             });
         }
 
-        public string StoreId { get { return GetSetting("store_id", ""); } }
+        public string StoreId { get { return (GetSetting("store_id", "") ?? "").Trim().Replace(" ", "").ToUpperInvariant(); } }
 
         public List<WebUser> GetWebUsers()
         {

@@ -1,0 +1,236 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<NexoMarket>
+  <Settings>
+    <Setting Key="store_name" Value="NexoMarket" />
+    <Setting Key="delivery_enabled" Value="1" />
+    <Setting Key="pickup_enabled" Value="1" />
+    <Setting Key="delivery_cost" Value="0" />
+    <Setting Key="admin_username" Value="admin" />
+    <Setting Key="admin_password_salt" Value="gZxfYEbidnjPrj7Jqqzt8A==" />
+    <Setting Key="admin_password_hash" Value="ohzL3jJJgUNnJ/Em6AAlI5vZfLIOr0c51xs3Zci0T9U=" />
+    <Setting Key="admin_must_change_password" Value="1" />
+    <Setting Key="admin_recovery_email" Value="" />
+    <Setting Key="smtp_host" Value="smtp.gmail.com" />
+    <Setting Key="smtp_port" Value="587" />
+    <Setting Key="smtp_user" Value="" />
+    <Setting Key="smtp_app_password" Value="" />
+    <Setting Key="smtp_ssl" Value="1" />
+    <Setting Key="recovery_code" Value="" />
+    <Setting Key="recovery_code_expires" Value="" />
+    <Setting Key="master_password" Value="" />
+    <Setting Key="admin_initial_password_version" Value="3.2.6" />
+    <Setting Key="master_password_legacy" Value="" />
+    <Setting Key="ticket_header" Value="NexoMarket" />
+    <Setting Key="ticket_footer" Value="Gracias por su compra" />
+    <Setting Key="web_public_url" Value="https://nexomarket-central.onrender.com" />
+    <Setting Key="web_api_url" Value="https://nexomarket-central.onrender.com" />
+    <Setting Key="web_sync_enabled" Value="1" />
+    <Setting Key="store_web_active" Value="1" />
+    <Setting Key="central_endpoint_migrated_4120" Value="1" />
+    <Setting Key="central_store_activation_migrated_4119" Value="1" />
+    <Setting Key="store_id" Value="26AFA4AC4D7749CD90F155CC5E8C5F5E" />
+    <Setting Key="web_server_port" Value="8090" />
+    <Setting Key="web_server_enabled" Value="0" />
+    <Setting Key="seller_account_email" Value="" />
+    <Setting Key="store_latitude" Value="" />
+    <Setting Key="store_longitude" Value="" />
+    <Setting Key="store_delivery_radius_km" Value="10" />
+    <Setting Key="cash_opening" Value="0" />
+    <Setting Key="cash_opening_mercadopago" Value="0" />
+    <Setting Key="cash_mercadopago_retention" Value="0" />
+    <Setting Key="cash_status" Value="Cerrada" />
+    <Setting Key="cash_opened_at" Value="" />
+    <Setting Key="cash_closed_at" Value="" />
+    <Setting Key="cash_close_actual" Value="0" />
+    <Setting Key="cash_close_mercadopago" Value="0" />
+    <Setting Key="seller_account_locked" Value="0" />
+    <Setting Key="arca_cuit" Value="" />
+    <Setting Key="arca_point_of_sale" Value="0001" />
+    <Setting Key="arca_regime" Value="Responsable Inscripto" />
+    <Setting Key="arca_environment" Value="Homologación / Testing" />
+    <Setting Key="demo_seeded" Value="1" />
+    <Setting Key="central_sync_last_error" Value="central_unreachable" />
+  </Settings>
+  <Products>
+    <Product Id="1">
+      <Name>Producto de ejemplo</Name>
+      <Category>General</Category>
+      <Description>Producto inicial para probar el panel.</Description>
+      <Price>1000</Price>
+      <SalePrice>0</SalePrice>
+      <Stock>25</Stock>
+      <MinimumStock>5</MinimumStock>
+      <Variants></Variants>
+      <Active>1</Active>
+      <ImagePath></ImagePath>
+      <Barcode></Barcode>
+      <SKU></SKU>
+      <Brand></Brand>
+      <Size></Size>
+      <Color></Color>
+      <Cost>0</Cost>
+      <TaxRate>0</TaxRate>
+      <OnlineEnabled>0</OnlineEnabled>
+      <Slug></Slug>
+      <PublicDescription></PublicDescription>
+      <VideoUrl></VideoUrl>
+      <BarcodeImagePath></BarcodeImagePath>
+    </Product>
+    <Product Id="2">
+      <Name>Remera demo NexoMarket</Name>
+      <Category>Indumentaria</Category>
+      <Description></Description>
+      <Price>18500</Price>
+      <SalePrice>15900</SalePrice>
+      <Stock>18</Stock>
+      <MinimumStock>4</MinimumStock>
+      <Variants></Variants>
+      <Active>1</Active>
+      <ImagePath></ImagePath>
+      <Barcode>779900000001</Barcode>
+      <SKU>NEX-REM-001</SKU>
+      <Brand>Nexo</Brand>
+      <Size>M</Size>
+      <Color>Negro</Color>
+      <Cost>0</Cost>
+      <TaxRate>0</TaxRate>
+      <OnlineEnabled>1</OnlineEnabled>
+      <Slug>remera-demo-nexomarket</Slug>
+      <PublicDescription>Producto de demostración para visualizar la tienda online.</PublicDescription>
+      <VideoUrl></VideoUrl>
+      <BarcodeImagePath></BarcodeImagePath>
+    </Product>
+    <Product Id="3">
+      <Name>Pantalón demo</Name>
+      <Category>Indumentaria</Category>
+      <Description></Description>
+      <Price>32000</Price>
+      <SalePrice>0</SalePrice>
+      <Stock>10</Stock>
+      <MinimumStock>3</MinimumStock>
+      <Variants></Variants>
+      <Active>1</Active>
+      <ImagePath></ImagePath>
+      <Barcode>779900000002</Barcode>
+      <SKU>NEX-PAN-001</SKU>
+      <Brand>Nexo</Brand>
+      <Size>42</Size>
+      <Color>Azul</Color>
+      <Cost>0</Cost>
+      <TaxRate>0</TaxRate>
+      <OnlineEnabled>1</OnlineEnabled>
+      <Slug>pantalon-demo</Slug>
+      <PublicDescription></PublicDescription>
+      <VideoUrl></VideoUrl>
+      <BarcodeImagePath></BarcodeImagePath>
+    </Product>
+  </Products>
+  <Customers>
+    <Customer Id="1">
+      <Name>María Cliente Demo</Name>
+      <Phone>11 5555-0101</Phone>
+      <Email>cliente.demo@nexomarket.local</Email>
+      <Address>Av. Demo 123</Address>
+      <Notes></Notes>
+      <PhotoPath></PhotoPath>
+    </Customer>
+  </Customers>
+  <Orders>
+    <Order Id="1">
+      <CustomerId>0</CustomerId>
+      <CustomerName>María Cliente Demo</CustomerName>
+      <Phone>11 5555-0101</Phone>
+      <Fulfillment>Delivery</Fulfillment>
+      <Address></Address>
+      <Notes></Notes>
+      <Status>Pendiente</Status>
+      <Total>47700</Total>
+      <CreatedAt>2026-08-24T23:09:48.7160519-03:00</CreatedAt>
+      <PaymentMethod>Mercado Pago</PaymentMethod>
+      <Source>Web</Source>
+      <ItemsJson>[]</ItemsJson>
+      <CustomerEmail></CustomerEmail>
+      <PaymentStatus>Pendiente</PaymentStatus>
+      <PaymentReference></PaymentReference>
+      <PaymentProofPath></PaymentProofPath>
+      <PostalCode></PostalCode>
+      <ShippingCost>0</ShippingCost>
+      <TrackingNumber></TrackingNumber>
+      <Carrier></Carrier>
+      <StoreId></StoreId>
+      <SellerMessage></SellerMessage>
+      <BuyerMessage></BuyerMessage>
+      <NegotiationStatus>Ninguna</NegotiationStatus>
+      <CentralOrderId></CentralOrderId>
+    </Order>
+    <Order Id="2">
+      <CustomerId>0</CustomerId>
+      <CustomerName>Juan Cliente Demo</CustomerName>
+      <Phone>11 5555-0102</Phone>
+      <Fulfillment>Retiro</Fulfillment>
+      <Address></Address>
+      <Notes></Notes>
+      <Status>Preparando</Status>
+      <Total>15900</Total>
+      <CreatedAt>2026-08-24T21:27:48.7280940-03:00</CreatedAt>
+      <PaymentMethod>Débito</PaymentMethod>
+      <Source>Mostrador</Source>
+      <ItemsJson>[]</ItemsJson>
+      <CustomerEmail></CustomerEmail>
+      <PaymentStatus>Pendiente</PaymentStatus>
+      <PaymentReference></PaymentReference>
+      <PaymentProofPath></PaymentProofPath>
+      <PostalCode></PostalCode>
+      <ShippingCost>0</ShippingCost>
+      <TrackingNumber></TrackingNumber>
+      <Carrier></Carrier>
+      <StoreId></StoreId>
+      <SellerMessage></SellerMessage>
+      <BuyerMessage></BuyerMessage>
+      <NegotiationStatus>Ninguna</NegotiationStatus>
+      <CentralOrderId></CentralOrderId>
+    </Order>
+    <Order Id="3">
+      <CustomerId>0</CustomerId>
+      <CustomerName>Ana Cliente Demo</CustomerName>
+      <Phone>11 5555-0103</Phone>
+      <Fulfillment>Delivery</Fulfillment>
+      <Address></Address>
+      <Notes></Notes>
+      <Status>Listo</Status>
+      <Total>32000</Total>
+      <CreatedAt>2026-08-24T19:27:48.7280940-03:00</CreatedAt>
+      <PaymentMethod>Efectivo</PaymentMethod>
+      <Source>Web</Source>
+      <ItemsJson>[]</ItemsJson>
+      <CustomerEmail></CustomerEmail>
+      <PaymentStatus>Pendiente</PaymentStatus>
+      <PaymentReference></PaymentReference>
+      <PaymentProofPath></PaymentProofPath>
+      <PostalCode></PostalCode>
+      <ShippingCost>0</ShippingCost>
+      <TrackingNumber></TrackingNumber>
+      <Carrier></Carrier>
+      <StoreId></StoreId>
+      <SellerMessage></SellerMessage>
+      <BuyerMessage></BuyerMessage>
+      <NegotiationStatus>Ninguna</NegotiationStatus>
+      <CentralOrderId></CentralOrderId>
+    </Order>
+  </Orders>
+  <Media />
+  <WebUsers />
+  <Promotions>
+    <Promotion Id="1">
+      <Name>Combo demo · Remera + Pantalón</Name>
+      <ProductIds>2,3</ProductIds>
+      <PromotionalPrice>42900</PromotionalPrice>
+      <Active>1</Active>
+      <From>2026-08-24T00:00:00.0000000-03:00</From>
+      <To>2026-09-23T00:00:00.0000000-03:00</To>
+    </Promotion>
+  </Promotions>
+  <Coupons />
+  <Reviews />
+  <Messages />
+</NexoMarket>

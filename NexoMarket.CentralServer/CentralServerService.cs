@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -42,6 +43,13 @@ namespace NexoMarket.CentralServer
             _accountsFile = Path.Combine(_root, "nexomarket_accounts.xml");
             Directory.CreateDirectory(_root);
             _r2 = new R2ObjectStore();
+            // Restaurar TODOS los datos persistentes antes de cargar o guardar cualquier documento.
+            // En versiones anteriores Load() podía crear un registro vacío y subirlo a R2 antes
+            // de restaurar los datos, borrando las tiendas al reiniciar Render.
+            RestoreLatest(_file, "data/nexomarket_stores.xml");
+            RestoreLatest(_catalogFile, "data/nexomarket_catalog.xml");
+            RestoreLatest(_ordersFile, "data/nexomarket_orders.xml");
+            RestoreLatest(_accountsFile, "data/nexomarket_accounts.xml");
             Load();
             EnsureCentralDataFiles();
         }
@@ -160,6 +168,7 @@ namespace NexoMarket.CentralServer
                         if (path == "/api/media/upload" && method == "POST") { Write(stream, 200, "text/plain; charset=utf-8", UploadMedia(Form(body))); return; }
                         if (path == "/api/stores" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", StoreLines(query)); return; }
                         if (path == "/api/stores/connect" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", StoreConnect(QueryValue(query, "storeId"))); return; }
+                        if (path == "/api/sync/diagnostics" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", SyncDiagnostics(QueryValue(query, "storeId"))); return; }
                         if (path == "/api/stores/json" && method == "GET") { Write(stream, 200, "application/json; charset=utf-8", StoreJson(query)); return; }
                         if (path == "/api/geocode" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", Geocode(QueryValue(query, "q"))); return; }
                         if (path == "/api/stores/register" && method == "POST") { Write(stream, 200, "text/plain", Register(Form(body))); return; }
@@ -314,12 +323,21 @@ namespace NexoMarket.CentralServer
         {
             lock (_sync)
             {
-                RestoreLatest(_catalogFile, "data/nexomarket_catalog.xml");
-                RestoreLatest(_ordersFile, "data/nexomarket_orders.xml");
-                RestoreLatest(_accountsFile, "data/nexomarket_accounts.xml");
-                if (!File.Exists(_accountsFile)) File.WriteAllText(_accountsFile, new XDocument(new XElement("NexoMarketAccounts", new XElement("Users"))).ToString(SaveOptions.None), Encoding.UTF8);
-                if (!File.Exists(_catalogFile)) File.WriteAllText(_catalogFile, new XDocument(new XElement("NexoMarketCatalog", new XElement("Products"), new XElement("Promotions"))).ToString(SaveOptions.None), Encoding.UTF8);
-                if (!File.Exists(_ordersFile)) File.WriteAllText(_ordersFile, new XDocument(new XElement("NexoMarketOrders", new XElement("Orders"))).ToString(SaveOptions.None), Encoding.UTF8);
+                // La restauración se realiza antes de Load(). Acá solamente creamos archivos
+                // que realmente no existen; jamás reemplazamos una copia persistente válida.
+                if (!File.Exists(_accountsFile))
+                    File.WriteAllText(_accountsFile, new XDocument(new XElement("NexoMarketAccounts", new XElement("Users"))).ToString(SaveOptions.None), Encoding.UTF8);
+                if (!File.Exists(_catalogFile))
+                    File.WriteAllText(_catalogFile, new XDocument(new XElement("NexoMarketCatalog", new XElement("Products"), new XElement("Promotions"))).ToString(SaveOptions.None), Encoding.UTF8);
+                if (!File.Exists(_ordersFile))
+                    File.WriteAllText(_ordersFile, new XDocument(new XElement("NexoMarketOrders", new XElement("Orders"))).ToString(SaveOptions.None), Encoding.UTF8);
+                // Subir los archivos recién creados o los existentes restaurados.
+                if (_r2 != null && _r2.Enabled)
+                {
+                    if (File.Exists(_accountsFile)) _r2.PutText("data/nexomarket_accounts.xml", File.ReadAllText(_accountsFile, Encoding.UTF8));
+                    if (File.Exists(_catalogFile)) _r2.PutText("data/nexomarket_catalog.xml", File.ReadAllText(_catalogFile, Encoding.UTF8));
+                    if (File.Exists(_ordersFile)) _r2.PutText("data/nexomarket_orders.xml", File.ReadAllText(_ordersFile, Encoding.UTF8));
+                }
             }
         }
 
@@ -584,26 +602,65 @@ namespace NexoMarket.CentralServer
 
         private string StoreConnect(string storeId)
         {
-            storeId = (storeId ?? "").Trim();
+            storeId = NormalizeStoreId(storeId);
+            if (storeId.Length == 0) return "ERROR|store_id_required";
+            lock (_sync)
+            {
+                XElement stores = _doc.Root.Element("Stores");
+                XElement store = stores == null ? null : stores.Elements("Store").FirstOrDefault(x => string.Equals(S(x, "StoreId"), storeId, StringComparison.OrdinalIgnoreCase));
+                if (store == null) return "ERROR|store_not_found|" + Escape(storeId);
+                if (S(store, "Active") != "1") return "ERROR|store_inactive|" + Escape(storeId);
+                string syncKey = S(store, "SyncKey");
+                if (string.IsNullOrWhiteSpace(syncKey)) return "ERROR|store_sync_key_missing|" + Escape(storeId);
+
+                string sellerEmail = "", sellerName = "";
+                XDocument accounts = LoadFile(_accountsFile, "NexoMarketAccounts", "Users");
+                XElement users = accounts.Root.Element("Users");
+                if (users != null)
+                {
+                    XElement seller = users.Elements("User").FirstOrDefault(x =>
+                        string.Equals(S(x, "StoreId"), storeId, StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(S(x, "Role"), "seller", StringComparison.OrdinalIgnoreCase));
+                    if (seller != null)
+                    {
+                        sellerEmail = S(seller, "Email");
+                        sellerName = S(seller, "Name");
+                    }
+                }
+
+                // StoreId es la identidad de la instalación. La cuenta web es información
+                // complementaria; su ausencia NO debe impedir conectar Windows a una tienda
+                // que ya existe y está activa.
+                return "OK|" + Escape(storeId) + "|" + Escape(S(store, "Name")) + "|1|" + Escape(syncKey) +
+                    "|" + Escape(sellerEmail) + "|" + Escape(sellerName) + "|" +
+                    Escape(A(store, "UpdatedAt")) + "|" + Escape(S(store, "LegalName")) + "|" + Escape(S(store, "Category")) +
+                    "|" + Escape(S(store, "Address")) + "|" + Escape(S(store, "City")) + "|" + Escape(S(store, "Province")) +
+                    "|" + Escape(S(store, "Description")) + "|" + Escape(S(store, "Logo")) + "|" + Escape(S(store, "Slug")) +
+                    "|" + Escape(S(store, "PublicUrl")) + "|" + Escape(S(store, "Active")) + "|" + Escape(S(store, "Delivery")) +
+                    "|" + Escape(S(store, "Pickup")) + "|" + Escape(S(store, "Latitude")) + "|" + Escape(S(store, "Longitude"));
+            }
+        }
+
+        private string SyncDiagnostics(string storeId)
+        {
+            storeId = NormalizeStoreId(storeId);
             if (storeId.Length == 0) return "ERROR|store_id_required";
             lock (_sync)
             {
                 XElement store = _doc.Root.Element("Stores").Elements("Store").FirstOrDefault(x => string.Equals(S(x, "StoreId"), storeId, StringComparison.OrdinalIgnoreCase));
                 if (store == null) return "ERROR|store_not_found";
-                if (S(store, "Active") != "1") return "ERROR|store_inactive";
                 string syncKey = S(store, "SyncKey");
-                if (string.IsNullOrWhiteSpace(syncKey)) return "ERROR|store_sync_key_missing";
-                string sellerEmail = ""; string sellerName = "";
                 XDocument accounts = LoadFile(_accountsFile, "NexoMarketAccounts", "Users");
-                XElement users = accounts.Root.Element("Users");
-                if (users != null)
-                {
-                    XElement seller = users.Elements("User").FirstOrDefault(x => string.Equals(S(x, "StoreId"), storeId, StringComparison.OrdinalIgnoreCase) && string.Equals(S(x, "Role"), "seller", StringComparison.OrdinalIgnoreCase));
-                    if (seller != null) { sellerEmail = S(seller, "Email"); sellerName = S(seller, "Name"); }
-                }
-                if (string.IsNullOrWhiteSpace(sellerEmail)) return "ERROR|seller_account_not_found";
-                return "OK|" + Escape(storeId) + "|" + Escape(S(store, "Name")) + "|1|" + Escape(syncKey) + "|" + Escape(sellerEmail) + "|" + Escape(sellerName) + "|" + Escape(A(store, "UpdatedAt")) + "|" + Escape(S(store, "LegalName")) + "|" + Escape(S(store, "Category")) + "|" + Escape(S(store, "Address")) + "|" + Escape(S(store, "City")) + "|" + Escape(S(store, "Province")) + "|" + Escape(S(store, "Description")) + "|" + Escape(S(store, "Logo")) + "|" + Escape(S(store, "Slug")) + "|" + Escape(S(store, "PublicUrl")) + "|1|" + Escape(S(store, "Delivery")) + "|" + Escape(S(store, "Pickup")) + "|" + Escape(S(store, "Latitude")) + "|" + Escape(S(store, "Longitude"));
+                int accountCount = accounts.Root.Element("Users") == null ? 0 : accounts.Root.Element("Users").Elements("User").Count(x => string.Equals(S(x, "StoreId"), storeId, StringComparison.OrdinalIgnoreCase));
+                XDocument catalog = LoadFile(_catalogFile, "NexoMarketCatalog", "Products");
+                int productCount = catalog.Root.Element("Products") == null ? 0 : catalog.Root.Element("Products").Elements("Product").Count(x => string.Equals(S(x, "StoreId"), storeId, StringComparison.OrdinalIgnoreCase));
+                return "OK|store=" + Escape(storeId) + "|active=" + Escape(S(store, "Active")) + "|accounts=" + accountCount.ToString(CultureInfo.InvariantCulture) + "|products=" + productCount.ToString(CultureInfo.InvariantCulture) + "|r2=" + ((_r2 != null && _r2.Enabled) ? "1" : "0") + "|syncKey=" + (string.IsNullOrWhiteSpace(syncKey) ? "0" : "1");
             }
+        }
+
+        private static string NormalizeStoreId(string value)
+        {
+            return (value ?? "").Trim().Replace(" ", "").ToUpperInvariant();
         }
 
         private string CatalogLines(string storeId, string syncKey)

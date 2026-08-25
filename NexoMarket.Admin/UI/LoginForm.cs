@@ -98,7 +98,15 @@ namespace NexoMarket.Admin.UI
                     string storeName, sellerEmail, sellerName;
                     if (!sync.ConnectByStoreId(storeId, out storeName, out sellerEmail, out sellerName))
                     {
-                        Fail("No se encontró una tienda activa con ese Store ID o no se pudo conectar con NexoMarket Central.");
+                        string detail = _store.GetSetting("central_sync_last_error", "");
+                        if (detail.IndexOf("store_not_found", StringComparison.OrdinalIgnoreCase) >= 0)
+                            Fail("El Store ID no existe en NexoMarket Central. Verificá que la tienda haya sido creada en la Web.");
+                        else if (detail.IndexOf("store_inactive", StringComparison.OrdinalIgnoreCase) >= 0)
+                            Fail("La tienda existe, pero está desactivada en NexoMarket Central.");
+                        else if (detail.IndexOf("central_unreachable", StringComparison.OrdinalIgnoreCase) >= 0)
+                            Fail("No se pudo conectar con NexoMarket Central. Revisá Internet y la dirección pública de Render.");
+                        else
+                            Fail("No se pudo vincular el Store ID con NexoMarket Central. Detalle: " + detail);
                         return;
                     }
                     sync.SyncOnce();
