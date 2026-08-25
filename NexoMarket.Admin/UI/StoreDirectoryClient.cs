@@ -4,6 +4,7 @@ using System.IO;
 using System.Net;
 using System.Text;
 using System.Security;
+using System.Security.Cryptography;
 using NexoMarket.Admin.Data;
 
 namespace NexoMarket.Admin.UI
@@ -27,8 +28,8 @@ namespace NexoMarket.Admin.UI
         {
             if (!IsConfigured) return false;
             string endpoint = Normalize(CentralUrl()) + "/api/stores/register";
-            string syncKey = (_store.GetSetting("central_sync_key", "") ?? "").Trim();
-            if (string.IsNullOrWhiteSpace(syncKey)) { syncKey = Guid.NewGuid().ToString("N"); _store.SetSetting("central_sync_key", syncKey); }
+            string syncKey = ComputeStorePairKey(_store.StoreId);
+            _store.SetSetting("central_sync_key", syncKey);
             string resolvedPublicUrl = (publicUrl ?? "").Trim();
             if (IsLocalUrl(resolvedPublicUrl) || string.IsNullOrWhiteSpace(resolvedPublicUrl) || resolvedPublicUrl.IndexOf("tudominio.com", StringComparison.OrdinalIgnoreCase) >= 0)
                 resolvedPublicUrl = Normalize(CentralUrl()) + "/store/" + Uri.EscapeDataString(_store.StoreId);
@@ -135,6 +136,16 @@ namespace NexoMarket.Admin.UI
             return result;
         }
 
+        private static string ComputeStorePairKey(string storeId)
+        {
+            using (SHA256 sha = SHA256.Create())
+            {
+                byte[] data = Encoding.UTF8.GetBytes("NexoMarket.StorePair.v1:" + (storeId ?? "").Trim().Replace(" ", "").ToUpperInvariant());
+                byte[] hash = sha.ComputeHash(data); StringBuilder b = new StringBuilder(hash.Length * 2);
+                foreach (byte x in hash) b.Append(x.ToString("x2")); return b.ToString();
+            }
+        }
+
         private static string JsonValue(string json, string key)
         {
             if (string.IsNullOrEmpty(json) || string.IsNullOrEmpty(key)) return "";
@@ -214,7 +225,7 @@ namespace NexoMarket.Admin.UI
             try { ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12; } catch { }
             HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
             req.Method = method; req.Timeout = 20000; req.ReadWriteTimeout = 20000;
-            req.KeepAlive = false; req.UserAgent = "NexoMarket Central Client/4.1.24";
+            req.KeepAlive = false; req.UserAgent = "NexoMarket Central Client/4.1.26";
             req.Expect = null;
             if (method == "POST")
             {

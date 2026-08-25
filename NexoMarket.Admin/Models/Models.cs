@@ -28,6 +28,9 @@ namespace NexoMarket.Admin.Models
         public string PublicDescription { get; set; }
         public string VideoUrl { get; set; }
         public string BarcodeImagePath { get; set; }
+        public string WebImageUrl { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public bool Deleted { get; set; }
 
         public Product()
         {
@@ -45,6 +48,9 @@ namespace NexoMarket.Admin.Models
             PublicDescription = "";
             VideoUrl = "";
             BarcodeImagePath = "";
+            WebImageUrl = "";
+            UpdatedAt = DateTime.UtcNow;
+            Deleted = false;
             Active = true;
             OnlineEnabled = true;
         }

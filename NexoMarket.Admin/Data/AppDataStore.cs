@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Security.Cryptography;
+using System.Text;
 using System.Xml.Linq;
 using NexoMarket.Admin.Models;
 using NexoMarket.Admin.UI;
@@ -145,6 +148,8 @@ namespace NexoMarket.Admin.Data
                 SetSetting("central_store_activation_migrated_4119", "1");
             }
             SetDefault("store_id", Guid.NewGuid().ToString("N").ToUpperInvariant());
+            string pairStoreId = GetSetting("store_id", "");
+            if (!string.IsNullOrWhiteSpace(pairStoreId)) SetSetting("central_sync_key", ComputeStorePairKey(pairStoreId));
             SetDefault("web_server_port", "8090");
             SetDefault("web_server_enabled", "0");
             SetDefault("seller_account_email", "");
@@ -319,6 +324,16 @@ namespace NexoMarket.Admin.Data
             SetSetting("admin_must_change_password", "1");
         }
 
+        private static string ComputeStorePairKey(string storeId)
+        {
+            using (SHA256 sha = SHA256.Create())
+            {
+                byte[] data = Encoding.UTF8.GetBytes("NexoMarket.StorePair.v1:" + (storeId ?? "").Trim().Replace(" ", "").ToUpperInvariant());
+                byte[] hash = sha.ComputeHash(data); StringBuilder b = new StringBuilder(hash.Length * 2);
+                foreach (byte x in hash) b.Append(x.ToString("x2")); return b.ToString();
+            }
+        }
+
         private static bool IsLocalEndpoint(string value)
         {
             if (string.IsNullOrWhiteSpace(value)) return true;
@@ -340,7 +355,7 @@ namespace NexoMarket.Admin.Data
             string q = (search ?? "").Trim().ToLowerInvariant();
             return _doc.Root.Element("Products").Elements("Product")
                 .Select(ToProduct)
-                .Where(p => q.Length == 0 || p.Name.ToLowerInvariant().Contains(q) || p.Category.ToLowerInvariant().Contains(q) || p.Barcode.ToLowerInvariant().Contains(q) || (p.SKU ?? "").ToLowerInvariant().Contains(q))
+                .Where(p => !p.Deleted && (q.Length == 0 || p.Name.ToLowerInvariant().Contains(q) || p.Category.ToLowerInvariant().Contains(q) || p.Barcode.ToLowerInvariant().Contains(q) || (p.SKU ?? "").ToLowerInvariant().Contains(q)))
                 .OrderByDescending(p => p.Id).ToList();
         }
 
@@ -370,7 +385,10 @@ namespace NexoMarket.Admin.Data
                 Slug = S(e, "Slug"),
                 PublicDescription = S(e, "PublicDescription"),
                 VideoUrl = S(e, "VideoUrl"),
-                BarcodeImagePath = S(e, "BarcodeImagePath")
+                BarcodeImagePath = S(e, "BarcodeImagePath"),
+                WebImageUrl = S(e, "WebImageUrl"),
+                UpdatedAt = D(e, "UpdatedAt"),
+                Deleted = S(e, "Deleted") == "1"
             };
         }
 
@@ -399,7 +417,10 @@ namespace NexoMarket.Admin.Data
                 new XElement("Slug", p.Slug ?? ""),
                 new XElement("PublicDescription", p.PublicDescription ?? ""),
                 new XElement("VideoUrl", p.VideoUrl ?? ""),
-                new XElement("BarcodeImagePath", p.BarcodeImagePath ?? ""));
+                new XElement("BarcodeImagePath", p.BarcodeImagePath ?? ""),
+                new XElement("WebImageUrl", p.WebImageUrl ?? ""),
+                new XElement("UpdatedAt", (p.UpdatedAt == DateTime.MinValue ? DateTime.UtcNow : p.UpdatedAt.ToUniversalTime()).ToString("o")),
+                new XElement("Deleted", p.Deleted ? "1" : "0"));
         }
 
         private void AddProduct(Product p)
@@ -413,14 +434,46 @@ namespace NexoMarket.Admin.Data
         public void UpsertProductFromCentral(Product p)
         {
             if (p == null || p.Id <= 0) return;
+            if (!string.IsNullOrWhiteSpace(p.WebImageUrl) && (p.WebImageUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || p.WebImageUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
+            {
+                string localImage = EnsureLocalWebImage(p.WebImageUrl, p.Id);
+                if (!string.IsNullOrWhiteSpace(localImage)) p.ImagePath = localImage;
+            }
             XElement parent = _doc.Root.Element("Products");
             XElement old = parent.Elements("Product").FirstOrDefault(x => (long)x.Attribute("Id") == p.Id);
+            if (p.Deleted)
+            {
+                if (old != null) old.Remove();
+                Save();
+                return;
+            }
             if (old != null) old.ReplaceWith(ProductElement(p)); else parent.Add(ProductElement(p));
             Save();
         }
 
+        private string EnsureLocalWebImage(string url, long productId)
+        {
+            try
+            {
+                string ext = Path.GetExtension(new Uri(url).AbsolutePath);
+                if (string.IsNullOrWhiteSpace(ext) || ext.Length > 6) ext = ".jpg";
+                string path = Path.Combine(MediaDirectory, "central-product-" + productId.ToString(CultureInfo.InvariantCulture) + ext.ToLowerInvariant());
+                if (File.Exists(path) && new FileInfo(path).Length > 0) return path;
+                using (WebClient client = new WebClient())
+                {
+                    client.Headers[HttpRequestHeader.UserAgent] = "NexoMarket Windows Central Sync";
+                    client.DownloadFile(url, path);
+                }
+                return File.Exists(path) ? path : "";
+            }
+            catch { return ""; }
+        }
+
         public void SaveProduct(Product p)
         {
+            if (p == null) return;
+            p.UpdatedAt = DateTime.UtcNow;
+            p.Deleted = false;
             XElement parent = _doc.Root.Element("Products");
             XElement old = parent.Elements("Product").FirstOrDefault(x => (long)x.Attribute("Id") == p.Id);
             if (old != null) old.ReplaceWith(ProductElement(p));
@@ -441,12 +494,27 @@ namespace NexoMarket.Admin.Data
         {
             XElement parent = _doc.Root.Element("Products");
             XElement old = parent.Elements("Product").FirstOrDefault(x => (long)x.Attribute("Id") == id);
-            if (old != null) old.Remove();
+            if (old != null)
+            {
+                old.SetElementValue("Deleted", "1");
+                old.SetElementValue("Active", "0");
+                old.SetElementValue("OnlineEnabled", "0");
+                old.SetElementValue("UpdatedAt", DateTime.UtcNow.ToString("o"));
+            }
             Save();
             if (GetSetting("web_sync_enabled", "0") == "1")
             {
                 try { new WebCatalogExporter(this).Export(); } catch { }
+                try { using (CentralSyncService sync = new CentralSyncService(this)) sync.DeleteProductNow(id); } catch { }
             }
+        }
+
+        public void DeleteProductFromCentral(long id)
+        {
+            XElement parent = _doc.Root.Element("Products");
+            XElement old = parent.Elements("Product").FirstOrDefault(x => (long)x.Attribute("Id") == id);
+            if (old != null) old.Remove();
+            Save();
         }
 
 

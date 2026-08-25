@@ -74,8 +74,31 @@ namespace NexoMarket.Admin
             _webServer = new WebServerService(_store, webPort);
             _webServer.Start();
             _centralSync = new CentralSyncService(_store);
+            _centralSync.DataChanged += HandleCentralDataChanged;
             _centralSync.Start();
             ShowPage("Inicio", BuildDashboard);
+        }
+
+        private void HandleCentralDataChanged()
+        {
+            try
+            {
+                if (IsDisposed) return;
+                if (InvokeRequired) { BeginInvoke(new Action(HandleCentralDataChanged)); return; }
+                switch (_currentPage)
+                {
+                    case "Productos": ShowPage("Productos", BuildProducts); break;
+                    case "Inventario": ShowPage("Inventario", BuildInventory); break;
+                    case "Pedidos nuevos": ShowPage("Pedidos nuevos", BuildOrders); break;
+                    case "Delivery": ShowPage("Delivery", BuildDelivery); break;
+                    case "Ventas": ShowPage("Ventas", BuildSalesHistory); break;
+                    case "Clientes": ShowPage("Clientes", BuildCustomers); break;
+                    case "Promociones": ShowPage("Promociones", BuildPromotions); break;
+                    case "Estadísticas": ShowPage("Estadísticas", BuildStats); break;
+                    case "Inicio": ShowPage("Inicio", BuildDashboard); break;
+                }
+            }
+            catch { }
         }
 
         private void BuildShell()
@@ -1944,7 +1967,7 @@ namespace NexoMarket.Admin
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
-            try { if (_centralSync != null) _centralSync.Dispose(); } catch { }
+            try { if (_centralSync != null) { _centralSync.DataChanged -= HandleCentralDataChanged; _centralSync.Dispose(); } } catch { }
             try { if (_webServer != null) _webServer.Dispose(); } catch { }
             try { if (_localScannerServer != null) _localScannerServer.Dispose(); } catch { }
             try { if (_androidBridge != null) _androidBridge.Dispose(); } catch { }
