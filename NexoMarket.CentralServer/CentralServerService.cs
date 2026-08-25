@@ -491,21 +491,7 @@ namespace NexoMarket.CentralServer
 
         private static string A(XElement e, string name) { XAttribute a = e == null ? null : e.Attribute(name); return a == null ? "" : a.Value; }
 
-        private void SaveDoc(string file, XDocument doc)
-        {
-            string temp = file + ".tmp";
-            doc.Save(temp);
-            if (File.Exists(file)) File.Delete(file);
-            File.Move(temp, file);
-            if (_r2 != null && _r2.Enabled)
-            {
-                string key = "data/" + Path.GetFileName(file);
-                _r2.PutText(key, File.ReadAllText(file, Encoding.UTF8));
-            }
-        }
-
-
-        private string StorageStatus()
+                private string StorageStatus()
         {
             return _r2 != null && _r2.Enabled ? "OK|R2|enabled" : "ERROR|R2|not_configured";
         }
