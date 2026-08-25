@@ -1,4 +1,4 @@
-# NexoMarket Central Server 4.1.3 - Render / Docker
+# NexoMarket Central Server 4.1.15 - Render / Docker
 # Build robusto: restaura dependencias despues de copiar el proyecto completo.
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
@@ -10,8 +10,7 @@ COPY NexoMarket.CentralServer/ ./NexoMarket.CentralServer/
 RUN dotnet restore ./NexoMarket.CentralServer/NexoMarket.CentralServer.csproj
 RUN dotnet publish ./NexoMarket.CentralServer/NexoMarket.CentralServer.csproj \
     -c Release \
-    -o /app/publish \
-    --no-restore
+    -o /app/publish
 
 FROM mcr.microsoft.com/dotnet/runtime:8.0 AS runtime
 WORKDIR /app

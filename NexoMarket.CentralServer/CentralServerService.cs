@@ -396,7 +396,7 @@ namespace NexoMarket.CentralServer
         private string LicenseUpsertAccount(Dictionary<string,string> f)
         {
             if(!IsLicenseAdmin(f))return "ERROR|unauthorized"; string token=Get(f,"license"); NexoMarket.Licensing.LicenseRecord r; if(!NexoMarket.Licensing.LicenseCore.TryParse(token,out r))return "ERROR|license"; string pub=LicensePublicKey(); if(string.IsNullOrWhiteSpace(pub)||!NexoMarket.Licensing.LicenseCore.Verify(r,pub))return "ERROR|signature"; if(r.ExpiresUtc<=DateTime.UtcNow)return "ERROR|expired";
-            CentralUser u=FindAccount(r.AccountEmail); if(u==null||u.Role!="seller")return "ERROR|seller_account"; if(!string.Equals(LicenseAccountId(u.Email),r.AccountId,StringComparison.OrdinalIgnoreCase))return "ERROR|account_id"; if(!string.IsNullOrWhiteSpace(r.StoreId) && !string.Equals(u.StoreId,r.StoreId,StringComparison.OrdinalIgnoreCase))return "ERROR|store";
+            CentralUser u=FindAccount(r.AccountEmail); if(u==null||u.Role!="seller")return "ERROR|seller_account"; if(!string.Equals(LicenseAccountId(u.Email),r.AccountId,StringComparison.OrdinalIgnoreCase))return "ERROR|account_id"; if(!string.IsNullOrWhiteSpace(r.StoreId)&&!string.IsNullOrWhiteSpace(u.StoreId)&&!string.Equals(u.StoreId,r.StoreId,StringComparison.OrdinalIgnoreCase))return "ERROR|store";
             return ActivateAccountLicense(new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){{"email",r.AccountEmail},{"accountId",r.AccountId},{"storeId",r.StoreId},{"license",token}});
         }
 
@@ -621,7 +621,7 @@ namespace NexoMarket.CentralServer
                 XElement e = x.Element;
                 string publicUrl = S(e, "PublicUrl");
                 if (string.IsNullOrWhiteSpace(publicUrl)) publicUrl = "/store/" + Uri.EscapeDataString(S(e, "StoreId"));
-                else if (publicUrl.IndexOf("/store/", StringComparison.OrdinalIgnoreCase) < 0) publicUrl = publicUrl.TrimEnd('/') + "/store/" + Uri.EscapeDataString(S(e, "StoreId"));
+                else if (!publicUrl.Contains("/store/", StringComparison.OrdinalIgnoreCase)) publicUrl = publicUrl.TrimEnd('/') + "/store/" + Uri.EscapeDataString(S(e, "StoreId"));
                 b.Append("STORE|").Append(Escape(S(e, "StoreId"))).Append('|').Append(Escape(S(e, "Name"))).Append('|').Append(Escape(publicUrl)).Append('|').Append(Escape(S(e, "City"))).Append('|').Append(Escape(S(e, "Province"))).Append('|').Append(Escape(S(e, "Category"))).Append('|').Append(Escape(S(e, "Latitude"))).Append('|').Append(Escape(S(e, "Longitude"))).Append('|').Append(Escape(S(e, "Active"))).Append('|').Append(Escape(S(e, "Delivery"))).Append('|').Append(Escape(S(e, "Pickup"))).Append('|').Append(Escape(e.Attribute("UpdatedAt") == null ? "" : e.Attribute("UpdatedAt").Value)).Append('|').Append(Escape(x.DistanceKm >= 999999d ? "" : x.DistanceKm.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture))).Append('\n');
             }
             return b.ToString();
@@ -867,9 +867,9 @@ namespace NexoMarket.CentralServer
         private string ActivateAccountLicense(Dictionary<string,string> f)
         {
             string email=Get(f,"email").Trim().ToLowerInvariant(), accountId=Get(f,"accountId").Trim(), storeId=Get(f,"storeId").Trim(), token=Get(f,"license").Trim();
-            CentralUser user=FindAccount(email); if(user==null || user.Role!="seller")return "ERROR|seller_account"; if(!string.Equals(LicenseAccountId(user.Email),accountId,StringComparison.OrdinalIgnoreCase))return "ERROR|account_id"; if(!string.IsNullOrWhiteSpace(user.StoreId)&&!string.IsNullOrWhiteSpace(storeId)&&!string.Equals(user.StoreId,storeId,StringComparison.OrdinalIgnoreCase))return "ERROR|store";
+            CentralUser user=FindAccount(email); if(user==null || user.Role!="seller")return "ERROR|seller_account"; if(!string.Equals(LicenseAccountId(user.Email),accountId,StringComparison.OrdinalIgnoreCase))return "ERROR|account_id";
             NexoMarket.Licensing.LicenseRecord r; if(!NexoMarket.Licensing.LicenseCore.TryParse(token,out r))return "ERROR|license"; string pub=LicensePublicKey(); if(string.IsNullOrWhiteSpace(pub)||!NexoMarket.Licensing.LicenseCore.Verify(r,pub))return "ERROR|signature";
-            if(!string.Equals(r.AccountId,LicenseAccountId(email),StringComparison.OrdinalIgnoreCase)||!string.Equals(r.AccountEmail,email,StringComparison.OrdinalIgnoreCase)||(!string.IsNullOrWhiteSpace(r.StoreId)&&!string.IsNullOrWhiteSpace(storeId)&&!string.Equals(r.StoreId,storeId,StringComparison.OrdinalIgnoreCase)))return "ERROR|license_account"; if(!string.Equals(r.Status,"Active",StringComparison.OrdinalIgnoreCase)||r.ExpiresUtc<=DateTime.UtcNow)return "ERROR|expired";
+            if(!string.Equals(r.AccountId,LicenseAccountId(email),StringComparison.OrdinalIgnoreCase)||!string.Equals(r.AccountEmail,email,StringComparison.OrdinalIgnoreCase))return "ERROR|license_account"; if(!string.Equals(r.Status,"Active",StringComparison.OrdinalIgnoreCase)||r.ExpiresUtc<=DateTime.UtcNow)return "ERROR|expired";
             lock(_sync){XDocument d=LoadFile(_accountsFile,"NexoMarketAccounts","Users");XElement e=d.Root.Element("Users").Elements("User").FirstOrDefault(x=>string.Equals(S(x,"Email"),email,StringComparison.OrdinalIgnoreCase));if(e==null)return "ERROR|seller_account";e.SetElementValue("PaidLicenseIssuedUtc",r.IssuedUtc.ToString("o"));e.SetElementValue("PaidLicenseExpiresUtc",r.ExpiresUtc.ToString("o"));e.SetElementValue("PaidLicenseStatus","Active");e.SetElementValue("PaidLicenseToken",token);SaveDoc(_accountsFile,d);}
             return SellerTrialResponse(FindAccount(email));
         }
