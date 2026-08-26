@@ -702,7 +702,7 @@ namespace NexoMarket.Admin.UI
                 string baseUrl = (_store.GetSetting("web_api_url", "") ?? "").Trim().TrimEnd('/');
                 if (baseUrl.EndsWith("/api", StringComparison.OrdinalIgnoreCase)) baseUrl = baseUrl.Substring(0, baseUrl.Length - 4).TrimEnd('/');
                 if (baseUrl.Length == 0) return;
-                string body = "storeId=" + Uri.EscapeDataString(_store.StoreId) + "&centralOrderId=" + Uri.EscapeDataString(order.CentralOrderId) + "&status=" + Uri.EscapeDataString(order.Status ?? "Pendiente") + "&carrier=" + Uri.EscapeDataString(order.Carrier ?? "") + "&trackingNumber=" + Uri.EscapeDataString(order.TrackingNumber ?? "");
+                string body = "storeId=" + Uri.EscapeDataString(_store.StoreId) + "&centralOrderId=" + Uri.EscapeDataString(order.CentralOrderId) + "&syncKey=" + Uri.EscapeDataString(_store.GetSetting("central_sync_key", "") ?? "") + "&status=" + Uri.EscapeDataString(order.Status ?? "Pendiente") + "&carrier=" + Uri.EscapeDataString(order.Carrier ?? "") + "&trackingNumber=" + Uri.EscapeDataString(order.TrackingNumber ?? "");
                 HttpWebRequest req = (HttpWebRequest)WebRequest.Create(baseUrl + "/api/orders/status");
                 req.Method = "POST"; req.Timeout = 6000; req.ReadWriteTimeout = 6000; req.ContentType = "application/x-www-form-urlencoded";
                 byte[] bytes = Encoding.UTF8.GetBytes(body); req.ContentLength = bytes.Length;

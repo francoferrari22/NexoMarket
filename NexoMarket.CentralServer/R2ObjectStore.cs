@@ -98,6 +98,27 @@ namespace NexoMarket.CentralServer
             return data == null ? null : Encoding.UTF8.GetString(data);
         }
 
+
+        public int DeletePrefix(string prefix)
+        {
+            if(!Enabled||string.IsNullOrWhiteSpace(prefix))return 0;
+            int count=0; string token=null;
+            try
+            {
+                do
+                {
+                    var req=new ListObjectsV2Request{BucketName=_bucket,Prefix=prefix.TrimStart('/'),ContinuationToken=token};
+                    var page=_client.ListObjectsV2Async(req).GetAwaiter().GetResult();
+                    foreach(var obj in page.S3Objects)
+                    {
+                        _client.DeleteObjectAsync(new DeleteObjectRequest{BucketName=_bucket,Key=obj.Key}).GetAwaiter().GetResult(); count++;
+                    }
+                    token=page.IsTruncated? page.NextContinuationToken:null;
+                }while(!string.IsNullOrEmpty(token));
+            }catch{}
+            return count;
+        }
+
         public string PublicUrl(string key)
         {
             return string.IsNullOrWhiteSpace(_publicBaseUrl) ? "" : _publicBaseUrl + "/" + key.TrimStart('/');

@@ -1,3 +1,17 @@
-NEXOMARKET 5.2.1
-REEMPLAZAR TODO EL CONTENIDO DEL REPOSITORIO GITHUB POR EL CONTENIDO DE ESTA CARPETA.
-NO MODIFICAR VARIABLES DE RENDER, POSTGRESQL, R2 NI LA CONFIGURACION DE LOGIN.
+NexoMarket 5.3.0
+
+Este paquete está preparado para reemplazar el contenido del repositorio GitHub completo.
+Conserva las correcciones anteriores de Seller Center, imágenes/R2, carrito/comprobante, logo de tienda y login Windows.
+Agrega Super Admin separado y API administrativa protegida.
+
+NO hay tiendas ni cuentas sembradas en los archivos del proyecto.
+Si Render conserva un PostgreSQL anterior, vaciarlo con Super Admin -> VACIAR TODO o con RESET_NEXOMARKET_DATOS.sql.
+
+Configurar en Render:
+- NEXOMARKET_DATABASE_URL
+- R2_ACCOUNT_ID
+- R2_ACCESS_KEY_ID
+- R2_SECRET_ACCESS_KEY
+- R2_BUCKET
+- R2_PUBLIC_BASE_URL
+- NEXOMARKET_ADMIN_KEY

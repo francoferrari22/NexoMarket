@@ -21,3 +21,22 @@ services:
       # de NexoMarket y colocar su Internal Connection String aquí.
       - key: NEXOMARKET_DATABASE_URL
         sync: false
+      # Clave maestra para NexoMarket Super Admin. Definirla manualmente en Render.
+      - key: NEXOMARKET_ADMIN_KEY
+        sync: false
+      # Correo transaccional (opcional pero recomendado en producción).
+      - key: NEXOMARKET_SMTP_HOST
+        sync: false
+      - key: NEXOMARKET_SMTP_PORT
+        value: "587"
+      - key: NEXOMARKET_SMTP_USER
+        sync: false
+      - key: NEXOMARKET_SMTP_PASSWORD
+        sync: false
+      - key: NEXOMARKET_SMTP_FROM
+        sync: false
+      - key: NEXOMARKET_SMTP_SSL
+        value: "1"
+      # Firma HMAC de webhooks del proveedor de pagos.
+      - key: NEXOMARKET_PAYMENT_WEBHOOK_SECRET
+        sync: false

@@ -1,4 +1,4 @@
-# NexoMarket Central Server 5.2.3 - Render / Docker
+# NexoMarket Central Server 5.4.0 - Render / Docker
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
@@ -6,7 +6,7 @@ COPY NexoMarket.CentralServer/NexoMarket.CentralServer.csproj ./NexoMarket.Centr
 RUN dotnet restore ./NexoMarket.CentralServer/NexoMarket.CentralServer.csproj --verbosity minimal
 
 COPY NexoMarket.CentralServer/ ./NexoMarket.CentralServer/
-RUN echo "=== NEXOMARKET BUILD 5.2.3 ===" && \
+RUN echo "=== NEXOMARKET BUILD 5.4.0 ===" && \
     echo "Source: CentralServerService.cs" && \
     wc -l ./NexoMarket.CentralServer/CentralServerService.cs && \
     echo "=== COMPILANDO ===" && \

@@ -1,0 +1,23 @@
+NexoMarket 5.2.3 - Reparaciones finales
+
+1) Logo de tienda/local
+- La ruta local de Windows (C:\...\Store\logo...) ya no se publica como si fuera una URL web.
+- CentralSyncService sube automáticamente el logo al endpoint central /api/media/upload antes de publicar la tienda.
+- El ajuste local se reemplaza por la URL /media/... de NexoMarket.
+- Se mantiene sincronización existente.
+
+2) Comprobante de pago
+- SUBIR FOTO abre selector de archivos normal (sin capture).
+- SACAR FOTO abre cámara del dispositivo mediante un input independiente con capture=environment.
+- Ambos flujos comparten validación, vista previa y carga a R2.
+
+3) Confirmación de pedido
+- Se valida carrito, nombre, dirección cuando es Delivery y comprobante.
+- El total se calcula directamente desde el carrito y se envía como decimal con punto.
+- El botón muestra ENVIANDO PEDIDO... mientras espera.
+- Se agregaron mensajes de error legibles para respuestas conocidas.
+- Se mantiene /api/orders/create y el almacenamiento/sincronización existentes.
+
+4) Verificación estática
+- C# modificado revisado con parser léxico básico: llaves/paréntesis/corchetes balanceados y sin estado de string/comentario abierto.
+- No se cambiaron conexiones centrales.

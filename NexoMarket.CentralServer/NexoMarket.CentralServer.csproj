@@ -13,6 +13,7 @@
     <Compile Include="CentralServerService.cs" />
     <Compile Include="R2ObjectStore.cs" />
     <Compile Include="CentralDatabase.cs" />
+    <Compile Include="TransactionalEmailService.cs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="AWSSDK.S3" Version="3.7.402.8" />

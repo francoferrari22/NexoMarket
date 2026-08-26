@@ -104,7 +104,7 @@ namespace NexoMarket.Admin.UI
                 List<Coupon> coupons = _store.GetCoupons();
                 foreach (Coupon c in coupons) PublishCoupon(baseUrl, c);
 
-                string pending = Request(baseUrl + "/api/orders/pending?storeId=" + Uri.EscapeDataString(_store.StoreId), "GET", null);
+                string pending = Request(baseUrl + "/api/orders/pending?storeId=" + Uri.EscapeDataString(_store.StoreId) + "&syncKey=" + Uri.EscapeDataString(_store.GetSetting("central_sync_key", "") ?? ""), "GET", null);
                 foreach (Dictionary<string,string> order in ParseObjects(pending))
                 {
                     string centralId = Get(order, "centralOrderId");
@@ -120,7 +120,7 @@ namespace NexoMarket.Admin.UI
                     o.StoreId = _store.StoreId; o.Source = "Web Central"; o.CreatedAt = ParseDate(Get(order,"createdAt"));
                     ApplyOrderStock(o.ItemsJson);
                     _store.AddOrder(o);
-                    Request(baseUrl + "/api/orders/ack", "POST", Form(new Dictionary<string,string>{{"storeId",_store.StoreId},{"centralOrderId",centralId}}));
+                    Request(baseUrl + "/api/orders/ack", "POST", Form(new Dictionary<string,string>{{"storeId",_store.StoreId},{"syncKey",_store.GetSetting("central_sync_key", "")},{"centralOrderId",centralId}}));
                     changed = true;
                 }
                 _store.SetSetting("central_sync_last", DateTime.Now.ToString("o"));
@@ -150,6 +150,9 @@ namespace NexoMarket.Admin.UI
         {
             try
             {
+                // El logo local de Windows no es una URL que el navegador pueda abrir.
+                // Antes de publicar la tienda lo subimos al almacenamiento central.
+                EnsureWebStoreLogoUrl(baseUrl);
                 string signature = BuildStoreSignature();
                 string last = _store.GetSetting("central_store_published_signature", "") ?? "";
                 if (string.Equals(signature, last, StringComparison.Ordinal)) return;
@@ -162,6 +165,34 @@ namespace NexoMarket.Admin.UI
                 else _store.SetSetting("central_sync_last_error", "store_publish_failed");
             }
             catch (Exception ex) { _store.SetSetting("central_sync_last_error", "store_publish:" + ex.GetType().Name); }
+        }
+
+        private void EnsureWebStoreLogoUrl(string baseUrl)
+        {
+            try
+            {
+                string current = (_store.GetSetting("store_logo", "") ?? "").Trim();
+                if (string.IsNullOrWhiteSpace(current)) return;
+                if (current.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || current.StartsWith("https://", StringComparison.OrdinalIgnoreCase) || current.StartsWith("/media/", StringComparison.OrdinalIgnoreCase)) return;
+                if (!File.Exists(current)) return;
+                FileInfo fi = new FileInfo(current);
+                if (fi.Length == 0 || fi.Length > 8 * 1024 * 1024) return;
+                string ext = Path.GetExtension(current).ToLowerInvariant();
+                string contentType = ext == ".png" ? "image/png" : ext == ".webp" ? "image/webp" : ext == ".gif" ? "image/gif" : "image/jpeg";
+                string response = Request(baseUrl + "/api/media/upload", "POST", Form(new Dictionary<string,string>
+                {
+                    {"storeId", _store.StoreId},
+                    {"fileName", "store-logo" + (string.IsNullOrWhiteSpace(ext) ? ".jpg" : ext)},
+                    {"contentType", contentType},
+                    {"base64", Convert.ToBase64String(File.ReadAllBytes(current))}
+                }));
+                if (!string.IsNullOrWhiteSpace(response) && response.StartsWith("OK|", StringComparison.OrdinalIgnoreCase))
+                {
+                    string[] parts = response.Split(new[]{'|'}, 3);
+                    if (parts.Length >= 3 && !string.IsNullOrWhiteSpace(parts[2])) _store.SetSetting("store_logo", parts[2]);
+                }
+            }
+            catch { }
         }
 
         private string BuildStoreSignature()
