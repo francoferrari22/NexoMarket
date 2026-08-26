@@ -36,6 +36,7 @@ namespace NexoMarket.CentralServer
                     ServiceURL = "https://" + accountId + ".r2.cloudflarestorage.com",
                     ForcePathStyle = true,
                     UseHttp = false,
+                    AuthenticationRegion = "auto",
                     Timeout = TimeSpan.FromSeconds(25),
                     ReadWriteTimeout = TimeSpan.FromSeconds(25)
                 };
@@ -58,7 +59,13 @@ namespace NexoMarket.CentralServer
                         BucketName = _bucket,
                         Key = key.TrimStart('/'),
                         InputStream = ms,
-                        ContentType = string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType
+                        ContentLength = bytes.LongLength,
+                        ContentType = string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType,
+                        // Cloudflare R2 no admite el payload streaming SigV4 que
+                        // AWSSDK.S3 utiliza por defecto para algunos PutObject.
+                        // R2 requiere UNSIGNED-PAYLOAD y sin checksum automático.
+                        DisablePayloadSigning = true,
+                        DisableDefaultChecksumValidation = true
                     };
                     _client.PutObjectAsync(req).GetAwaiter().GetResult();
                     error = "";
