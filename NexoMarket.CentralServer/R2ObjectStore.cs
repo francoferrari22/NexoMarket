@@ -119,6 +119,33 @@ namespace NexoMarket.CentralServer
             return count;
         }
 
+        public int DeleteOlderThanPrefix(string rootPrefix, string keyFragment, DateTime cutoffUtc)
+        {
+            if(!Enabled || string.IsNullOrWhiteSpace(rootPrefix)) return 0;
+            int count=0; string token=null;
+            try
+            {
+                do
+                {
+                    var req=new ListObjectsV2Request{BucketName=_bucket,Prefix=rootPrefix.TrimStart('/'),ContinuationToken=token};
+                    var page=_client.ListObjectsV2Async(req).GetAwaiter().GetResult();
+                    foreach(var obj in page.S3Objects)
+                    {
+                        string key=obj.Key ?? "";
+                        if(key.IndexOf(keyFragment ?? "",StringComparison.OrdinalIgnoreCase)<0) continue;
+                        DateTime last=obj.LastModified.ToUniversalTime();
+                        if(last<cutoffUtc)
+                        {
+                            _client.DeleteObjectAsync(new DeleteObjectRequest{BucketName=_bucket,Key=key}).GetAwaiter().GetResult();
+                            count++;
+                        }
+                    }
+                    token=page.IsTruncated?page.NextContinuationToken:null;
+                }while(!string.IsNullOrEmpty(token));
+            }catch{}
+            return count;
+        }
+
         public string PublicUrl(string key)
         {
             return string.IsNullOrWhiteSpace(_publicBaseUrl) ? "" : _publicBaseUrl + "/" + key.TrimStart('/');

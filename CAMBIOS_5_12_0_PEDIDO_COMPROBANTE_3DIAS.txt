@@ -1,0 +1,27 @@
+NexoMarket 5.12.0 - Correcciones aplicadas
+
+1. Compra simplificada:
+- Nombre: obligatorio.
+- Delivery: dirección obligatoria.
+- Correo, teléfono, referencia de pago y notas: opcionales.
+- Método de pago y modalidad de entrega quedan disponibles.
+
+2. Comprobante de pago:
+- Ya no es obligatorio para poder realizar el pedido.
+- Se puede seleccionar "No tengo comprobante".
+- Al seleccionar esa opción se solicita una explicación breve.
+- El pedido igualmente se crea y queda registrado.
+- Los comprobantes subidos se guardan en R2 bajo payment-proofs/.
+- Los comprobantes se eliminan automáticamente de R2 después de 3 días.
+- El pedido, total, estado y demás datos NO se eliminan.
+
+3. Cupones:
+- El carrito mantiene la línea "Descuento cupón" y el total final descontado.
+- El servidor vuelve a calcular el descuento antes de crear el pedido.
+
+4. Render:
+- Se mantiene el Dockerfile sin generación/parcheo de código durante el build.
+- Se agregó limpieza periódica de comprobantes temporales.
+- Se realizó una comprobación estática de balance de sintaxis del fuente C# modificado.
+
+Nota: la compilación final debe ejecutarse en Render con el SDK .NET 8 definido por el Dockerfile.
