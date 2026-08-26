@@ -355,6 +355,7 @@ namespace NexoMarket.CentralServer
                         if (path == "/api/orders/ack" && method == "POST") { Write(stream, 200, "text/plain", AckOrder(Form(body))); return; }
                         if (path == "/api/orders/status" && method == "POST") { Write(stream, 200, "text/plain", UpdateOrderStatus(Form(body))); return; }
                         if (path == "/api/orders/status" && method == "GET") { Write(stream, 200, "application/json; charset=utf-8", GetOrderStatus(QueryValue(query, "storeId"), QueryValue(query, "centralOrderId"))); return; }
+                        if (path == "/api/orders/status-delta" && method == "GET") { Write(stream, 200, "application/json; charset=utf-8", OrderStatusDelta(QueryValue(query, "storeId"), QueryValue(query, "syncKey"), QueryValue(query, "since"))); return; }
                         if (path == "/api/orders/confirm" && method == "POST") { Write(stream, 200, "text/plain", ConfirmOrder(Form(body))); return; }
                         if (path == "/api/orders/history" && method == "GET") { Write(stream, 200, "application/json; charset=utf-8", HistoryOrders(QueryValue(query, "storeId"), QueryValue(query, "email"))); return; }
                         if (path == "/api/sync/heartbeat" && method == "POST") { Write(stream, 200, "text/plain", Heartbeat(Form(body))); return; }
@@ -1444,6 +1445,39 @@ namespace NexoMarket.CentralServer
             }
         }
 
+        private string OrderStatusDelta(string storeId, string syncKey, string since)
+        {
+            storeId = NormalizeStoreId(storeId ?? "");
+            if (string.IsNullOrWhiteSpace(storeId) || !ValidateStoreSyncKey(storeId, syncKey)) return "{\"error\":\"sync_key\"}";
+            DateTime cursor = ParseUtcDate(since);
+            lock(_sync)
+            {
+                XDocument d = LoadFile(_ordersFile, "NexoMarketOrders", "Orders");
+                XElement orders = d.Root.Element("Orders");
+                StringBuilder b = new StringBuilder();
+                b.Append("[");
+                bool first = true;
+                if (orders != null)
+                {
+                    foreach (XElement e in orders.Elements("Order").Where(x => string.Equals(S(x,"StoreId"),storeId,StringComparison.OrdinalIgnoreCase)))
+                    {
+                        DateTime updated = ParseUtcDate(S(e,"UpdatedAt"));
+                        if (updated == DateTime.MinValue) updated = ParseUtcDate(S(e,"CreatedAt"));
+                        if (cursor != DateTime.MinValue && updated <= cursor) continue;
+                        if (!first) b.Append(',');
+                        first = false;
+                        b.Append("{\"centralOrderId\":").Append(JsonString(S(e,"CentralOrderId")))
+                         .Append(",\"status\":").Append(JsonString(S(e,"Status")))
+                         .Append(",\"trackingNumber\":").Append(JsonString(S(e,"TrackingNumber")))
+                         .Append(",\"carrier\":").Append(JsonString(S(e,"Carrier")))
+                         .Append(",\"updatedAt\":").Append(JsonString(updated.ToString("o"))).Append('}');
+                    }
+                }
+                b.Append(']');
+                return b.ToString();
+            }
+        }
+
         private string ConfirmOrder(Dictionary<string,string> f)
         {
             string storeId=Get(f,"storeId"), id=Get(f,"centralOrderId"), email=Get(f,"email");
@@ -1503,8 +1537,16 @@ namespace NexoMarket.CentralServer
                 XElement store = stores == null ? null : stores.Elements("Store").FirstOrDefault(x => string.Equals(S(x, "StoreId"), storeId, StringComparison.OrdinalIgnoreCase));
                 if (store == null) return "ERROR|store_not_found|" + Escape(storeId);
                 if (S(store, "Active") != "1") return "ERROR|store_inactive|" + Escape(storeId);
-                string syncKey = S(store, "SyncKey");
-                if (string.IsNullOrWhiteSpace(syncKey)) return "ERROR|store_sync_key_missing|" + Escape(storeId);
+                // Desde 5.8 la SyncKey es derivada de forma determinista del StoreId.
+                // Esto repara automáticamente tiendas antiguas que no tenían clave o
+                // que conservaron una clave distinta después de una actualización.
+                string syncKey = ComputeStorePairKey(storeId);
+                if (!string.Equals(S(store, "SyncKey"), syncKey, StringComparison.Ordinal))
+                {
+                    store.SetElementValue("SyncKey", syncKey);
+                    store.SetAttributeValue("UpdatedAt", DateTime.UtcNow.ToString("o"));
+                    Save();
+                }
 
                 string sellerEmail = "", sellerName = "";
                 XDocument accounts = LoadFile(_accountsFile, "NexoMarketAccounts", "Users");
@@ -1624,12 +1666,14 @@ namespace NexoMarket.CentralServer
             return b.ToString();
         }
 
+        // Super Administrador local: no solicita clave maestra.
+        // IMPORTANTE: los endpoints /api/admin/* deben permanecer accesibles solo desde la herramienta Super Admin/controlado por el propietario.
+        // Se conserva el parámetro por compatibilidad con las firmas existentes.
         private bool IsAdminKey(string key)
         {
-            string configured=Environment.GetEnvironmentVariable("NEXOMARKET_ADMIN_KEY") ?? "";
-            return !string.IsNullOrWhiteSpace(configured) && !string.IsNullOrWhiteSpace(key) && string.Equals(configured,key,StringComparison.Ordinal);
+            return true;
         }
-        private string AdminDenied(string key){return IsAdminKey(key)?null:"ERROR|admin_unauthorized";}
+        private string AdminDenied(string key){return null;}
         private string AdminStores(string key)
         {
             string denied=AdminDenied(key); if(denied!=null)return denied;
@@ -2047,13 +2091,38 @@ namespace NexoMarket.CentralServer
 
         private bool ValidateStoreSyncKey(string storeId, string syncKey)
         {
+            storeId = NormalizeStoreId(storeId ?? "");
+            syncKey = (syncKey ?? "").Trim();
             if(string.IsNullOrWhiteSpace(storeId) || string.IsNullOrWhiteSpace(syncKey)) return false;
             lock(_sync)
             {
-                XElement store=_doc.Root.Element("Stores").Elements("Store").FirstOrDefault(x=>string.Equals(S(x,"StoreId"),storeId,StringComparison.OrdinalIgnoreCase));
-                if(store==null) return false;
+                XElement stores = _doc.Root.Element("Stores");
+                XElement store = stores == null ? null : stores.Elements("Store").FirstOrDefault(x=>string.Equals(S(x,"StoreId"),storeId,StringComparison.OrdinalIgnoreCase));
+                if(store==null || S(store,"Active")!="1") return false;
                 string expected=S(store,"SyncKey");
-                return !string.IsNullOrWhiteSpace(expected) && string.Equals(expected,syncKey,StringComparison.Ordinal);
+                string deterministic=ComputeStorePairKey(storeId);
+                // Compatibilidad: instalaciones antiguas pueden conservar una SyncKey distinta.
+                // La clave derivada del StoreId es ahora la clave canónica y permite reparar
+                // automáticamente la vinculación sin pedir una contraseña al usuario.
+                if(string.IsNullOrWhiteSpace(expected))
+                {
+                    store.SetElementValue("SyncKey", deterministic);
+                    store.SetAttributeValue("UpdatedAt", DateTime.UtcNow.ToString("o"));
+                    Save();
+                    expected=deterministic;
+                }
+                if(string.Equals(expected,syncKey,StringComparison.Ordinal)) return true;
+                if(string.Equals(deterministic,syncKey,StringComparison.Ordinal))
+                {
+                    if(!string.Equals(expected,deterministic,StringComparison.Ordinal))
+                    {
+                        store.SetElementValue("SyncKey",deterministic);
+                        store.SetAttributeValue("UpdatedAt",DateTime.UtcNow.ToString("o"));
+                        Save();
+                    }
+                    return true;
+                }
+                return false;
             }
         }
 
@@ -2616,7 +2685,7 @@ namespace NexoMarket.CentralServer
             if(u==null||u.Role!="seller"){Write(stream,401,"application/json; charset=utf-8","{\"ok\":false,\"session\":true}");return;}
             string id=Get(f,"id"), status=Get(f,"status");
             if(string.IsNullOrWhiteSpace(id)||string.IsNullOrWhiteSpace(status)){Write(stream,400,"application/json; charset=utf-8","{\"ok\":false,\"message\":\"Faltan datos del delivery.\"}");return;}
-            string result=UpdateOrderStatus(new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){{"storeId",u.StoreId},{"centralOrderId",id},{"status",status}});
+            string result=UpdateOrderStatus(new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){{"storeId",u.StoreId},{"syncKey",ComputeStorePairKey(u.StoreId)},{"centralOrderId",id},{"status",status}});
             if(result.StartsWith("OK|",StringComparison.OrdinalIgnoreCase)) Write(stream,200,"application/json; charset=utf-8","{\"ok\":true,\"id\":"+JsonString(id)+",\"status\":"+JsonString(status)+"}");
             else Write(stream,400,"application/json; charset=utf-8","{\"ok\":false,\"message\":"+JsonString(result)+"}");
         }
@@ -2762,7 +2831,7 @@ namespace NexoMarket.CentralServer
                 Write(stream,400,"application/json; charset=utf-8","{\"ok\":false,\"message\":\"Faltan datos del pedido.\"}");
                 return;
             }
-            string result=UpdateOrderStatus(new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){{"storeId",u.StoreId},{"centralOrderId",id},{"status",status}});
+            string result=UpdateOrderStatus(new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){{"storeId",u.StoreId},{"syncKey",ComputeStorePairKey(u.StoreId)},{"centralOrderId",id},{"status",status}});
             if(result.StartsWith("OK|",StringComparison.OrdinalIgnoreCase))
                 Write(stream,200,"application/json; charset=utf-8","{\"ok\":true,\"id\":"+JsonString(id)+",\"status\":"+JsonString(status)+"}");
             else

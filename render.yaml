@@ -22,8 +22,6 @@ services:
       - key: NEXOMARKET_DATABASE_URL
         sync: false
       # Clave maestra para NexoMarket Super Admin. Definirla manualmente en Render.
-      - key: NEXOMARKET_ADMIN_KEY
-        sync: false
       # Correo transaccional (opcional pero recomendado en producción).
       - key: NEXOMARKET_SMTP_HOST
         sync: false

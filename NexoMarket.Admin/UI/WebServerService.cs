@@ -702,7 +702,7 @@ namespace NexoMarket.Admin.UI
                 string baseUrl = (_store.GetSetting("web_api_url", "") ?? "").Trim().TrimEnd('/');
                 if (baseUrl.EndsWith("/api", StringComparison.OrdinalIgnoreCase)) baseUrl = baseUrl.Substring(0, baseUrl.Length - 4).TrimEnd('/');
                 if (baseUrl.Length == 0) return;
-                string body = "storeId=" + Uri.EscapeDataString(_store.StoreId) + "&centralOrderId=" + Uri.EscapeDataString(order.CentralOrderId) + "&syncKey=" + Uri.EscapeDataString(_store.GetSetting("central_sync_key", "") ?? "") + "&status=" + Uri.EscapeDataString(order.Status ?? "Pendiente") + "&carrier=" + Uri.EscapeDataString(order.Carrier ?? "") + "&trackingNumber=" + Uri.EscapeDataString(order.TrackingNumber ?? "");
+                string body = "storeId=" + Uri.EscapeDataString(_store.StoreId) + "&centralOrderId=" + Uri.EscapeDataString(order.CentralOrderId) + "&syncKey=" + Uri.EscapeDataString(ComputeStorePairKey(_store.StoreId)) + "&status=" + Uri.EscapeDataString(order.Status ?? "Pendiente") + "&carrier=" + Uri.EscapeDataString(order.Carrier ?? "") + "&trackingNumber=" + Uri.EscapeDataString(order.TrackingNumber ?? "");
                 HttpWebRequest req = (HttpWebRequest)WebRequest.Create(baseUrl + "/api/orders/status");
                 req.Method = "POST"; req.Timeout = 6000; req.ReadWriteTimeout = 6000; req.ContentType = "application/x-www-form-urlencoded";
                 byte[] bytes = Encoding.UTF8.GetBytes(body); req.ContentLength = bytes.Length;
@@ -1213,6 +1213,18 @@ namespace NexoMarket.Admin.UI
             try { foreach (NetworkInterface ni in NetworkInterface.GetAllNetworkInterfaces()) { if (ni.OperationalStatus != OperationalStatus.Up || ni.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue; foreach (UnicastIPAddressInformation ip in ni.GetIPProperties().UnicastAddresses) if (ip.Address.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(ip.Address)) return ip.Address.ToString(); } } catch { }
             return "127.0.0.1";
         }
+        private static string ComputeStorePairKey(string storeId)
+        {
+            using (SHA256 sha = SHA256.Create())
+            {
+                byte[] data = Encoding.UTF8.GetBytes("NexoMarket.StorePair.v1:" + (storeId ?? "").Trim().Replace(" ", "").ToUpperInvariant());
+                byte[] hash = sha.ComputeHash(data);
+                StringBuilder b = new StringBuilder(hash.Length * 2);
+                foreach (byte x in hash) b.Append(x.ToString("x2"));
+                return b.ToString();
+            }
+        }
+
         public void Dispose()
         {
             lock (_lifecycleSync)

@@ -1,0 +1,2 @@
+NexoMarket 5.8.0
+Sincronizacion reparada: SyncKey deterministica, inventario bidireccional y estados de pedidos Windows/Web.

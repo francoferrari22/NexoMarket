@@ -104,7 +104,23 @@ namespace NexoMarket.Admin.UI
                 List<Coupon> coupons = _store.GetCoupons();
                 foreach (Coupon c in coupons) PublishCoupon(baseUrl, c);
 
-                string pending = Request(baseUrl + "/api/orders/pending?storeId=" + Uri.EscapeDataString(_store.StoreId) + "&syncKey=" + Uri.EscapeDataString(_store.GetSetting("central_sync_key", "") ?? ""), "GET", null);
+                string syncKey = (_store.GetSetting("central_sync_key", "") ?? "").Trim();
+                if (syncKey.Length == 0)
+                {
+                    syncKey = ComputeStorePairKey(_store.StoreId);
+                    _store.SetSetting("central_sync_key", syncKey);
+                }
+                string pending = Request(baseUrl + "/api/orders/pending?storeId=" + Uri.EscapeDataString(_store.StoreId) + "&syncKey=" + Uri.EscapeDataString(syncKey), "GET", null);
+                if ((pending ?? "").IndexOf("sync_key", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    // Auto-repair: re-fetch the canonical key from Central without asking the user.
+                    string cn, ce, cseller;
+                    if (ConnectByStoreId(_store.StoreId, out cn, out ce, out cseller))
+                    {
+                        syncKey = _store.GetSetting("central_sync_key", "") ?? syncKey;
+                        pending = Request(baseUrl + "/api/orders/pending?storeId=" + Uri.EscapeDataString(_store.StoreId) + "&syncKey=" + Uri.EscapeDataString(syncKey), "GET", null);
+                    }
+                }
                 foreach (Dictionary<string,string> order in ParseObjects(pending))
                 {
                     string centralId = Get(order, "centralOrderId");
@@ -120,9 +136,14 @@ namespace NexoMarket.Admin.UI
                     o.StoreId = _store.StoreId; o.Source = "Web Central"; o.CreatedAt = ParseDate(Get(order,"createdAt"));
                     ApplyOrderStock(o.ItemsJson);
                     _store.AddOrder(o);
-                    Request(baseUrl + "/api/orders/ack", "POST", Form(new Dictionary<string,string>{{"storeId",_store.StoreId},{"syncKey",_store.GetSetting("central_sync_key", "")},{"centralOrderId",centralId}}));
+                    // El pedido web ya descontó el stock central. Después de importar el pedido
+                    // Windows aplica el mismo descuento local y publica el stock resultante para
+                    // que ambos lados queden idénticos.
+                    PublishProductsForOrder(baseUrl, o.ItemsJson);
+                    Request(baseUrl + "/api/orders/ack", "POST", Form(new Dictionary<string,string>{{"storeId",_store.StoreId},{"syncKey",syncKey},{"centralOrderId",centralId}}));
                     changed = true;
                 }
+                PullOrderStatusDelta(baseUrl, syncKey, ref changed);
                 _store.SetSetting("central_sync_last", DateTime.Now.ToString("o"));
                 _store.SetSetting("central_sync_status", "connected");
                 _store.SetSetting("central_sync_last_success", DateTime.UtcNow.ToString("o"));
@@ -736,6 +757,47 @@ namespace NexoMarket.Admin.UI
                 }
             }
             catch (Exception ex) { try { _store.SetSetting("central_sync_last_error", "catalog_pull:" + ex.GetType().Name + ":" + ex.Message); } catch { } }
+        }
+
+        private void PublishProductsForOrder(string baseUrl, string itemsJson)
+        {
+            if (string.IsNullOrWhiteSpace(itemsJson)) return;
+            HashSet<long> ids = new HashSet<long>();
+            foreach (Match m in Regex.Matches(itemsJson, @"""id""\s*:\s*""([^""]+)""[^}]*?""qty""\s*:\s*(\d+)", RegexOptions.IgnoreCase))
+            {
+                long id; if (long.TryParse(m.Groups[1].Value, out id) && id > 0) ids.Add(id);
+            }
+            foreach (long id in ids)
+            {
+                Product p = _store.GetProducts("").FirstOrDefault(x => x.Id == id);
+                if (p != null) PublishProduct(baseUrl, p);
+            }
+        }
+
+        private void PullOrderStatusDelta(string baseUrl, string syncKey, ref bool changed)
+        {
+            try
+            {
+                string since = _store.GetSetting("central_order_status_cursor", "") ?? "";
+                string response = Request(baseUrl + "/api/orders/status-delta?storeId=" + Uri.EscapeDataString(_store.StoreId) + "&syncKey=" + Uri.EscapeDataString(syncKey ?? "") + "&since=" + Uri.EscapeDataString(since), "GET", null);
+                if (string.IsNullOrWhiteSpace(response) || response.IndexOf("sync_key", StringComparison.OrdinalIgnoreCase) >= 0) return;
+                DateTime newest = ParseDate(since);
+                foreach (Dictionary<string,string> item in ParseObjects(response))
+                {
+                    string centralId = Get(item,"centralOrderId"); if (centralId.Length == 0) continue;
+                    Order local = _store.GetOrders("").FirstOrDefault(x => string.Equals(x.CentralOrderId,centralId,StringComparison.OrdinalIgnoreCase));
+                    DateTime updated = ParseDate(Get(item,"updatedAt"));
+                    if (updated > newest) newest = updated;
+                    if (local == null) continue;
+                    string status = Get(item,"status");
+                    bool localChanged = !string.Equals(local.Status,status,StringComparison.OrdinalIgnoreCase) || !string.Equals(local.TrackingNumber,Get(item,"trackingNumber"),StringComparison.Ordinal);
+                    if (!localChanged) continue;
+                    local.Status=status; local.TrackingNumber=Get(item,"trackingNumber"); local.Carrier=Get(item,"carrier");
+                    _store.SaveOrder(local); changed=true;
+                }
+                if (newest != DateTime.MinValue) _store.SetSetting("central_order_status_cursor",newest.ToUniversalTime().ToString("o"));
+            }
+            catch (Exception ex) { try { _store.SetSetting("central_sync_last_error","order_status_pull:"+ex.GetType().Name+":"+ex.Message); } catch {} }
         }
 
         private void ApplyOrderStock(string itemsJson)
