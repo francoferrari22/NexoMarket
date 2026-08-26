@@ -671,7 +671,7 @@ namespace NexoMarket.Admin.UI
             {
                 string syncKey=(_store.GetSetting("central_sync_key","")??"").Trim();if(syncKey.Length==0||string.IsNullOrWhiteSpace(_store.StoreId))return;
                 string r=Request(baseUrl+"/api/platform-fee?storeId="+Uri.EscapeDataString(_store.StoreId)+"&syncKey="+Uri.EscapeDataString(syncKey),"GET",null);if(string.IsNullOrWhiteSpace(r)||r.IndexOf("\"error\"",StringComparison.OrdinalIgnoreCase)>=0)return;
-                _store.SetSetting("platform_fee_month",JsonField(r,"month"));_store.SetSetting("platform_fee_rate",JsonField(r,"rate"));_store.SetSetting("platform_fee_sales",JsonField(r,"sales"));_store.SetSetting("platform_fee_amount",JsonField(r,"amount"));_store.SetSetting("platform_fee_status",JsonField(r,"status"));
+                _store.SetSetting("platform_fee_month",JsonField(r,"month"));_store.SetSetting("platform_fee_rate",JsonField(r,"rate"));_store.SetSetting("platform_fee_sales",JsonField(r,"sales"));_store.SetSetting("platform_fee_amount",JsonField(r,"amount"));_store.SetSetting("platform_fee_status",JsonField(r,"status"));_store.SetSetting("platform_fee_due_date",JsonField(r,"dueDate"));_store.SetSetting("platform_fee_grace_days",JsonField(r,"graceDays"));_store.SetSetting("platform_fee_blocked",JsonField(r,"blocked"));
             }catch{}
         }
 

@@ -50,10 +50,12 @@ namespace NexoMarket.SuperAdmin
         public string CreateStore(Dictionary<string,string> d){return Request("/api/admin/store/create","POST",d);}
         public string DeleteStore(string id){return Request("/api/admin/store/delete","POST",new Dictionary<string,string>{{"storeId",id}});}
         public string SetStoreActive(string id,bool active){return Request("/api/admin/store/active","POST",new Dictionary<string,string>{{"storeId",id},{"active",active?"1":"0"}});}
+        public string SetStoreFeatured(string id,string mode,string color){return Request("/api/admin/store/featured","POST",new Dictionary<string,string>{{"storeId",id},{"mode",mode},{"color",color}});}
+        public string SetStorePlatformGrace(string id,int days,int dueDay){return Request("/api/admin/store/platform-grace","POST",new Dictionary<string,string>{{"storeId",id},{"days",days.ToString()},{"dueDay",dueDay.ToString()}});}
         public string SetTrial(string email,int days){return Request("/api/admin/account/trial","POST",new Dictionary<string,string>{{"email",email},{"days",days.ToString()}});}
         public string SetAccountActive(string email,bool active){return Request("/api/admin/account/active","POST",new Dictionary<string,string>{{"email",email},{"active",active?"1":"0"}});}
         public string DeleteAccount(string email){return Request("/api/admin/account/delete","POST",new Dictionary<string,string>{{"email",email}});}
-        public string SetCommission(string email,string rate){return Request("/api/admin/account/commission","POST",new Dictionary<string,string>{{"email",email},{"rate",rate}});}
+        public string SetCommission(string email,string rate){string r=Request("/api/admin/account/commission","POST",new Dictionary<string,string>{{"email",email},{"rate",rate}});if(r.IndexOf("Not Found",StringComparison.OrdinalIgnoreCase)>=0||r.StartsWith("404"))r=Request("/api/admin/account/commission/set","POST",new Dictionary<string,string>{{"email",email},{"rate",rate}});return r;}
         public string PlatformPayments(){return Request("/api/admin/platform-payments","GET",null);}
         public string Reviews(string storeId){return Request("/api/admin/reviews?storeId="+Uri.EscapeDataString(storeId??""),"GET",null);}
         public string SetPlatformPaymentStatus(string storeId,string month,string status){return Request("/api/admin/platform-payment/status","POST",new Dictionary<string,string>{{"storeId",storeId},{"month",month},{"status",status}});}
