@@ -1,0 +1,4 @@
+NexoMarket 5.11.0
+Android file picker: no camera forcing
+Seller new-order red 10s alert + sound
+Windows new-order red 10s alert + sound

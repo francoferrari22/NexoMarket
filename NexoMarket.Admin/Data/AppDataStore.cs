@@ -78,6 +78,11 @@ namespace NexoMarket.Admin.Data
             if (root.Element("Coupons") == null) root.Add(new XElement("Coupons"));
 
             SetDefault("store_name", "NexoMarket");
+            SetDefault("store_photo", "");
+            SetDefault("store_system_name", "");
+            SetDefault("store_auto_schedule", "0");
+            SetDefault("store_open_time", "08:00");
+            SetDefault("store_close_time", "22:00");
             SetDefault("delivery_enabled", "1");
             SetDefault("pickup_enabled", "1");
             SetDefault("delivery_cost", "0");

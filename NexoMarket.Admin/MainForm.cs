@@ -10,6 +10,7 @@ using System.IO;
 using System.Diagnostics;
 using System.Linq;
 using System.Windows.Forms;
+using System.Media;
 using NexoMarket.Admin.Data;
 using NexoMarket.Admin.Models;
 using NexoMarket.Admin.UI;
@@ -43,6 +44,9 @@ namespace NexoMarket.Admin
         private WebServerService _webServer;
         private CentralSyncService _centralSync;
         private Button _storeStatusNavButton;
+        private Panel _newOrderAlertPanel;
+        private Label _newOrderAlertLabel;
+        private Timer _newOrderAlertTimer;
 
         private sealed class CartLine
         {
@@ -76,8 +80,33 @@ namespace NexoMarket.Admin
             _webServer.Start();
             _centralSync = new CentralSyncService(_store);
             _centralSync.DataChanged += HandleCentralDataChanged;
+            _centralSync.NewOrderReceived += HandleNewCentralOrder;
             _centralSync.Start();
             ShowPage("Inicio", BuildDashboard);
+        }
+
+        private void HandleNewCentralOrder()
+        {
+            try
+            {
+                if (IsDisposed) return;
+                if (InvokeRequired) { BeginInvoke(new Action(HandleNewCentralOrder)); return; }
+                try { SystemSounds.Exclamation.Play(); } catch { try { Console.Beep(880, 180); } catch { } }
+                if (_newOrderAlertPanel != null)
+                {
+                    _newOrderAlertLabel.Text = "🔴  NUEVO PEDIDO RECIBIDO  ·  Revisá Pedidos nuevos";
+                    _newOrderAlertPanel.Visible = true;
+                    _newOrderAlertPanel.BringToFront();
+                    _newOrderAlertTimer.Stop();
+                    _newOrderAlertTimer.Start();
+                }
+                if (!string.Equals(_currentPage, "Pedidos nuevos", StringComparison.OrdinalIgnoreCase))
+                {
+                    Text = "NexoMarket · NUEVO PEDIDO";
+                    BeginInvoke(new Action(delegate { if (!IsDisposed) Text = "NexoMarket"; }));
+                }
+            }
+            catch { }
         }
 
         private void HandleCentralDataChanged()
@@ -105,6 +134,27 @@ namespace NexoMarket.Admin
 
         private void BuildShell()
         {
+            _newOrderAlertPanel = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 58,
+                BackColor = Color.FromArgb(190, 165, 8, 24),
+                Visible = false,
+                Padding = new Padding(14, 8, 14, 8)
+            };
+            _newOrderAlertLabel = new Label
+            {
+                Dock = DockStyle.Fill,
+                Text = "🔴  NUEVO PEDIDO RECIBIDO  ·  Revisá Pedidos nuevos",
+                ForeColor = Color.White,
+                Font = Theme.Font(13, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+            _newOrderAlertPanel.Controls.Add(_newOrderAlertLabel);
+            Controls.Add(_newOrderAlertPanel);
+            _newOrderAlertPanel.BringToFront();
+            _newOrderAlertTimer = new Timer { Interval = 10000 };
+            _newOrderAlertTimer.Tick += delegate { _newOrderAlertTimer.Stop(); if (!IsDisposed) _newOrderAlertPanel.Visible = false; };
             // Estructura estable: barra lateral + host principal. Cada página vive
             // exclusivamente dentro de _content para evitar solapamientos por Z-Order.
             _sidebar = new TexturedPanel

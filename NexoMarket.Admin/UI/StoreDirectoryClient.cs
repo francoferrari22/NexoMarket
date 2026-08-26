@@ -48,6 +48,7 @@ namespace NexoMarket.Admin.UI
                 { "province", _store.GetSetting("store_province", "") },
                 { "description", _store.GetSetting("store_description", "") },
                 { "logo", _store.GetSetting("store_logo", "") },
+                { "storePhoto", _store.GetSetting("store_photo", _store.GetSetting("store_cover", "")) },
                 { "slug", _store.GetSetting("store_slug", "") },
                 { "publicUrl", resolvedPublicUrl },
                 { "active", _store.GetSetting("store_web_active", "1") },
@@ -55,6 +56,9 @@ namespace NexoMarket.Admin.UI
                 { "pickup", _store.GetSetting("pickup_enabled", "1") },
                 { "latitude", _store.GetSetting("store_latitude", "") },
                 { "longitude", _store.GetSetting("store_longitude", "") },
+                { "autoSchedule", _store.GetSetting("store_auto_schedule", "0") },
+                { "openTime", _store.GetSetting("store_open_time", "08:00") },
+                { "closeTime", _store.GetSetting("store_close_time", "22:00") },
                 { "updatedAt", DateTime.UtcNow.ToString("o") }
             });
             string response = Request(endpoint, "POST", body);
