@@ -1,0 +1,13 @@
+NexoMarket 5.12.3 - Render Deploy Fix
+
+Objetivo: eliminar la cascada CS0106 del CentralServerService.cs y dejar el deploy con una base C# limpia.
+
+Cambios:
+- Se reconstruyó CentralServerService.cs sobre la última base de servidor estructuralmente estable 5.12.1.
+- Se conservaron los cambios seguros de backend de 5.12.2: catálogo de promociones, resolución StoreId/Slug, heartbeat operativo y normalización de tienda.
+- Se agregó nuevamente el control de cantidades del carrito mediante una modificación aislada y segura del storefront.
+- Se mantiene el buscador de tienda transparente.
+- Se actualizó Dockerfile a 5.12.3 y se mantuvo una comprobación de huella del fuente antes de publicar.
+- No se incluyen bin/obj ni artefactos temporales.
+
+Nota: este entorno no contiene el SDK de .NET, por lo que la validación final de compilación debe ejecutarse en Render. La estructura fuente se dejó sin los cambios de la versión 5.12.2 que podían provocar la cascada de CS0106.
