@@ -53,7 +53,12 @@ namespace NexoMarket.Admin.UI
         private void Build()
         {
             Panel card=Theme.Card(); card.SetBounds(35,28,490,440); Controls.Add(card);
-            card.Controls.Add(new Label{Text="NEXO MARKET",Font=Theme.Font(26,FontStyle.Bold),ForeColor=Theme.Text,AutoSize=true,Location=new Point(38,28)});
+            Label brandNexo=new Label{Text="NEXO",Font=Theme.Font(27,FontStyle.Bold),ForeColor=Theme.Green,AutoSize=true,Location=new Point(38,25)};
+            card.Controls.Add(brandNexo);
+            Label brandMarket=new Label{Text="MARKET",Font=Theme.Font(27,FontStyle.Bold),ForeColor=Theme.Text,AutoSize=true,Location=new Point(123,25)};
+            card.Controls.Add(brandMarket);
+            Label brandLine=new Label{Text="●",Font=Theme.Font(10,FontStyle.Bold),ForeColor=Theme.Green,AutoSize=true,Location=new Point(38,60)};
+            card.Controls.Add(brandLine);
             card.Controls.Add(new Label{Text="SELLER CENTER · ACCESO ÚNICO",Font=Theme.Font(9,FontStyle.Bold),ForeColor=Theme.NeonWhite,AutoSize=true,Location=new Point(41,70)});
             card.Controls.Add(MakeLabel("Correo electrónico",42,116));
             _email=Input(_store.GetSetting("seller_account_email",""),42,140,400); card.Controls.Add(_email);
@@ -154,7 +159,10 @@ namespace NexoMarket.Admin.UI
             card.SetBounds(35, 22, 430, 370);
             Controls.Add(card);
 
-            card.Controls.Add(new Label { Text="NEXO MARKET", Font=Theme.Font(24,FontStyle.Bold), ForeColor=Theme.Text, AutoSize=true, Location=new Point(34,26) });
+            Label brandNexo=new Label { Text="NEXO", Font=Theme.Font(25,FontStyle.Bold), ForeColor=Theme.Green, AutoSize=true, Location=new Point(34,23) };
+            card.Controls.Add(brandNexo);
+            Label brandMarket=new Label { Text="MARKET", Font=Theme.Font(25,FontStyle.Bold), ForeColor=Theme.Text, AutoSize=true, Location=new Point(111,23) };
+            card.Controls.Add(brandMarket);
             card.Controls.Add(new Label { Text="INICIAR SESIÓN · CUENTA DE VENDEDOR", Font=Theme.Font(9,FontStyle.Bold), ForeColor=Theme.Green, AutoSize=true, Location=new Point(37,66) });
             card.Controls.Add(Label("Correo electrónico",37,110));
             _email = Input(_store.GetSetting("seller_account_email",""),37,134,355);
@@ -265,13 +273,21 @@ namespace NexoMarket.Admin.UI
             card.SetBounds(35, 24, 430, 395);
             Controls.Add(card);
 
-            Label brand = new Label();
-            brand.Text = "NEXO MARKET";
-            brand.Font = Theme.Font(24, FontStyle.Bold);
-            brand.ForeColor = Theme.Text;
-            brand.AutoSize = true;
-            brand.Location = new Point(34, 28);
-            card.Controls.Add(brand);
+            Label brandNexo = new Label();
+            brandNexo.Text = "NEXO";
+            brandNexo.Font = Theme.Font(25, FontStyle.Bold);
+            brandNexo.ForeColor = Theme.Green;
+            brandNexo.AutoSize = true;
+            brandNexo.Location = new Point(34, 25);
+            card.Controls.Add(brandNexo);
+
+            Label brandMarket = new Label();
+            brandMarket.Text = "MARKET";
+            brandMarket.Font = Theme.Font(25, FontStyle.Bold);
+            brandMarket.ForeColor = Theme.Text;
+            brandMarket.AutoSize = true;
+            brandMarket.Location = new Point(111, 25);
+            card.Controls.Add(brandMarket);
 
             Label sub = new Label();
             sub.Text = "PANEL DE ADMINISTRACIÓN";
