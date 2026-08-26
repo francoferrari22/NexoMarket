@@ -1756,7 +1756,8 @@ namespace NexoMarket.CentralServer
                 foreach(XElement e in d.Root.Element("Users").Elements("User"))
                 {
                     CentralUser u=FindAccount(S(e,"Email")); string rate=NormalizeCommission(u==null?S(e,"CommissionRate"):u.CommissionRate); decimal rateValue=Money(rate); decimal sales=string.Equals(S(e,"Role"),"seller",StringComparison.OrdinalIgnoreCase)?StoreMonthSales(S(e,"StoreId"),CurrentMonth()):0m; decimal due=Math.Round(sales*rateValue/100m,2,MidpointRounding.AwayFromZero);
-                    b.Append("ACCOUNT|").Append(Escape(S(e,"Id"))).Append('|').Append(Escape(S(e,"Name"))).Append('|').Append(Escape(S(e,"Email"))).Append('|').Append(Escape(S(e,"Role"))).Append('|').Append(Escape(S(e,"StoreId"))).Append('|').Append(Escape(S(e,"Active")=="0"?"0":"1")).Append('|').Append(Escape(S(e,"TrialExpiresAt"))).Append('|').Append(Escape(S(e,"CreatedAt"))).Append('|').Append(Escape(rate)).Append('|').Append(Escape(due.ToString("0.00",CultureInfo.InvariantCulture))).Append('\n');
+                    string accountStoreId=S(e,"StoreId"); string accountStoreName=accountStoreId.Length>0?GetStoreName(accountStoreId):"";
+                    b.Append("ACCOUNT|").Append(Escape(S(e,"Id"))).Append('|').Append(Escape(S(e,"Name"))).Append('|').Append(Escape(S(e,"Email"))).Append('|').Append(Escape(S(e,"Role"))).Append('|').Append(Escape(accountStoreId)).Append('|').Append(Escape(accountStoreName)).Append('|').Append(Escape(S(e,"Active")=="0"?"0":"1")).Append('|').Append(Escape(S(e,"TrialExpiresAt"))).Append('|').Append(Escape(S(e,"CreatedAt"))).Append('|').Append(Escape(rate)).Append('|').Append(Escape(due.ToString("0.00",CultureInfo.InvariantCulture))).Append('\n');
                 }
             }
             return b.ToString();
@@ -1869,6 +1870,14 @@ namespace NexoMarket.CentralServer
         private string SellerPlatformFee(string cookie)
         {
             CentralUser u=SessionUser(cookie);return u==null||u.Role!="seller"?"{\"error\":\"unauthorized\"}":BuildPlatformFeeJson(u);
+        }
+        private string PlatformFeeForStore(string storeId,string syncKey)
+        {
+            storeId=NormalizeStoreId(storeId);
+            if(string.IsNullOrWhiteSpace(storeId)) return "{\"error\":\"store_id_required\"}";
+            if(!ValidateStoreSyncKey(storeId,syncKey)) return "{\"error\":\"sync_key\"}";
+            CentralUser seller=FindSellerByStore(storeId);
+            return seller==null?"{\"error\":\"seller_not_found\"}":BuildPlatformFeeJson(seller);
         }
         private string AdminSetCommission(string key,Dictionary<string,string> f)
         {

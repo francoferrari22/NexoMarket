@@ -33,3 +33,8 @@ Se reforzó la distribución de pedidos:
 - El JavaScript de configuración de tienda afectado pasó `node --check` después de la corrección.
 - Se revisó la ruta de Render y el Dockerfile.
 - No se pudo ejecutar `dotnet publish` en este entorno porque no hay SDK .NET instalado fuera del contenedor de Render.
+
+
+## Error reportado por Render 26/08/2026 17:36
+
+El error real era `CS0103: The name PlatformFeeForStore does not exist in the current context` en la línea 358. La ruta `/api/platform-fee` ya estaba registrada, pero el método que implementaba esa ruta no estaba presente. Se agregó y se validó su flujo con `StoreId + SyncKey`.

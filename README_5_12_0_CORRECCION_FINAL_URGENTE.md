@@ -41,3 +41,11 @@
 - JavaScript embebido extraído y validado con `node --check`: correcto.
 - Se verificó que no queden atributos HTML con comillas dobles sin escapar en `CentralServerService.cs`.
 - No se ejecutó `dotnet build` local porque este entorno no tiene SDK .NET instalado; Render será quien haga la compilación final dentro de Docker.
+
+
+## Corrección adicional 5.12.0 FINAL3
+
+- Se agregó el método `PlatformFeeForStore`, que faltaba y provocaba el error de compilación CS0103 en `CentralServerService.cs(358,133)`.
+- El endpoint `/api/platform-fee` ahora valida `StoreId + SyncKey`, localiza al vendedor asociado y devuelve el mismo resumen de comisión/pago usado por Seller Center.
+- SuperAdmin > Cuentas ahora muestra también el **Nombre de tienda** asociado a cada cuenta vendedor.
+- Se mantiene la comisión inicial en 0% y el cálculo mensual configurable por cuenta.
