@@ -2093,7 +2093,20 @@ namespace NexoMarket.CentralServer
         {
             user=FindAccount(email); if(user==null || !user.Active) return false;
             if(!string.IsNullOrWhiteSpace(user.TrialExpiresAt)){DateTime trial; if(DateTime.TryParse(user.TrialExpiresAt,null,DateTimeStyles.RoundtripKind,out trial) && trial.ToUniversalTime()<DateTime.UtcNow)return false;}
-            if(user.Role=="seller" && !string.IsNullOrWhiteSpace(user.StoreId)){lock(_sync){XElement st=_doc.Root.Element("Stores").Elements("Store").FirstOrDefault(x=>string.Equals(S(x,"StoreId"),user.StoreId,StringComparison.OrdinalIgnoreCase));if(st!=null && S(st,"Active")=="0")return false;}}
+            if(user.Role=="seller" && !string.IsNullOrWhiteSpace(user.StoreId))
+            {
+                // No capturar el parámetro out `user` dentro de la lambda de LINQ.
+                // El compilador C# genera CS1628 si un parámetro ref/out se usa dentro
+                // de una expresión lambda. Copiamos el valor a una variable local normal.
+                string verifiedStoreId = user.StoreId;
+                lock(_sync)
+                {
+                    XElement storesRoot = _doc.Root == null ? null : _doc.Root.Element("Stores");
+                    XElement st = storesRoot == null ? null : storesRoot.Elements("Store")
+                        .FirstOrDefault(x => string.Equals(S(x,"StoreId"),verifiedStoreId,StringComparison.OrdinalIgnoreCase));
+                    if(st!=null && S(st,"Active")=="0") return false;
+                }
+            }
             try
             {
                 byte[] salt=Convert.FromBase64String(user.Salt); byte[] expected=Convert.FromBase64String(user.PasswordHash);
