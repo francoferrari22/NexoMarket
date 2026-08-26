@@ -35,6 +35,7 @@ namespace NexoMarket.SuperAdmin
             var create=B("＋ NUEVA TIENDA");create.Click+=(s,e)=>CreateStoreDialog();actions.Controls.Add(create);
             var trial=B("ASIGNAR PRUEBA");trial.Click+=(s,e)=>AssignTrial();actions.Controls.Add(trial);
             var disable=B("ACTIVAR / BLOQUEAR CUENTA");disable.Click+=(s,e)=>ToggleAccount();actions.Controls.Add(disable);
+            var reactivate=B("VOLVER A HABILITAR TIENDA");reactivate.BackColor=Color.FromArgb(245,190,45);reactivate.ForeColor=Color.Black;reactivate.Click+=(s,e)=>ReactivateSelectedStore();actions.Controls.Add(reactivate);
             var commission=B("% COMISIÓN / PAGO");commission.Click+=(s,e)=>ConfigureCommission();actions.Controls.Add(commission);var featured=B("★ DESTACAR TIENDA");featured.Click+=(s,e)=>SetFeatured("featured");actions.Controls.Add(featured);var superFeatured=B("★ SÚPER DESTACAR");superFeatured.Click+=(s,e)=>SetFeatured("super");actions.Controls.Add(superFeatured);var unfeatured=B("✕ DESACTIVAR DESTACADA / SÚPER");unfeatured.Click+=(s,e)=>SetFeatured("none");actions.Controls.Add(unfeatured);var grace=B("PLAZO / BLOQUEO DE PAGO");grace.Click+=(s,e)=>ConfigurePaymentGrace();actions.Controls.Add(grace);
             var payments=B("PAGOS MENSUALES");payments.Click+=(s,e)=>ShowPlatformPayments();actions.Controls.Add(payments);var reputation=B("REPUTACIÓN");reputation.Click+=(s,e)=>ShowSelectedStoreReviews();actions.Controls.Add(reputation);
             var delAccount=B("ELIMINAR CUENTA");delAccount.ForeColor=Color.FromArgb(255,130,130);delAccount.Click+=(s,e)=>DeleteAccount();actions.Controls.Add(delAccount);
@@ -76,6 +77,20 @@ namespace NexoMarket.SuperAdmin
         private void ToggleAccount(){string email=Cell(_accounts,"Correo");if(email.Length==0){MessageBox.Show("Seleccioná una cuenta.");return;}bool current=Cell(_accounts,"Activa")=="1";string r=_api.SetAccountActive(email,!current);MessageBox.Show(r,"NexoMarket");if(r.StartsWith("OK|"))RefreshAll();}
         private void DeleteAccount(){string email=Cell(_accounts,"Correo");if(email.Length==0){MessageBox.Show("Seleccioná una cuenta.");return;}if(MessageBox.Show("¿Eliminar definitivamente la cuenta "+email+"?\n\nSi es vendedor y tiene tienda asociada, se eliminará la tienda completa.","ELIMINAR CUENTA",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;string r=_api.DeleteAccount(email);MessageBox.Show(r,"NexoMarket");if(r.StartsWith("OK|"))RefreshAll();}
         private void DeleteStore(){string id=Cell(_stores,"Store ID");if(id.Length==0){MessageBox.Show("Seleccioná una tienda.");return;}if(MessageBox.Show("Esto elimina tienda, cuenta vendedora, dispositivos, productos, pedidos y medios asociados.\n\n¿Continuar?","ELIMINACIÓN DEFINITIVA",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;string r=_api.DeleteStore(id);MessageBox.Show(r,"NexoMarket");if(r.StartsWith("OK|"))RefreshAll();}
+        private void ReactivateSelectedStore()
+        {
+            string id=Cell(_stores,"Store ID");
+            string name=Cell(_stores,"Tienda");
+            if(id.Length==0)
+            {
+                MessageBox.Show("Seleccioná primero la tienda que querés volver a habilitar.","NexoMarket",MessageBoxButtons.OK,MessageBoxIcon.Information);
+                return;
+            }
+            if(MessageBox.Show("¿Volver a habilitar la tienda: "+name+"?\n\nLa tienda quedará activa y podrá volver a aceptar pedidos.","VOLVER A HABILITAR TIENDA",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+            string r=_api.ReactivateStore(id);
+            MessageBox.Show(r,"NexoMarket",MessageBoxButtons.OK,r.StartsWith("OK|")?MessageBoxIcon.Information:MessageBoxIcon.Error);
+            if(r.StartsWith("OK|"))RefreshAll();
+        }
         private void ToggleSelectedStore(){string id=Cell(_stores,"Store ID");if(id.Length==0)return;bool current=Cell(_stores,"Activa")=="1";string r=_api.SetStoreActive(id,!current);MessageBox.Show(r,"NexoMarket");if(r.StartsWith("OK|"))RefreshAll();}
         private void FactoryReset(){if(MessageBox.Show("ATENCIÓN: esto vacía TODAS las tiendas, cuentas, dispositivos, emparejamientos y datos centrales.\n\nEsta acción no se puede deshacer.\n\n¿Querés dejar NexoMarket como recién instalado?","VACIAR TODA LA PLATAFORMA",MessageBoxButtons.YesNo,MessageBoxIcon.Stop)!=DialogResult.Yes)return;string r=_api.FactoryReset();MessageBox.Show(r,"NexoMarket");if(r.StartsWith("OK|"))RefreshAll();}
         private void ShowAudit(){try{string r=_api.Audit("",200);if(r.IndexOf("admin_unauthorized",StringComparison.OrdinalIgnoreCase)>=0){MessageBox.Show("No autorizado o clave incorrecta.","Auditoría");return;}using(var f=new Form{Text="NexoMarket · Auditoría",Width=1000,Height=650,StartPosition=FormStartPosition.CenterParent,BackColor=bg,ForeColor=text}){var t=new TextBox{Dock=DockStyle.Fill,Multiline=true,ScrollBars=ScrollBars.Both,ReadOnly=true,BackColor=Color.FromArgb(8,11,16),ForeColor=text,Font=new Font("Consolas",9),Text=r};f.Controls.Add(t);f.ShowDialog(this);}}catch(Exception ex){MessageBox.Show(ex.Message,"Auditoría");}}

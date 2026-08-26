@@ -1,0 +1,38 @@
+NexoMarket 5.12.1 - Corrección integral del flujo de pedido
+
+Cambios realizados sobre la versión recibida:
+
+1. Buscador de tiendas
+- El campo ahora usa el texto como hint dentro del buscador.
+- Se eliminó el panel/rectángulo visual del campo: fondo transparente y estilo integrado.
+- La búsqueda por nombre continúa filtrando en tiempo real mientras se escribe.
+
+2. Tarjetas de productos
+- Se agregó una estructura específica product-card.
+- Las tarjetas usan altura/estructura flexible para que AGREGAR quede alineado en la parte inferior aunque el nombre o descripción tengan distinta longitud.
+
+3. Comprobante de pago
+- Se mantuvo la subida a R2 y se reforzó la validación del StoreId aceptando también slug.
+- Se valida la URL pública de R2 antes de subir para evitar objetos huérfanos.
+- Se conserva la limpieza automática de comprobantes con antigüedad mayor a 3 días.
+- “NO TENGO COMPROBANTE” exige explicación obligatoria y el pedido continúa siendo válido.
+- Se mejoró el mensaje de bloqueo de plataforma.
+
+4. Disponibilidad de tienda
+- CreateOrder ya no depende exclusivamente de una coincidencia literal del StoreId: acepta StoreId o Slug y normaliza al StoreId real.
+- La subida de comprobantes usa la misma resolución robusta de tienda.
+- Esto evita el ERROR|store provocado por identificadores equivalentes.
+
+5. SuperAdministrador
+- Se agregó endpoint seguro /api/admin/store/reactivate.
+- Se agregó botón amarillo VOLVER A HABILITAR TIENDA.
+- El botón trabaja sobre la tienda seleccionada, muestra confirmación y la deja activa.
+- La reactivación establece un override explícito para que la tienda pueda aceptar pedidos incluso si el bloqueo automático de plataforma era la causa.
+- La activación/bloqueo normal limpia ese override para no alterar la lógica habitual.
+
+6. Limpieza
+- No se agregaron binarios temporales, bin/obj ni .vs al ZIP final.
+- Se conservaron los proyectos y funciones existentes.
+
+Nota de compilación:
+El entorno utilizado para preparar este ZIP no dispone del SDK dotnet, por lo que no fue posible ejecutar dotnet build localmente. Se verificaron las modificaciones sobre los archivos fuente y se mantuvo la estructura original del proyecto.
