@@ -22,6 +22,7 @@ namespace NexoMarket.Admin.UI
         private readonly AppDataStore _store;
         private Timer _timer;
         private volatile bool _busy;
+        private int _syncCycle;
         public event Action DataChanged;
         private const string DefaultCentralUrl = "https://nexomarket-0k22.onrender.com";
         public CentralSyncService(AppDataStore store) { _store = store; }
@@ -37,6 +38,7 @@ namespace NexoMarket.Admin.UI
             if (_busy || !Enabled()) return;
             _busy = true;
             bool changed = false;
+            bool localStoreDirty = false;
             try
             {
                 string baseUrl = ResolveCentralBaseUrl();
@@ -66,12 +68,20 @@ namespace NexoMarket.Admin.UI
                 // cursor y recibimos solamente los cambios hechos en Web/Central.
                 string cursor = _store.GetSetting("central_sync_cursor", "") ?? "";
 
-                // PRIMERO sincronizamos desde Central. Esto evita que una copia local vieja
-                // sobrescriba inmediatamente un cambio recién hecho en la Web.
+                // PRIMERO detectamos cambios locales antes de traer Central.
+                // Si Windows acaba de guardar el nombre/logo/dirección, no permitimos que el perfil
+                // central anterior lo pise en el mismo ciclo.
+                string localStoreSignatureBeforePull = BuildStoreSignature();
+                string lastPublishedStoreSignature = _store.GetSetting("central_store_published_signature", "") ?? "";
+                localStoreDirty = !string.Equals(localStoreSignatureBeforePull, lastPublishedStoreSignature, StringComparison.Ordinal);
                 PullStoreState(baseUrl);
                 string newCursor = PullProductsDelta(baseUrl, cursor, ref changed);
                 PullAccounts(baseUrl);
                 PullCoupons(baseUrl);
+                _syncCycle++;
+                // Reconciliación completa periódica: repara cualquier delta perdido por una
+                // desconexión, cambio de reloj o actualización realizada justo durante un cursor.
+                if ((_syncCycle % 3) == 0) PullProducts(baseUrl, ref changed);
                 if (!string.IsNullOrWhiteSpace(newCursor))
                 {
                     _store.SetSetting("central_sync_cursor", newCursor);
@@ -79,7 +89,7 @@ namespace NexoMarket.Admin.UI
                 }
 
                 // DESPUÉS publicamos únicamente cambios locales nuevos.
-                PublishStoreIfChanged(baseUrl);
+                PublishStoreIfChanged(baseUrl, localStoreDirty);
                 List<Product> localProducts = _store.GetProducts("");
                 DateTime lastLocalPublish = ParseDate(_store.GetSetting("central_local_publish_cursor", ""));
                 DateTime publishNow = DateTime.UtcNow;
@@ -167,7 +177,7 @@ namespace NexoMarket.Admin.UI
         }
         private bool Enabled() { return true; }
         private bool AlreadyImported(string id) { foreach (Order o in _store.GetOrders("")) if (string.Equals(o.CentralOrderId,id,StringComparison.OrdinalIgnoreCase)) return true; return false; }
-        private void PublishStoreIfChanged(string baseUrl)
+        private void PublishStoreIfChanged(string baseUrl, bool force)
         {
             try
             {
@@ -176,7 +186,7 @@ namespace NexoMarket.Admin.UI
                 EnsureWebStoreLogoUrl(baseUrl);
                 string signature = BuildStoreSignature();
                 string last = _store.GetSetting("central_store_published_signature", "") ?? "";
-                if (string.Equals(signature, last, StringComparison.Ordinal)) return;
+                if (!force && string.Equals(signature, last, StringComparison.Ordinal)) return;
                 StoreDirectoryClient client = new StoreDirectoryClient(_store);
                 if (client.PublishStore(_store.GetSetting("web_public_url", "")))
                 {
@@ -239,7 +249,7 @@ namespace NexoMarket.Admin.UI
                 SetCentralSetting(p, 10, "store_address"); SetCentralSetting(p, 11, "store_city"); SetCentralSetting(p, 12, "store_province");
                 SetCentralSetting(p, 13, "store_description"); SetCentralSetting(p, 14, "store_logo"); SetCentralSetting(p, 15, "store_slug");
                 SetCentralSetting(p, 16, "web_public_url"); SetCentralSetting(p, 17, "store_web_active"); SetCentralSetting(p, 18, "delivery_enabled");
-                SetCentralSetting(p, 19, "pickup_enabled"); SetCentralSetting(p, 20, "store_latitude"); SetCentralSetting(p, 21, "store_longitude");
+                SetCentralSetting(p, 19, "pickup_enabled"); SetCentralSetting(p, 20, "store_latitude"); SetCentralSetting(p, 21, "store_longitude"); SetCentralSetting(p, 22, "store_system_name"); SetCentralSetting(p, 23, "store_featured"); SetCentralSetting(p, 24, "store_listed");
                 _store.SetSetting("store_name", Decode(p[2]));
                 _store.SetSetting("central_store_last_received", centralUpdated);
                 _store.SetSetting("central_store_published_signature", BuildStoreSignature());
@@ -344,6 +354,9 @@ namespace NexoMarket.Admin.UI
                 SetCentralSetting(p, 19, "pickup_enabled");
                 SetCentralSetting(p, 20, "store_latitude");
                 SetCentralSetting(p, 21, "store_longitude");
+                SetCentralSetting(p, 22, "store_system_name");
+                SetCentralSetting(p, 23, "store_featured");
+                SetCentralSetting(p, 24, "store_listed");
                 if (!string.IsNullOrWhiteSpace(sellerEmail)) _store.SetSetting("seller_account_email", sellerEmail);
                 if (!string.IsNullOrWhiteSpace(sellerName)) _store.SetSetting("seller_account_name", sellerName);
                 _store.SetSetting("seller_account_locked", "1");
