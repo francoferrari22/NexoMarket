@@ -52,23 +52,23 @@ namespace NexoMarket.Admin.UI
 
         private void Build()
         {
-            Panel card=Theme.Card(); card.SetBounds(35,28,490,440); Controls.Add(card);
-            Label brandNexo=new Label{Text="NEXO",Font=Theme.Font(27,FontStyle.Bold),ForeColor=Theme.Green,AutoSize=true,Location=new Point(38,25)};
+            Panel card=Theme.Card(); card.SetBounds(28,24,504,470); Controls.Add(card);
+            Label brandNexo=new Label{Text="NEXO",Font=Theme.Font(32,FontStyle.Bold),ForeColor=Theme.NeonGreen,AutoSize=true,Location=new Point(38,24)};
             card.Controls.Add(brandNexo);
-            Label brandMarket=new Label{Text="MARKET",Font=Theme.Font(27,FontStyle.Bold),ForeColor=Theme.Text,AutoSize=true,Location=new Point(123,25)};
+            Label brandMarket=new Label{Text="MARKET",Font=Theme.Font(32,FontStyle.Bold),ForeColor=Theme.Text,AutoSize=true,Location=new Point(156,24)};
             card.Controls.Add(brandMarket);
-            Label brandLine=new Label{Text="●",Font=Theme.Font(10,FontStyle.Bold),ForeColor=Theme.Green,AutoSize=true,Location=new Point(38,60)};
+            Label brandLine=new Label{Text="SELLER CENTER",Font=Theme.Font(9,FontStyle.Bold),ForeColor=Theme.Green,AutoSize=true,Location=new Point(41,70)};
             card.Controls.Add(brandLine);
-            card.Controls.Add(new Label{Text="SELLER CENTER · ACCESO ÚNICO",Font=Theme.Font(9,FontStyle.Bold),ForeColor=Theme.NeonWhite,AutoSize=true,Location=new Point(41,70)});
-            card.Controls.Add(MakeLabel("Correo electrónico",42,116));
-            _email=Input(_store.GetSetting("seller_account_email",""),42,140,400); card.Controls.Add(_email);
+            Panel accent=new Panel{BackColor=Theme.Green,Location=new Point(41,91),Size=new Size(420,2)}; card.Controls.Add(accent);
+            card.Controls.Add(MakeLabel("Correo electrónico",42,115));
+            _email=Input(_store.GetSetting("seller_account_email",""),42,139,420); card.Controls.Add(_email);
             card.Controls.Add(MakeLabel("Contraseña",42,190));
-            _pass=Input("",42,214,400); _pass.PasswordChar='●'; card.Controls.Add(_pass);
+            _pass=Input("",42,214,420); _pass.PasswordChar='●'; card.Controls.Add(_pass);
 
-            _login=Theme.Primary("INICIAR SESIÓN"); _login.Width=400; _login.Location=new Point(42,264); _login.Click+=Login; card.Controls.Add(_login);
-            _createWeb=Theme.Secondary("CREAR CUENTA DE VENDEDOR EN LA WEB"); _createWeb.Width=400; _createWeb.Location=new Point(42,314); _createWeb.Click+=CreateWebAccount; card.Controls.Add(_createWeb);
+            _login=Theme.Primary("INICIAR SESIÓN"); _login.Width=420; _login.Height=42; _login.Location=new Point(42,264); _login.Click+=Login; card.Controls.Add(_login);
+            _createWeb=Theme.Secondary("CREAR CUENTA DE VENDEDOR EN LA WEB"); _createWeb.Width=420; _createWeb.Height=40; _createWeb.Location=new Point(42,316); _createWeb.Click+=CreateWebAccount; card.Controls.Add(_createWeb);
 
-            _status=new Label{Text="Usá el mismo correo y contraseña del Seller Center Web.\r\nNo se pide Store ID, código de vinculación ni teléfono.",AutoSize=false,Width=400,Height=80,ForeColor=Theme.Muted,Font=Theme.Font(8.5f),Location=new Point(42,365)}; card.Controls.Add(_status);
+            _status=new Label{Text="Usá el mismo correo y contraseña del Seller Center Web.\r\nNo se pide Store ID, código de vinculación ni teléfono.",AutoSize=false,Width=420,Height=78,ForeColor=Theme.Muted,Font=Theme.Font(8.5f),Location=new Point(42,370)}; card.Controls.Add(_status);
             AcceptButton=_login;
             Shown+=delegate{ if(string.IsNullOrWhiteSpace(_email.Text))_email.Focus(); else _pass.Focus(); };
         }
@@ -156,29 +156,31 @@ namespace NexoMarket.Admin.UI
         private void Build()
         {
             Panel card = Theme.Card();
-            card.SetBounds(35, 22, 430, 370);
+            card.SetBounds(24, 20, 452, 400);
             Controls.Add(card);
 
-            Label brandNexo=new Label { Text="NEXO", Font=Theme.Font(25,FontStyle.Bold), ForeColor=Theme.Green, AutoSize=true, Location=new Point(34,23) };
+            Label brandNexo=new Label { Text="NEXO", Font=Theme.Font(30,FontStyle.Bold), ForeColor=Theme.NeonGreen, AutoSize=true, Location=new Point(34,22) };
             card.Controls.Add(brandNexo);
-            Label brandMarket=new Label { Text="MARKET", Font=Theme.Font(25,FontStyle.Bold), ForeColor=Theme.Text, AutoSize=true, Location=new Point(111,23) };
+            Label brandMarket=new Label { Text="MARKET", Font=Theme.Font(30,FontStyle.Bold), ForeColor=Theme.Text, AutoSize=true, Location=new Point(144,22) };
             card.Controls.Add(brandMarket);
-            card.Controls.Add(new Label { Text="INICIAR SESIÓN · CUENTA DE VENDEDOR", Font=Theme.Font(9,FontStyle.Bold), ForeColor=Theme.Green, AutoSize=true, Location=new Point(37,66) });
-            card.Controls.Add(Label("Correo electrónico",37,110));
-            _email = Input(_store.GetSetting("seller_account_email",""),37,134,355);
+            Panel accent=new Panel { BackColor=Theme.Green, Location=new Point(37,68), Size=new Size(378,2) }; card.Controls.Add(accent);
+            card.Controls.Add(new Label { Text="CUENTA DE VENDEDOR · ACCESO SEGURO", Font=Theme.Font(9,FontStyle.Bold), ForeColor=Theme.Green, AutoSize=true, Location=new Point(37,82) });
+            card.Controls.Add(Label("Correo electrónico",37,112));
+            _email = Input(_store.GetSetting("seller_account_email",""),37,136,378);
             card.Controls.Add(_email);
-            card.Controls.Add(Label("Contraseña",37,178));
-            _pass = Input("",37,202,355);
+            card.Controls.Add(Label("Contraseña",37,180));
+            _pass = Input("",37,204,378);
             _pass.PasswordChar='●';
             card.Controls.Add(_pass);
 
             _login = Theme.Primary("INICIAR SESIÓN");
-            _login.Width=355;
-            _login.Location=new Point(37,250);
+            _login.Width=378;
+            _login.Height=42;
+            _login.Location=new Point(37,254);
             _login.Click+=Login;
             card.Controls.Add(_login);
 
-            _status = new Label { Text="Solo necesitás el correo y la contraseña de tu cuenta Seller Center Web.", AutoSize=false, Width=355, Height=58, ForeColor=Theme.Muted, Font=Theme.Font(8.5f), Location=new Point(37,300) };
+            _status = new Label { Text="Solo necesitás el correo y la contraseña de tu cuenta Seller Center Web.", AutoSize=false, Width=378, Height=58, ForeColor=Theme.Muted, Font=Theme.Font(8.5f), Location=new Point(37,310) };
             card.Controls.Add(_status);
             AcceptButton=_login;
             Shown+=delegate { if(string.IsNullOrWhiteSpace(_email.Text)) _email.Focus(); else _pass.Focus(); };
@@ -265,28 +267,28 @@ namespace NexoMarket.Admin.UI
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
             MinimizeBox = false;
-            ClientSize = new Size(500, 455);
+            ClientSize = new Size(540, 485);
             BackColor = Theme.Background;
             ForeColor = Theme.Text;
 
             Panel card = Theme.Card();
-            card.SetBounds(35, 24, 430, 395);
+            card.SetBounds(28, 24, 484, 425);
             Controls.Add(card);
 
             Label brandNexo = new Label();
             brandNexo.Text = "NEXO";
-            brandNexo.Font = Theme.Font(25, FontStyle.Bold);
+            brandNexo.Font = Theme.Font(30, FontStyle.Bold);
             brandNexo.ForeColor = Theme.Green;
             brandNexo.AutoSize = true;
-            brandNexo.Location = new Point(34, 25);
+            brandNexo.Location = new Point(38, 24);
             card.Controls.Add(brandNexo);
 
             Label brandMarket = new Label();
             brandMarket.Text = "MARKET";
-            brandMarket.Font = Theme.Font(25, FontStyle.Bold);
+            brandMarket.Font = Theme.Font(30, FontStyle.Bold);
             brandMarket.ForeColor = Theme.Text;
             brandMarket.AutoSize = true;
-            brandMarket.Location = new Point(111, 25);
+            brandMarket.Location = new Point(148, 24);
             card.Controls.Add(brandMarket);
 
             Label sub = new Label();
@@ -294,38 +296,38 @@ namespace NexoMarket.Admin.UI
             sub.Font = Theme.Font(9, FontStyle.Bold);
             sub.ForeColor = Theme.Green;
             sub.AutoSize = true;
-            sub.Location = new Point(37, 68);
+            sub.Location = new Point(41, 73);
             card.Controls.Add(sub);
 
-            card.Controls.Add(Label("Usuario", 37, 112));
-            _user = Input(_store.AdminUsername, 37, 136, 355);
+            card.Controls.Add(Label("Usuario", 41, 118));
+            _user = Input(_store.AdminUsername, 41, 142, 400);
             card.Controls.Add(_user);
 
-            card.Controls.Add(Label("Contraseña", 37, 181));
-            _pass = Input("", 37, 205, 355);
+            card.Controls.Add(Label("Contraseña", 41, 190));
+            _pass = Input("", 41, 214, 400);
             _pass.PasswordChar = '●';
             card.Controls.Add(_pass);
 
             _login = Theme.Primary("INGRESAR");
-            _login.Width = 355;
-            _login.Location = new Point(37, 257);
+            _login.Width = 400;
+            _login.Location = new Point(41, 266);
             _login.Click += Login;
             card.Controls.Add(_login);
 
             Button forgot = Theme.Secondary("¿OLVIDASTE TU CONTRASEÑA?");
-            forgot.Width = 355;
-            forgot.Location = new Point(37, 305);
+            forgot.Width = 400;
+            forgot.Location = new Point(41, 316);
             forgot.Click += ForgotPassword;
             card.Controls.Add(forgot);
 
             _status = new Label();
             _status.Text = "Ingresá con las credenciales proporcionadas por el administrador.";
             _status.AutoSize = false;
-            _status.Width = 355;
+            _status.Width = 400;
             _status.Height = 42;
             _status.ForeColor = Theme.Muted;
             _status.Font = Theme.Font(8.5f, FontStyle.Regular);
-            _status.Location = new Point(37, 350);
+            _status.Location = new Point(41, 362);
             card.Controls.Add(_status);
 
             AcceptButton = _login;

@@ -1,0 +1,22 @@
+NexoMarket 5.2.3 - Corrección Render / R2 / Login Windows
+
+1) R2ObjectStore.cs
+- Eliminado ContentLength del inicializador de PutObjectRequest porque no existe como propiedad en AWSSDK.S3 3.x utilizado por este proyecto.
+- Mantiene DisablePayloadSigning=true y DisableDefaultChecksumValidation=true requeridos por Cloudflare R2.
+- Desactivado UseChunkEncoding para evitar cargas chunked/streaming incompatibles con R2.
+
+2) Dockerfile
+- Build y publish con salida mínima para que Render muestre los errores reales sin ruido.
+- Etapas separadas y mensajes claros de COMPILANDO/PUBLICANDO.
+
+3) Program.cs
+- Si el servidor no puede abrir el puerto, termina con código 1 en lugar de quedarse bloqueado esperando entrada.
+- Logs de arranque identifican versión 5.2.3, health endpoint y puerto LIVE.
+
+4) LoginForm.cs
+- Marca NEXO MARKET reorganizada y separada.
+- NEXO en verde flúor.
+- Mayor tamaño, espaciado y jerarquía visual.
+- Aplicado a acceso de vendedor, inicio de sesión de vendedor y panel de administración.
+
+No se modificaron las conexiones centrales, credenciales, endpoints de PostgreSQL ni variables R2.

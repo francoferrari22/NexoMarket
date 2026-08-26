@@ -13,17 +13,18 @@ namespace NexoMarket.CentralServer
             CentralServerService server = new CentralServerService(port);
             if (!server.Start())
             {
-                Console.WriteLine("No se pudo iniciar NexoMarket Central Server en el puerto " + port + ".");
-                Console.ReadKey();
+                Console.Error.WriteLine("[NexoMarket] ERROR: no se pudo iniciar el servidor en el puerto " + port + ".");
+                Environment.Exit(1);
                 return;
             }
-            Console.WriteLine("NexoMarket Central Server 5.1.2");
+            Console.WriteLine("[NexoMarket] Central Server 5.2.3 iniciado correctamente.");
             string publicBase = Environment.GetEnvironmentVariable("PUBLIC_BASE_URL");
             Console.WriteLine("Marketplace: " + (string.IsNullOrWhiteSpace(publicBase) ? "http://localhost:" + port + "/" : publicBase.TrimEnd('/') + "/"));
             Console.WriteLine("API:         " + (string.IsNullOrWhiteSpace(publicBase) ? "http://localhost:" + port + "/api" : publicBase.TrimEnd('/') + "/api"));
             Console.WriteLine("Datos:       PostgreSQL central (XML/R2 solo como respaldo/migracion)");
             Console.WriteLine("DB status:   " + server.DatabaseStatusForLog());
-            Console.WriteLine("Servidor ejecutándose. Render mantiene el proceso activo.");
+            Console.WriteLine("[NexoMarket] Health: /health");
+            Console.WriteLine("[NexoMarket] LIVE: esperando tráfico HTTP en 0.0.0.0:" + port);
             System.Threading.Thread.Sleep(System.Threading.Timeout.Infinite);
         }
     }
