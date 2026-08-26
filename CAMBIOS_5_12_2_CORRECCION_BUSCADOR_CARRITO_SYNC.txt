@@ -1,0 +1,38 @@
+NexoMarket 5.12.2 – Corrección de buscador, carrito, pedidos y sincronización
+
+1. BUSCAR TIENDA POR NOMBRE
+- El campo es realmente transparente, incluso frente a estilos globales del navegador.
+- Mantiene la fuente escrita visible, cursor verde y línea inferior elegante.
+- El filtro continúa funcionando mientras se escribe.
+
+2. CARRITO
+- Cada producto agregado desde la tienda central ahora muestra controles − / cantidad / +.
+- Se puede escribir directamente la cantidad.
+- La cantidad queda limitada al stock conocido del producto.
+- La interfaz conserva la temática oscura/neón de NexoMarket.
+- El total se recalcula inmediatamente.
+
+3. PEDIDOS / ERROR store
+- Se reforzó la resolución de StoreId y Slug en Central.
+- La búsqueda del comercio ahora tolera diferencias de formato heredadas en StoreId/Slug.
+- Se agregó una segunda resolución antes de devolver ERROR|store.
+- Se agregó idempotencyKey al pedido web para evitar duplicados por doble envío/reintento.
+- El total enviado al Central contempla el descuento del cupón aplicado en el carrito.
+
+4. DISPONIBILIDAD REAL
+- Windows envía un heartbeat operativo a Central en cada ciclo de sincronización.
+- Central actualiza estado abierto/cerrado, delivery y retiro cuando Windows lo informa explícitamente.
+- Se conserva separado el bloqueo de plataforma: el heartbeat no elimina un bloqueo administrativo de plataforma.
+- Esto evita que Central quede con un estado de tienda viejo y rechace pedidos cuando Windows está abierto.
+
+5. SINCRONIZACIÓN
+- Productos/catálogo: Windows trae los cambios de Central en cada ciclo de sincronización de 20 segundos, además de seguir publicando cambios locales.
+- Pedidos/Delivery: se mantiene la sincronización bidireccional de pedidos y estados.
+- Promociones: se agregó descarga Central -> Windows, además de Windows -> Central.
+- Cupones: se mantiene sincronización Central -> Windows y Windows -> Central.
+- El stock resultante de pedidos web continúa regresando a Windows para mantener ambos catálogos alineados.
+
+6. NO SE ELIMINARON FUNCIONES
+- Se trabajó sobre la versión 5.12.1 existente.
+- No se reconstruyó el proyecto desde cero.
+- No se eliminaron pantallas ni funciones existentes.
