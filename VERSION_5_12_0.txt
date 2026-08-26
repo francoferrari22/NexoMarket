@@ -1,0 +1,16 @@
+NexoMarket 5.12.0
+
+Cambios principales:
+- Comisión mensual configurable por SuperAdmin para cada cuenta vendedor, inicialmente 0%.
+- Cálculo automático de ventas del mes e importe de comisión.
+- Solicitud de pago mensual desde Seller Center y control de estado desde SuperAdmin.
+- Indicador pequeño de pago de plataforma en Web y Windows.
+- Reputación pública por estrellas de 1 a 5 con promedio decimal y comentarios.
+- Reseñas permitidas con cuenta o identificando el dispositivo, sin exigir un pedido verificado.
+- Directorio con tiendas priorizadas por cercanía y fallback a todas las tiendas cuando no hay coincidencias cercanas.
+- Geolocalización de vendedor para completar automáticamente dirección/coordenadas.
+- Tarjetas de tiendas centradas y con estado Abierto/Cerrado, delivery, dirección, horario y pagos.
+- Botones Crear cuenta y Crear cuenta de vendedor corregidos.
+- Publicidad pequeña “Probá NexoMarket y vendé más”.
+- Catálogo móvil de tienda mantiene 3 productos por fila para imágenes más grandes.
+- Carga de comprobantes mantiene opción de archivo y cámara.

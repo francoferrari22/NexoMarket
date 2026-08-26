@@ -46,6 +46,7 @@ namespace NexoMarket.Admin
         private Button _storeStatusNavButton;
         private Panel _newOrderAlertPanel;
         private Label _newOrderAlertLabel;
+        private Label _platformFeeLabel;
         private Timer _newOrderAlertTimer;
 
         private sealed class CartLine
@@ -82,7 +83,32 @@ namespace NexoMarket.Admin
             _centralSync.DataChanged += HandleCentralDataChanged;
             _centralSync.NewOrderReceived += HandleNewCentralOrder;
             _centralSync.Start();
+            UpdatePlatformFeeLabel();
             ShowPage("Inicio", BuildDashboard);
+        }
+
+        private void PlayNewOrderSound()
+        {
+            try
+            {
+                System.Threading.ThreadPool.QueueUserWorkItem(delegate
+                {
+                    try { SystemSounds.Exclamation.Play(); } catch { }
+                    try { System.Threading.Thread.Sleep(180); } catch { }
+                    try { SystemSounds.Exclamation.Play(); } catch { }
+                    try { System.Threading.Thread.Sleep(180); } catch { }
+                    try { Console.Beep(1175, 220); } catch { }
+                });
+            }
+            catch
+            {
+                try { SystemSounds.Exclamation.Play(); } catch { }
+            }
+        }
+
+        private void UpdatePlatformFeeLabel()
+        {
+            if(_platformFeeLabel==null)return;string rate=_store.GetSetting("platform_fee_rate","0");string amount=_store.GetSetting("platform_fee_amount","0");string status=_store.GetSetting("platform_fee_status","Sin porcentaje");string month=_store.GetSetting("platform_fee_month","");decimal rv,am;decimal.TryParse(rate,NumberStyles.Any,CultureInfo.InvariantCulture,out rv);decimal.TryParse(amount,NumberStyles.Any,CultureInfo.InvariantCulture,out am);_platformFeeLabel.Text=rv>0?("Pago plataforma · "+rv.ToString("0.####",CultureInfo.InvariantCulture)+"% · $ "+am.ToString("N2",CultureInfo.InvariantCulture)+(month.Length>0?" · "+month:"")):"Pago plataforma · sin porcentaje";_platformFeeLabel.ForeColor=status=="Pagado"?Theme.Green:(rv>0?Theme.Warning:Theme.Muted);
         }
 
         private void HandleNewCentralOrder()
@@ -91,7 +117,7 @@ namespace NexoMarket.Admin
             {
                 if (IsDisposed) return;
                 if (InvokeRequired) { BeginInvoke(new Action(HandleNewCentralOrder)); return; }
-                try { SystemSounds.Exclamation.Play(); } catch { try { Console.Beep(880, 180); } catch { } }
+                PlayNewOrderSound();
                 if (_newOrderAlertPanel != null)
                 {
                     _newOrderAlertLabel.Text = "🔴  NUEVO PEDIDO RECIBIDO  ·  Revisá Pedidos nuevos";
@@ -111,6 +137,8 @@ namespace NexoMarket.Admin
 
         private void HandleCentralDataChanged()
         {
+            try { UpdatePlatformFeeLabel(); } catch { }
+            
             try
             {
                 if (IsDisposed) return;
@@ -278,6 +306,8 @@ namespace NexoMarket.Admin
                 Anchor = AnchorStyles.Top | AnchorStyles.Right
             };
             top.Controls.Add(store);
+            _platformFeeLabel = new Label { Text = "Pago plataforma · sin porcentaje", AutoSize = false, Width = 260, Height = 20, Font = Theme.Font(7.5f, FontStyle.Bold), ForeColor = Theme.Muted, TextAlign = ContentAlignment.MiddleRight, Anchor = AnchorStyles.Top | AnchorStyles.Right };
+            top.Controls.Add(_platformFeeLabel);
 
             TextBox globalSearch = new TextBox
             {
@@ -304,6 +334,8 @@ namespace NexoMarket.Admin
             {
                 store.Left = Math.Max(500, top.ClientSize.Width - store.Width - 28);
                 store.Top = 10;
+                _platformFeeLabel.Left = Math.Max(500, top.ClientSize.Width - _platformFeeLabel.Width - 28);
+                _platformFeeLabel.Top = 38;
                 searchButton.Left = Math.Max(300, store.Left - searchButton.Width - 10);
                 searchButton.Top = 8;
                 globalSearch.Left = Math.Max(300, searchButton.Left - globalSearch.Width - 8);

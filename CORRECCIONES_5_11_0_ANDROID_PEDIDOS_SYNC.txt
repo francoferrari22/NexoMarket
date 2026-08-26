@@ -1,0 +1,9 @@
+NexoMarket 5.11.0 - Correcciones Android / Pedidos / Sincronización
+
+1. Catálogo público móvil: en pantallas de hasta 650 px los productos pasan de 5 columnas a 3 columnas, con imágenes cuadradas y mayores.
+2. Fotos: se habilita explícitamente elegir archivo/Galería/Fotos y sacar foto con la cámara para imágenes de productos y comprobantes, incluyendo capture=environment para Android.
+3. Pedidos del vendedor: se agrega VER PEDIDO y doble toque sobre la tarjeta para mostrar el detalle de productos, cantidades y total.
+4. Sonido: alerta web más larga y sonora; Windows reproduce una secuencia más larga al recibir un pedido.
+5. Sincronización Windows/Web: los tokens de dispositivo antiguos ya no bloquean la sincronización; se limpian automáticamente y se repara periódicamente StoreId + SyncKey desde Central.
+
+No se modifica la configuración de Cloudflare/R2.
