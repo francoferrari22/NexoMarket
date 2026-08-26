@@ -1,5 +1,5 @@
-# NexoMarket Central Server 5.12.0 - Render / Docker
-# Render compila dentro del contenedor; no requiere MSBuild instalado en la máquina del usuario.
+# NexoMarket Central Server 5.12.0 FINAL CLEAN - Render / Docker
+# IMPORTANTE: este Dockerfile compila exclusivamente el CentralServer incluido en este paquete.
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
@@ -8,11 +8,17 @@ RUN dotnet restore ./NexoMarket.CentralServer/NexoMarket.CentralServer.csproj --
 
 COPY NexoMarket.CentralServer/ ./NexoMarket.CentralServer/
 
-# Un único publish: compila y publica en Release y evita ejecutar un build redundante.
-RUN echo "=== NEXOMARKET BUILD 5.12.0 ===" && \
-    echo "=== SOURCE CHECK ===" && \
+# Huella del fuente: si Render está usando otro commit/archivo, queda visible inmediatamente
+# en los logs y el build no continúa con una versión equivocada.
+RUN echo "=== NEXOMARKET 5.12.0 FINAL CLEAN / SOURCE CHECK ===" && \
     wc -l ./NexoMarket.CentralServer/CentralServerService.cs && \
-    dotnet publish ./NexoMarket.CentralServer/NexoMarket.CentralServer.csproj \
+    sha256sum ./NexoMarket.CentralServer/CentralServerService.cs && \
+    echo "PlatformFeeForStore definition:" && \
+    grep -n "private string PlatformFeeForStore" ./NexoMarket.CentralServer/CentralServerService.cs && \
+    test "$(grep -c "private string PlatformFeeForStore" ./NexoMarket.CentralServer/CentralServerService.cs)" = "1"
+
+# Único paso de compilación/publicación. No hay código C# generado ni parcheado durante el build.
+RUN dotnet publish ./NexoMarket.CentralServer/NexoMarket.CentralServer.csproj \
       -c Release \
       --no-restore \
       -o /app/publish \

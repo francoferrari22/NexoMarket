@@ -1,0 +1,14 @@
+NEXOMARKET 5.12.0 FINAL CLEAN - RENDER
+
+Este paquete debe desplegarse desde la RAIZ del repositorio.
+
+Render:
+- Runtime: Docker
+- Dockerfile: ./Dockerfile
+- Health Check Path: /health
+- No agregar comandos manuales de dotnet build al servicio.
+- El Dockerfile hace restore + publish una sola vez.
+
+IMPORTANTE:
+El build imprime la cantidad de lineas y SHA-256 de CentralServerService.cs y verifica que exista exactamente una definicion de PlatformFeeForStore.
+Si Render muestra una cantidad de lineas o SHA distinta a la del paquete que se subio, Render esta construyendo otro commit/branch y no este archivo.
