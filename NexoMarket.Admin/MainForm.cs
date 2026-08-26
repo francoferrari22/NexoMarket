@@ -93,17 +93,15 @@ namespace NexoMarket.Admin
             {
                 System.Threading.ThreadPool.QueueUserWorkItem(delegate
                 {
-                    try { SystemSounds.Exclamation.Play(); } catch { }
-                    try { System.Threading.Thread.Sleep(180); } catch { }
-                    try { SystemSounds.Exclamation.Play(); } catch { }
-                    try { System.Threading.Thread.Sleep(180); } catch { }
-                    try { Console.Beep(1175, 220); } catch { }
+                    for(int i=0;i<10;i++)
+                    {
+                        try { SystemSounds.Exclamation.Play(); } catch { }
+                        try { Console.Beep(i%2==0?1175:880, 180); } catch { }
+                        try { System.Threading.Thread.Sleep(180); } catch { }
+                    }
                 });
             }
-            catch
-            {
-                try { SystemSounds.Exclamation.Play(); } catch { }
-            }
+            catch { try { SystemSounds.Exclamation.Play(); } catch { } }
         }
 
         private void UpdatePlatformFeeLabel()
@@ -181,8 +179,9 @@ namespace NexoMarket.Admin
             _newOrderAlertPanel.Controls.Add(_newOrderAlertLabel);
             Controls.Add(_newOrderAlertPanel);
             _newOrderAlertPanel.BringToFront();
-            _newOrderAlertTimer = new Timer { Interval = 10000 };
-            _newOrderAlertTimer.Tick += delegate { _newOrderAlertTimer.Stop(); if (!IsDisposed) _newOrderAlertPanel.Visible = false; };
+            _newOrderAlertTimer = new Timer { Interval = 300 };
+            int __orderFlashCount = 0;
+            _newOrderAlertTimer.Tick += delegate { if (IsDisposed) { _newOrderAlertTimer.Stop(); return; } __orderFlashCount++; _newOrderAlertPanel.Visible = !_newOrderAlertPanel.Visible; if (__orderFlashCount >= 20) { _newOrderAlertTimer.Stop(); _newOrderAlertPanel.Visible = false; __orderFlashCount = 0; } };
             // Estructura estable: barra lateral + host principal. Cada página vive
             // exclusivamente dentro de _content para evitar solapamientos por Z-Order.
             _sidebar = new TexturedPanel
