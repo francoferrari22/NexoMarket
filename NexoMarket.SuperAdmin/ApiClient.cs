@@ -53,6 +53,10 @@ namespace NexoMarket.SuperAdmin
         public string SetTrial(string email,int days){return Request("/api/admin/account/trial","POST",new Dictionary<string,string>{{"email",email},{"days",days.ToString()}});}
         public string SetAccountActive(string email,bool active){return Request("/api/admin/account/active","POST",new Dictionary<string,string>{{"email",email},{"active",active?"1":"0"}});}
         public string DeleteAccount(string email){return Request("/api/admin/account/delete","POST",new Dictionary<string,string>{{"email",email}});}
+        public string SetCommission(string email,string rate){return Request("/api/admin/account/commission","POST",new Dictionary<string,string>{{"email",email},{"rate",rate}});}
+        public string PlatformPayments(){return Request("/api/admin/platform-payments","GET",null);}
+        public string Reviews(string storeId){return Request("/api/admin/reviews?storeId="+Uri.EscapeDataString(storeId??""),"GET",null);}
+        public string SetPlatformPaymentStatus(string storeId,string month,string status){return Request("/api/admin/platform-payment/status","POST",new Dictionary<string,string>{{"storeId",storeId},{"month",month},{"status",status}});}
         public string FactoryReset(){return Request("/api/admin/factory-reset","POST",new Dictionary<string,string>{{"confirm","NEXO-FACTORY-RESET"}});}
         public string Audit(string storeId,int limit){return Request("/api/audit?storeId="+Uri.EscapeDataString(storeId??"")+"&limit="+limit.ToString(),"GET",null);}
     }

@@ -873,7 +873,7 @@ namespace NexoMarket.Admin.UI
                     }
                     if(local!=null) SetOrderPublishedSignature(local);
                 }
-                if(newest!=DateTime.MinValue)_store.SetSetting("central_orders_cursor",newest.ToUniversalTime().ToString("o"));
+                if(newest!=DateTime.MinValue)_store.SetSetting("central_orders_cursor",newest.ToUniversalTime().AddSeconds(-2).ToString("o"));
             }
             catch(Exception ex){try{_store.SetSetting("central_sync_last_error","orders_snapshot:"+ex.GetType().Name+":"+ex.Message);}catch{}}
         }
