@@ -1,0 +1,11 @@
+NexoMarket 5.12.8 — Corrección definitiva de subida de comprobantes
+
+Problema: /api/order-proof/upload seguía usando solamente ResolveStoreIdentityLocked(rawStoreId, storeSlug), por lo que podía devolver ERROR|store aunque CreateOrder ya resolviera correctamente la tienda mediante la evidencia de los productos.
+
+Corrección:
+- El navegador envía itemsJson del carrito junto con la subida del comprobante.
+- UploadOrderProof utiliza la misma resolución producto -> StoreId que CreateOrder.
+- Si el registro Stores no existe/desfasó, utiliza RecoverStoreRegistryEntryLocked.
+- Se conserva la validación de imagen, tamaño, R2 y URL.
+- Se agregó logging específico PAYMENT_PROOF_STORE_RESOLUTION_FAILED.
+- /api/version ahora informa 5.12.8 y proofResolver.
