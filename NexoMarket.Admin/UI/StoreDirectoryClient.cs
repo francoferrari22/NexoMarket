@@ -101,6 +101,13 @@ namespace NexoMarket.Admin.UI
                         s.Active = Decode(p[9]) == "1"; s.Delivery = Decode(p[10]) == "1"; s.Pickup = Decode(p[11]) == "1";
                         s.UpdatedAt = Decode(p.Length > 12 ? p[12] : "");
                         s.DistanceKm = ParseDouble(Decode(p.Length > 13 ? p[13] : ""));
+                        s.Logo = Decode(p.Length > 14 ? p[14] : "");
+                        s.Featured = Decode(p.Length > 15 ? p[15] : "") == "1";
+                        s.StorePhoto = Decode(p.Length > 16 ? p[16] : "");
+                        s.Address = Decode(p.Length > 17 ? p[17] : "");
+                        s.Description = Decode(p.Length > 18 ? p[18] : "");
+                        s.RatingSummary = Decode(p.Length > 19 ? p[19] : "0.0|0");
+                        s.FeaturedPlus = Decode(p.Length > 20 ? p[20] : "") == "1";
                         result.Add(s);
                     }
                 }
@@ -275,5 +282,12 @@ namespace NexoMarket.Admin.UI
         public bool Active;
         public bool Delivery;
         public bool Pickup;
+        public string Logo = "";
+        public string StorePhoto = "";
+        public string Address = "";
+        public string Description = "";
+        public string RatingSummary = "0.0|0";
+        public bool Featured;
+        public bool FeaturedPlus;
     }
 }

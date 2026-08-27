@@ -1,0 +1,14 @@
+NexoMarket 5.18.7 — Rediseño real del directorio principal
+
+Cambio principal: tarjetas de locales completamente rediseñadas en la web principal.
+- Grilla de 3 locales por fila en escritorio.
+- Portada real como fondo de la tarjeta.
+- Logo real flotante.
+- Destacada / Destacada Plus.
+- Estado Abierto / Cerrado.
+- Ciudad, distancia, servicio y valoración.
+- Sin panel lateral vacío ni bloques gigantes.
+- Efectos glass/neón y hover.
+
+La modificación se limita a la presentación del directorio principal y a la lectura de los campos visuales ya publicados por la API central.
+No se modificó render.yaml ni se agregaron secretos.
