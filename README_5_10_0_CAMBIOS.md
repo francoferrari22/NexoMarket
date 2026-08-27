@@ -1,4 +1,4 @@
-# NexoMarket 5.10.0
+# NexoMarket 5.11.1
 
 ## Sincronización
 La versión agrega una reconciliación completa de pedidos además del delta normal. Windows consulta `/api/orders/snapshot` con la SyncKey derivada del StoreId y realiza upsert por `CentralOrderId`. Los estados modificados desde Windows se publican en Central; los cambios hechos desde Web vuelven a Windows.
@@ -39,7 +39,7 @@ La ficha pública de productos usa 5 columnas en pantallas móviles para mostrar
 La herramienta separada sigue siendo HTA + BAT y no requiere MSBuild, Visual Studio, .NET ni clave maestra.
 
 
-## 5.11.0
+## 5.11.1
 - Android Seller Center product images now use the native image/file chooser without capture=environment, so the camera is not forced.
 - New order alert: red foreground banner for 10 seconds + sound in Seller Center web and Windows administrator.
-- Super Admin 5.11.0 separate HTA includes account filters: all, sellers, buyers.
+- Super Admin 5.11.1 separate HTA includes account filters: all, sellers, buyers.
