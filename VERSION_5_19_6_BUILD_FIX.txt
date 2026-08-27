@@ -1,0 +1,3 @@
+NexoMarket 5.19.6 - BUILD FIX
+Fixed malformed C# string in CentralServerService.cs caused by the responsive UI CSS insertion.
+The responsive UI overlap fixes are preserved.
