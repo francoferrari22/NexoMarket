@@ -1,0 +1,4 @@
+NexoMarket 5.18.4 — Tarjetas premium compactas
+Base funcional: 5.18.2.
+Cambios funcionales solicitados: únicamente presentación de tarjetas del marketplace y texto Abierto/Cerrado.
+Las variables/secretos de Render se conservan en render.yaml sin cambios.
