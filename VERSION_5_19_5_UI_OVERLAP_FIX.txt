@@ -1,0 +1,6 @@
+NexoMarket 5.19.5 - Corrección visual responsive
+- Se corrigieron superposiciones entre botones, textos y el indicador de sincronización.
+- La sección de comprador/vendedor ahora usa estructura flexible para evitar que elementos queden uno encima de otro.
+- En móviles, la CTA principal pasa a una columna y sus botones ocupan el ancho disponible.
+- Se mejoró jerarquía visual, contraste y color de títulos con gradientes modernos.
+- Se ajustaron tamaños, márgenes, alturas mínimas y saltos de línea para pantallas pequeñas.
