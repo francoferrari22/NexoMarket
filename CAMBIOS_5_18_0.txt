@@ -1,0 +1,43 @@
+NexoMarket 5.18.0
+
+Cambios de esta entrega
+
+1. Tarjetas de tiendas en Marketplace
+- Información a la izquierda y portada a la derecha.
+- Logo del local ampliado.
+- Portada con aparición/desvanecimiento suave.
+- Luz/neón blanco sutil detrás de las tiendas.
+- Se conserva el fondo transparente/neón y la estética violeta, blanca y verde.
+
+2. Ficha pública de tienda
+- Reputación integrada en la misma tarjeta del nombre.
+- Promedio de 1 a 5 con decimal visible.
+- Estrellas doradas y contador de reseñas.
+- Panel de reputación con acabado dorado integrado al diseño original.
+
+3. Web Seller / pedidos
+- Ubicación larga oculta por defecto y se revela con "VER UBICACIÓN".
+- Detalle de pedido preparado para empleados.
+- Los productos solicitados muestran imagen, cantidad, precio, nota y stock.
+- Se conserva doble clic/clic derecho para abrir el pedido.
+
+4. Comprador
+- Panel de seguimiento inteligente añadido.
+- Estados: pendiente, preparando, listo, enviado, en reparto y entregado.
+- Actualización automática del estado.
+- Botón para ver productos del pedido.
+- Botón "CONFIRMAR RECEPCIÓN" cuando el pedido está entregado.
+- Confirmación visual de recepción.
+
+5. Productos
+- Acción inferior del formulario de productos estabilizada y alineada para evitar botones fuera de formato.
+
+6. Compatibilidad y precaución
+- No se modificaron deliberadamente syncKey, emparejamiento Windows/Web, sincronización de catálogo, stock ni la ruta de recepción de pedidos.
+- Las funciones nuevas se apoyan en las estructuras/endpoints existentes.
+- No se incluyen tiendas ni cuentas reales en el paquete.
+
+Validación
+- Se realizó revisión estructural de llaves, paréntesis y corchetes del CentralServerService.cs.
+- El entorno de trabajo no dispone de Docker/SDK .NET, por lo que no se afirma una compilación local que no pudo ejecutarse aquí.
+- Render deberá ejecutar el build definitivo al desplegar.

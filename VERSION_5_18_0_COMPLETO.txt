@@ -1,0 +1,17 @@
+NexoMarket 5.18.0 — paquete integral
+
+Cambios incluidos:
+- Alerta de nuevo pedido con audio NexoMarket de 6 segundos, repetible hasta 10 veces cuando llega un pedido nuevo.
+- Permiso de notificaciones solicitado al entrar al Seller Center y botón manual de activación de sonido/notificaciones.
+- El sonido se reproduce mediante un archivo WAV servido por el propio Central Server; no depende de una URL externa.
+- Selector de imágenes del Seller Center preparado para Android: Galería/Fotos/Archivos, sin forzar cámara; usa showOpenFilePicker cuando el navegador lo admite.
+- Notas por producto únicamente dentro del carrito y nota general opcional al finalizar.
+- Marketplace con tarjetas translúcidas, portada del local al 45%, información al 55%, logo ampliado, teléfono, ubicación, horarios, reputación y prioridad Destacada Plus > Destacada > resto.
+- Botón NexoMarket flotante aparece al subir con scroll y vuelve al inicio.
+- Grilla de productos móvil de 3 columnas para aprovechar mejor la pantalla.
+- Horarios automáticos de apertura/cierre con tarea central cada 30 segundos, además del control manual del vendedor.
+- Reseñas públicas 1–5 estrellas, promedio decimal, comentario y emojis para cuentas comprador.
+- Super Admin separado en HTA, sin MSBuild, con tiendas por nombre, vendedores/compradores, comisión por tienda, planes, bloqueo/habilitación, contraseña, publicación, destacadas, Destacada Plus y eliminación de raíz.
+- Corrección de hash: se mantiene PBKDF2-HMAC-SHA1 con 50.000 iteraciones para no romper contraseñas existentes y se elimina el warning SYSLIB0041.
+
+Precaución: no se modificaron deliberadamente syncKey, emparejamiento Windows/Web, sincronización de catálogo, stock ni la ruta de recepción de pedidos. Las funciones nuevas usan rutas separadas cuando corresponde.
