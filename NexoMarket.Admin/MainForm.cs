@@ -46,7 +46,6 @@ namespace NexoMarket.Admin
         private Button _storeStatusNavButton;
         private Panel _newOrderAlertPanel;
         private Label _newOrderAlertLabel;
-        private Label _platformFeeLabel;
         private Timer _newOrderAlertTimer;
 
         private sealed class CartLine
@@ -83,30 +82,7 @@ namespace NexoMarket.Admin
             _centralSync.DataChanged += HandleCentralDataChanged;
             _centralSync.NewOrderReceived += HandleNewCentralOrder;
             _centralSync.Start();
-            UpdatePlatformFeeLabel();
             ShowPage("Inicio", BuildDashboard);
-        }
-
-        private void PlayNewOrderSound()
-        {
-            try
-            {
-                System.Threading.ThreadPool.QueueUserWorkItem(delegate
-                {
-                    for(int i=0;i<10;i++)
-                    {
-                        try { SystemSounds.Exclamation.Play(); } catch { }
-                        try { Console.Beep(i%2==0?1175:880, 180); } catch { }
-                        try { System.Threading.Thread.Sleep(180); } catch { }
-                    }
-                });
-            }
-            catch { try { SystemSounds.Exclamation.Play(); } catch { } }
-        }
-
-        private void UpdatePlatformFeeLabel()
-        {
-            if(_platformFeeLabel==null)return;string rate=_store.GetSetting("platform_fee_rate","0");string amount=_store.GetSetting("platform_fee_amount","0");string status=_store.GetSetting("platform_fee_status","Sin porcentaje");string month=_store.GetSetting("platform_fee_month","");string due=_store.GetSetting("platform_fee_due_date","");string blocked=_store.GetSetting("platform_fee_blocked","false");decimal rv,am;decimal.TryParse(rate,NumberStyles.Any,CultureInfo.InvariantCulture,out rv);decimal.TryParse(amount,NumberStyles.Any,CultureInfo.InvariantCulture,out am);_platformFeeLabel.Text=rv>0?(blocked=="true"?"🔴 PAGO PLATAFORMA VENCIDO · $ "+am.ToString("N2",CultureInfo.InvariantCulture):(status=="Pagado"?"✓ PAGO PLATAFORMA · PAGADO":("Pago plataforma · "+rv.ToString("0.####",CultureInfo.InvariantCulture)+"% · $ "+am.ToString("N2",CultureInfo.InvariantCulture)+(due.Length>0?" · vence "+due:"")))):"Pago plataforma · sin porcentaje";_platformFeeLabel.ForeColor=blocked=="true"?Theme.Danger:(status=="Pagado"?Theme.Green:(rv>0?Theme.Warning:Theme.Muted));if(_navPanel!=null){foreach(Control c in _navPanel.Controls){Button nav=c as Button;if(nav!=null)nav.Enabled=blocked!="true";}}
         }
 
         private void HandleNewCentralOrder()
@@ -115,7 +91,7 @@ namespace NexoMarket.Admin
             {
                 if (IsDisposed) return;
                 if (InvokeRequired) { BeginInvoke(new Action(HandleNewCentralOrder)); return; }
-                PlayNewOrderSound();
+                try { SystemSounds.Exclamation.Play(); } catch { try { Console.Beep(880, 180); } catch { } }
                 if (_newOrderAlertPanel != null)
                 {
                     _newOrderAlertLabel.Text = "🔴  NUEVO PEDIDO RECIBIDO  ·  Revisá Pedidos nuevos";
@@ -135,8 +111,6 @@ namespace NexoMarket.Admin
 
         private void HandleCentralDataChanged()
         {
-            try { UpdatePlatformFeeLabel(); } catch { }
-            
             try
             {
                 if (IsDisposed) return;
@@ -179,9 +153,8 @@ namespace NexoMarket.Admin
             _newOrderAlertPanel.Controls.Add(_newOrderAlertLabel);
             Controls.Add(_newOrderAlertPanel);
             _newOrderAlertPanel.BringToFront();
-            _newOrderAlertTimer = new Timer { Interval = 300 };
-            int __orderFlashCount = 0;
-            _newOrderAlertTimer.Tick += delegate { if (IsDisposed) { _newOrderAlertTimer.Stop(); return; } __orderFlashCount++; _newOrderAlertPanel.Visible = !_newOrderAlertPanel.Visible; if (__orderFlashCount >= 20) { _newOrderAlertTimer.Stop(); _newOrderAlertPanel.Visible = false; __orderFlashCount = 0; } };
+            _newOrderAlertTimer = new Timer { Interval = 10000 };
+            _newOrderAlertTimer.Tick += delegate { _newOrderAlertTimer.Stop(); if (!IsDisposed) _newOrderAlertPanel.Visible = false; };
             // Estructura estable: barra lateral + host principal. Cada página vive
             // exclusivamente dentro de _content para evitar solapamientos por Z-Order.
             _sidebar = new TexturedPanel
@@ -305,8 +278,6 @@ namespace NexoMarket.Admin
                 Anchor = AnchorStyles.Top | AnchorStyles.Right
             };
             top.Controls.Add(store);
-            _platformFeeLabel = new Label { Text = "Pago plataforma · sin porcentaje", AutoSize = false, Width = 260, Height = 20, Font = Theme.Font(7.5f, FontStyle.Bold), ForeColor = Theme.Muted, TextAlign = ContentAlignment.MiddleRight, Anchor = AnchorStyles.Top | AnchorStyles.Right };
-            top.Controls.Add(_platformFeeLabel);
 
             TextBox globalSearch = new TextBox
             {
@@ -333,8 +304,6 @@ namespace NexoMarket.Admin
             {
                 store.Left = Math.Max(500, top.ClientSize.Width - store.Width - 28);
                 store.Top = 10;
-                _platformFeeLabel.Left = Math.Max(500, top.ClientSize.Width - _platformFeeLabel.Width - 28);
-                _platformFeeLabel.Top = 38;
                 searchButton.Left = Math.Max(300, store.Left - searchButton.Width - 10);
                 searchButton.Top = 8;
                 globalSearch.Left = Math.Max(300, searchButton.Left - globalSearch.Width - 8);

@@ -59,20 +59,10 @@ namespace NexoMarket.Admin.UI
                     string dv=Request(baseUrl+"/api/devices/validate","POST",Form(new Dictionary<string,string>{{"deviceId",deviceId},{"deviceToken",deviceToken},{"storeId",_store.StoreId}}));
                     if (string.IsNullOrWhiteSpace(dv) || !dv.StartsWith("OK|",StringComparison.OrdinalIgnoreCase))
                     {
-                        // La sincronización de catálogo/pedidos no depende de un vínculo de dispositivo.
-                        // Si quedó un token viejo de otra instalación/tienda, lo limpiamos y continuamos
-                        // con StoreId + SyncKey, que es la identidad común entre Web y Windows.
-                        _store.SetSetting("central_device_token","");
-                        _store.SetSetting("central_device_id","");
-                        _store.SetSetting("central_sync_last_error","device_token_repaired");
+                        _store.SetSetting("central_sync_last_error","device_not_authorized");
+                        _store.SetSetting("central_sync_status","device_not_authorized");
+                        return;
                     }
-                }
-                // Reparación periódica: si una actualización cambió la tienda asociada o una clave
-                // quedó obsoleta, Central vuelve a entregar la identidad canónica sin intervención.
-                if ((_syncCycle % 5) == 0)
-                {
-                    string cn,ce,cseller;
-                    ConnectByStoreId(_store.StoreId, out cn, out ce, out cseller);
                 }
 
                 // Arquitectura de sincronización profesional: Central es la fuente de verdad.
@@ -90,7 +80,6 @@ namespace NexoMarket.Admin.UI
                 string newCursor = PullProductsDelta(baseUrl, cursor, ref changed);
                 PullAccounts(baseUrl);
                 PullCoupons(baseUrl);
-                PullPlatformFee(baseUrl);
                 _syncCycle++;
                 // Reconciliación completa periódica: repara cualquier delta perdido por una
                 // desconexión, cambio de reloj o actualización realizada justo durante un cursor.
@@ -665,16 +654,6 @@ namespace NexoMarket.Admin.UI
             return web.IndexOf("/media/",StringComparison.OrdinalIgnoreCase)<0 && web.IndexOf("/stores/",StringComparison.OrdinalIgnoreCase)<0;
         }
 
-        private void PullPlatformFee(string baseUrl)
-        {
-            try
-            {
-                string syncKey=(_store.GetSetting("central_sync_key","")??"").Trim();if(syncKey.Length==0||string.IsNullOrWhiteSpace(_store.StoreId))return;
-                string r=Request(baseUrl+"/api/platform-fee?storeId="+Uri.EscapeDataString(_store.StoreId)+"&syncKey="+Uri.EscapeDataString(syncKey),"GET",null);if(string.IsNullOrWhiteSpace(r)||r.IndexOf("\"error\"",StringComparison.OrdinalIgnoreCase)>=0)return;
-                _store.SetSetting("platform_fee_month",JsonField(r,"month"));_store.SetSetting("platform_fee_rate",JsonField(r,"rate"));_store.SetSetting("platform_fee_sales",JsonField(r,"sales"));_store.SetSetting("platform_fee_amount",JsonField(r,"amount"));_store.SetSetting("platform_fee_status",JsonField(r,"status"));_store.SetSetting("platform_fee_due_date",JsonField(r,"dueDate"));_store.SetSetting("platform_fee_grace_days",JsonField(r,"graceDays"));_store.SetSetting("platform_fee_blocked",JsonField(r,"blocked"));
-            }catch{}
-        }
-
         private string PublishProduct(string baseUrl, Product p)
         {
             string updated = (p.UpdatedAt == DateTime.MinValue ? DateTime.UtcNow : p.UpdatedAt.ToUniversalTime()).ToString("o");
@@ -873,7 +852,7 @@ namespace NexoMarket.Admin.UI
                     }
                     if(local!=null) SetOrderPublishedSignature(local);
                 }
-                if(newest!=DateTime.MinValue)_store.SetSetting("central_orders_cursor",newest.ToUniversalTime().AddSeconds(-2).ToString("o"));
+                if(newest!=DateTime.MinValue)_store.SetSetting("central_orders_cursor",newest.ToUniversalTime().ToString("o"));
             }
             catch(Exception ex){try{_store.SetSetting("central_sync_last_error","orders_snapshot:"+ex.GetType().Name+":"+ex.Message);}catch{}}
         }
@@ -1015,11 +994,6 @@ namespace NexoMarket.Admin.UI
 
         private static string Normalize(string u){string v=(u??"").Trim().TrimEnd('/');if(v.EndsWith("/api",StringComparison.OrdinalIgnoreCase))v=v.Substring(0,v.Length-4).TrimEnd('/');return v;}
         private static string Form(Dictionary<string,string> v){StringBuilder b=new StringBuilder();foreach(KeyValuePair<string,string> x in v){if(b.Length>0)b.Append('&');b.Append(Uri.EscapeDataString(x.Key??""));b.Append('=').Append(Uri.EscapeDataString(x.Value??""));}return b.ToString();}
-        private static string JsonField(string json,string key)
-        {
-            if(string.IsNullOrWhiteSpace(json)||string.IsNullOrWhiteSpace(key))return "";string marker="\""+key+"\"";int k=json.IndexOf(marker,StringComparison.OrdinalIgnoreCase);if(k<0)return "";int c=json.IndexOf(':',k+marker.Length);if(c<0)return "";int st=c+1;while(st<json.Length&&char.IsWhiteSpace(json[st]))st++;if(st<json.Length&&json[st]=='"'){st++;int en=st;while(en<json.Length){if(json[en]=='"'&&json[en-1]!='\\')break;en++;}return en<=json.Length?json.Substring(st,en-st):"";}int stop=st;while(stop<json.Length&&json[stop]!=','&&json[stop]!='}')stop++;return json.Substring(st,stop-st).Trim();
-        }
-
         private static string Request(string url,string method,string body){try{ServicePointManager.SecurityProtocol=SecurityProtocolType.Tls12;HttpWebRequest r=(HttpWebRequest)WebRequest.Create(url);r.Method=method;r.Timeout=20000;r.ReadWriteTimeout=20000;r.UserAgent="NexoMarket Central Sync/4.1.26";r.KeepAlive=false;if(method=="POST"){byte[] d=Encoding.UTF8.GetBytes(body??"");r.ContentType="application/x-www-form-urlencoded; charset=utf-8";r.ContentLength=d.Length;using(Stream s=r.GetRequestStream())s.Write(d,0,d.Length);}using(WebResponse x=r.GetResponse())using(StreamReader sr=new StreamReader(x.GetResponseStream(),Encoding.UTF8))return sr.ReadToEnd();}catch(WebException ex){try{if(ex.Response!=null)using(StreamReader sr=new StreamReader(ex.Response.GetResponseStream(),Encoding.UTF8))return sr.ReadToEnd();}catch{}return null;}catch{return null;}}
         private static long ParseLong(string s){long v;return long.TryParse(s,out v)?v:0;}
         private static decimal ParseDecimal(string s){decimal v;return decimal.TryParse(s,NumberStyles.Any,CultureInfo.InvariantCulture,out v)?v:0m;}

@@ -111,7 +111,6 @@ ALTER TABLE nexomarket_pairings ADD COLUMN IF NOT EXISTS pairing_code_hash TEXT;
 ALTER TABLE nexomarket_pairings ADD COLUMN IF NOT EXISTS pairing_code TEXT;
 ALTER TABLE nexomarket_accounts ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE nexomarket_accounts ADD COLUMN IF NOT EXISTS trial_expires_at TIMESTAMPTZ;
-ALTER TABLE nexomarket_accounts ADD COLUMN IF NOT EXISTS commission_rate NUMERIC(8,4) NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_nexomarket_accounts_trial ON nexomarket_accounts(trial_expires_at);
 CREATE INDEX IF NOT EXISTS idx_nexomarket_pairings_code_hash ON nexomarket_pairings(pairing_code_hash);
 CREATE INDEX IF NOT EXISTS idx_nexomarket_pairings_expiry ON nexomarket_pairings(expires_at);
@@ -288,23 +287,12 @@ CREATE INDEX IF NOT EXISTS idx_nexomarket_pairings_expiry ON nexomarket_pairings
         public Dictionary<string,string> GetAccount(string email)
         {
             if(!Enabled||string.IsNullOrWhiteSpace(email))return null;
-            try{using(NpgsqlConnection c=Open()){EnsureInitialized(c);using(NpgsqlCommand cmd=c.CreateCommand()){cmd.CommandText="SELECT account_id,name,email,phone,role,store_id,salt,password_hash,created_at,active,trial_expires_at,commission_rate FROM nexomarket_accounts WHERE lower(email)=lower(@email) LIMIT 1";cmd.Parameters.AddWithValue("email",email.Trim());using(NpgsqlDataReader r=cmd.ExecuteReader()){if(!r.Read())return null;return new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){{"id",r.GetString(0)},{"name",r.GetString(1)},{"email",r.GetString(2)},{"phone",r.GetString(3)},{"role",r.GetString(4)},{"storeId",r.GetString(5)},{"salt",r.GetString(6)},{"passwordHash",r.GetString(7)},{"createdAt",r.GetDateTime(8).ToUniversalTime().ToString("o")},{"active",r.GetBoolean(9)?"1":"0"},{"trialExpiresAt",r.IsDBNull(10)?"":r.GetDateTime(10).ToUniversalTime().ToString("o")},{"commissionRate",r.IsDBNull(11)?"0":r.GetDecimal(11).ToString("0.####",System.Globalization.CultureInfo.InvariantCulture)}};}}}}catch{return null;}
+            try{using(NpgsqlConnection c=Open()){EnsureInitialized(c);using(NpgsqlCommand cmd=c.CreateCommand()){cmd.CommandText="SELECT account_id,name,email,phone,role,store_id,salt,password_hash,created_at,active,trial_expires_at FROM nexomarket_accounts WHERE lower(email)=lower(@email) LIMIT 1";cmd.Parameters.AddWithValue("email",email.Trim());using(NpgsqlDataReader r=cmd.ExecuteReader()){if(!r.Read())return null;return new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){{"id",r.GetString(0)},{"name",r.GetString(1)},{"email",r.GetString(2)},{"phone",r.GetString(3)},{"role",r.GetString(4)},{"storeId",r.GetString(5)},{"salt",r.GetString(6)},{"passwordHash",r.GetString(7)},{"createdAt",r.GetDateTime(8).ToUniversalTime().ToString("o")},{"active",r.GetBoolean(9)?"1":"0"},{"trialExpiresAt",r.IsDBNull(10)?"":r.GetDateTime(10).ToUniversalTime().ToString("o")}};}}}}catch{return null;}
         }
         public Dictionary<string,string> GetSellerByStore(string storeId)
         {
             if(!Enabled||string.IsNullOrWhiteSpace(storeId))return null;
-            try{using(NpgsqlConnection c=Open()){EnsureInitialized(c);using(NpgsqlCommand cmd=c.CreateCommand()){cmd.CommandText="SELECT account_id,name,email,phone,role,store_id,salt,password_hash,created_at,active,trial_expires_at,commission_rate FROM nexomarket_accounts WHERE lower(store_id)=lower(@store) AND role='seller' ORDER BY updated_at DESC LIMIT 1";cmd.Parameters.AddWithValue("store",storeId.Trim());using(NpgsqlDataReader r=cmd.ExecuteReader()){if(!r.Read())return null;return new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){{"id",r.GetString(0)},{"name",r.GetString(1)},{"email",r.GetString(2)},{"phone",r.GetString(3)},{"role",r.GetString(4)},{"storeId",r.GetString(5)},{"salt",r.GetString(6)},{"passwordHash",r.GetString(7)},{"createdAt",r.GetDateTime(8).ToUniversalTime().ToString("o")},{"active",r.GetBoolean(9)?"1":"0"},{"trialExpiresAt",r.IsDBNull(10)?"":r.GetDateTime(10).ToUniversalTime().ToString("o")},{"commissionRate",r.IsDBNull(11)?"0":r.GetDecimal(11).ToString("0.####",System.Globalization.CultureInfo.InvariantCulture)}};}}}}catch{return null;}
-        }
-        public bool SetCommission(string email, decimal rate)
-        {
-            if(!Enabled || string.IsNullOrWhiteSpace(email)) return false;
-            rate=Math.Max(0m,Math.Min(100m,rate));
-            try{using(NpgsqlConnection c=Open()){EnsureInitialized(c);using(NpgsqlCommand cmd=c.CreateCommand()){cmd.CommandText="UPDATE nexomarket_accounts SET commission_rate=@rate,updated_at=NOW() WHERE lower(email)=lower(@email) AND role='seller'";cmd.Parameters.AddWithValue("email",email.Trim().ToLowerInvariant());cmd.Parameters.AddWithValue("rate",rate);return cmd.ExecuteNonQuery()>0;}}}catch{return false;}
-        }
-        public decimal GetCommission(string email)
-        {
-            if(!Enabled || string.IsNullOrWhiteSpace(email)) return 0m;
-            try{using(NpgsqlConnection c=Open()){EnsureInitialized(c);using(NpgsqlCommand cmd=c.CreateCommand()){cmd.CommandText="SELECT commission_rate FROM nexomarket_accounts WHERE lower(email)=lower(@email) LIMIT 1";cmd.Parameters.AddWithValue("email",email.Trim().ToLowerInvariant());object v=cmd.ExecuteScalar();return v==null||v==DBNull.Value?0m:Convert.ToDecimal(v,System.Globalization.CultureInfo.InvariantCulture);}}}catch{return 0m;}
+            try{using(NpgsqlConnection c=Open()){EnsureInitialized(c);using(NpgsqlCommand cmd=c.CreateCommand()){cmd.CommandText="SELECT account_id,name,email,phone,role,store_id,salt,password_hash,created_at,active,trial_expires_at FROM nexomarket_accounts WHERE lower(store_id)=lower(@store) AND role='seller' ORDER BY updated_at DESC LIMIT 1";cmd.Parameters.AddWithValue("store",storeId.Trim());using(NpgsqlDataReader r=cmd.ExecuteReader()){if(!r.Read())return null;return new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){{"id",r.GetString(0)},{"name",r.GetString(1)},{"email",r.GetString(2)},{"phone",r.GetString(3)},{"role",r.GetString(4)},{"storeId",r.GetString(5)},{"salt",r.GetString(6)},{"passwordHash",r.GetString(7)},{"createdAt",r.GetDateTime(8).ToUniversalTime().ToString("o")},{"active",r.GetBoolean(9)?"1":"0"},{"trialExpiresAt",r.IsDBNull(10)?"":r.GetDateTime(10).ToUniversalTime().ToString("o")}};}}}}catch{return null;}
         }
         public string CreatePairing(string storeId,string email,int minutes)
         {
