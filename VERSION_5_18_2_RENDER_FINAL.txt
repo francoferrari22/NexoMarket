@@ -1,0 +1,7 @@
+NexoMarket 5.18.2 — paquete final Render
+- Basado en NexoMarket 5.18.1 con el fix de compilación.
+- CentralServerService.cs revisado léxicamente: sin tokens de error y sin escapes C# inválidos.
+- StoreRatingSummary permanece correctamente como método de instancia y sus llamadas están dentro de métodos de instancia.
+- Dockerfile usa .NET 8 SDK y compila el CentralServer antes de publicar.
+- No se modificaron syncKey, emparejamiento Windows/Web, sincronización de catálogo, stock ni la ruta de recepción de pedidos.
+- No contiene tiendas ni cuentas reales.
