@@ -1,0 +1,7 @@
+NexoMarket 5.18.9 – correcciones solicitadas
+
+- Eliminado el pequeño botón flotante NEXOMARKET que aparecía debajo del menú en el marketplace.
+- Añadido filtro de productos por categoría dentro de cada tienda para compradores.
+- La búsqueda del marketplace mantiene las tarjetas visuales y limita el directorio a las coincidencias de nombre/categoría/ciudad.
+- Corregidos los solapamientos de botones y textos de las tarjetas CTA, especialmente en celular.
+- No se modificaron rutas ni la lógica de pedidos.
