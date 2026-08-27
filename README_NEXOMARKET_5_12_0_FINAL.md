@@ -21,3 +21,6 @@ Entrar en `NexoMarket.SuperAdmin` y ejecutar `COMPILAR_FACIL_SUPERADMIN.bat` en 
 
 ## Nota
 No se deben eliminar archivos funcionales del proyecto solo para reducir el tamaño. La limpieza de esta entrega elimina documentación/versiones duplicadas, pero conserva los proyectos necesarios para Central, Windows/Admin, Android Companion, SuperAdmin e instalador.
+
+
+Corrección aplicada: 5.12.7 — resolución de pedidos por evidencia de productos.

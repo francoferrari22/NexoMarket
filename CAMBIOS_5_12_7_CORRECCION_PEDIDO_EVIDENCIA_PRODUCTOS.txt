@@ -1,0 +1,12 @@
+NexoMarket 5.12.7 — Corrección definitiva del rechazo ERROR|store
+
+Diagnóstico: el mensaje del navegador no es una falla del carrito; es el mapeo exacto del backend cuando CreateOrder devuelve ERROR|store. Las versiones anteriores dependían demasiado de StoreId/slug enviados por el HTML.
+
+Corrección raíz:
+1. El servidor extrae los ProductId reales de itemsJson y obtiene StoreId directamente desde el catálogo central.
+2. Si el StoreId enviado por una página cacheada es viejo o incorrecto, se corrige automáticamente al StoreId demostrado por los productos del carrito.
+3. Solo si no existe evidencia de productos se usa la resolución StoreId/slug y la recuperación de Stores anterior.
+4. La reserva de stock ahora compara StoreId/ProductId sin sensibilidad a mayúsculas y devuelve product_not_found en lugar de ignorar silenciosamente un producto.
+5. La carga del comprobante también admite storeSlug y usa el mismo resolvedor.
+6. /api/version identifica inequívocamente la versión 5.12.7.
+7. Se conserva la idempotencia, alertas, sonido, polling y Seller Center.
