@@ -12,3 +12,9 @@ Cambio principal: tarjetas de locales completamente rediseñadas en la web princ
 
 La modificación se limita a la presentación del directorio principal y a la lectura de los campos visuales ya publicados por la API central.
 No se modificó render.yaml ni se agregaron secretos.
+
+NexoMarket 5.18.8 — REDISEÑO FORZADO DE TARJETAS DE TIENDAS
+- Se reemplazó el marcado de tarjetas del directorio principal por un componente único NEXO-V8.
+- Se agregó CSS de última prioridad con clases exclusivas para impedir que los estilos legacy 45/55 vuelvan a controlar las tarjetas.
+- 3 columnas escritorio, 2 tablet, 1 móvil; portada a pantalla completa, logo flotante, estrella, estado, rating y CTA.
+- No se modificó render.yaml ni las variables/secrets.
