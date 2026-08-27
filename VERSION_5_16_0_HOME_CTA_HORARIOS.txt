@@ -1,0 +1,8 @@
+NexoMarket 5.16.0
+- Home marketplace: CTA comprador/vendedor moderno con transparencias y estética neón violeta/blanco/verde.
+- Corregidos botones inferiores: crear cuenta de comprador y crear tienda.
+- CTA comprador orientado a seguimiento de pedidos y notificaciones.
+- CTA vendedor orientado a crear tienda online.
+- Scheduler central de apertura/cierre automático cada 30 segundos, conservando toggle manual.
+- No se modifica syncKey, emparejamiento Windows/Web, catálogo, stock ni recepción de pedidos.
+- Compatible con la corrección CS0120 de 5.15.1.

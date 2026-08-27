@@ -1,0 +1,20 @@
+NexoMarket 5.15.2 — Alertas de pedidos + portada + notas de productos
+
+CAMBIOS
+- Alerta de pedido nuevo en Seller Center: cartel rojo durante 10 segundos.
+- Reproducción del mismo aviso sonoro 10 veces, una por segundo, con desbloqueo de audio compatible con políticas del navegador.
+- Vibración opcional en dispositivos compatibles.
+- Solicitud de permiso de notificaciones al entrar; botón manual si el navegador requiere interacción.
+- Notificación del sistema cuando el permiso está concedido.
+- Detección de nuevos pedidos por latestOrderAt además del contador pendiente para no perder pedidos cuando el contador no cambia.
+- Notas opcionales por producto dentro del carrito, sin ensuciar las tarjetas de producto.
+- Las notas viajan dentro de ItemsJson y aparecen en el detalle del pedido del vendedor.
+- Compatibilidad hacia atrás: pedidos antiguos sin nota siguen siendo legibles.
+- Foto de portada del local usada como fondo visual en las tarjetas del directorio y como portada amplia en la ficha pública.
+- Tipografía visual más plateada/gris, con brillo blanco/violeta fino.
+
+PRECAUCIÓN
+No se modificaron deliberadamente syncKey, emparejamiento Windows/Web, rutas de stock, catálogo, ni creación/recepción de pedidos.
+
+LIMITACIÓN IMPORTANTE DEL NAVEGADOR
+Un navegador puede bloquear audio automático hasta que el usuario interactúe con la página. Por eso el sistema intenta desbloquear el audio con la primera interacción y muestra ACTIVAR SONIDO cuando todavía está bloqueado. Las notificaciones del sistema dependen del permiso del navegador y de la configuración de sonido del dispositivo.
