@@ -1043,6 +1043,27 @@ namespace NexoMarket.CentralServer
                 }
                 catch { }
             }
+            // Segundo canal de lectura: documento central de PostgreSQL.
+            // Esto permite recibir pedidos aunque la tabla de índice de pedidos esté desfasada.
+            if(_database!=null && _database.Enabled)
+            {
+                try
+                {
+                    string centralXml=_database.GetDocument("orders");
+                    if(!string.IsNullOrWhiteSpace(centralXml))
+                    {
+                        XDocument d=XDocument.Parse(centralXml);
+                        XElement root=d.Root==null?null:d.Root.Element("Orders");
+                        if(root!=null) foreach(XElement x in root.Elements("Order"))
+                        {
+                            string id=S(x,"CentralOrderId");
+                            if(id.Length==0 || seen.Contains(id)) continue;
+                            if(OrderBelongsToSeller(x,u)) { seen.Add(id); result.Add(new XElement(x)); }
+                        }
+                    }
+                }
+                catch { }
+            }
             try
             {
                 lock(_sync)
@@ -2789,6 +2810,20 @@ namespace NexoMarket.CentralServer
         {
             if(user==null || !string.Equals(user.Role,"seller",StringComparison.OrdinalIgnoreCase)) return "";
             string current=NormalizeStoreId(user.StoreId);
+            // Identidad canónica Web: la cuenta PostgreSQL manda.
+            if(_database!=null && _database.Enabled && !string.IsNullOrWhiteSpace(user.Email))
+            {
+                try
+                {
+                    Dictionary<string,string> db=_database.GetAccount(user.Email);
+                    if(db!=null && string.Equals(db.ContainsKey("role")?db["role"]:"","seller",StringComparison.OrdinalIgnoreCase))
+                    {
+                        string dbStore=NormalizeStoreId(db.ContainsKey("storeId")?db["storeId"]:"");
+                        if(dbStore.Length>0) return dbStore;
+                    }
+                }
+                catch { }
+            }
             lock(_sync)
             {
                 XElement stores=_doc.Root==null?null:_doc.Root.Element("Stores");
@@ -2852,24 +2887,8 @@ namespace NexoMarket.CentralServer
         {
             storeId=NormalizeStoreId(storeId??"");
             if(storeId.Length==0) return null;
-            CentralUser legacy=null;
-            lock(_sync)
-            {
-                XDocument d=LoadFile(_accountsFile,"NexoMarketAccounts","Users");
-                XElement users=d.Root==null?null:d.Root.Element("Users");
-                XElement e=users==null?null:users.Elements("User").FirstOrDefault(x=>
-                    string.Equals(S(x,"Role"),"seller",StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(NormalizeStoreId(S(x,"StoreId")),storeId,StringComparison.OrdinalIgnoreCase));
-                legacy=e==null?null:CentralUser.From(e);
-            }
-            if(legacy!=null)
-            {
-                if(_database!=null && _database.Enabled && legacy.Email.Length>0)
-                {
-                    try{_database.UpsertAccount(legacy.Id,legacy.Name,legacy.Email,legacy.Phone,"seller",storeId,legacy.Salt,legacy.PasswordHash,legacy.CreatedAt);}catch{}
-                }
-                return legacy;
-            }
+            // PostgreSQL primero: es la identidad canónica de la cuenta seller Web.
+            // Nunca dejamos que un registro XML antiguo vuelva a vincular el pedido a otra cuenta.
             if(_database!=null && _database.Enabled)
             {
                 try
@@ -2883,7 +2902,17 @@ namespace NexoMarket.CentralServer
                 }
                 catch { }
             }
-            return null;
+            CentralUser legacy=null;
+            lock(_sync)
+            {
+                XDocument d=LoadFile(_accountsFile,"NexoMarketAccounts","Users");
+                XElement users=d.Root==null?null:d.Root.Element("Users");
+                XElement e=users==null?null:users.Elements("User").FirstOrDefault(x=>
+                    string.Equals(S(x,"Role"),"seller",StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(NormalizeStoreId(S(x,"StoreId")),storeId,StringComparison.OrdinalIgnoreCase));
+                legacy=e==null?null:CentralUser.From(e);
+            }
+            return legacy;
         }
 
         private CentralUser FindAccount(string email)
@@ -2902,6 +2931,10 @@ namespace NexoMarket.CentralServer
                 }
             }
             catch { }
+            // PostgreSQL es la identidad canónica de la cuenta Web.
+            // IMPORTANTE: no sobrescribir el StoreId de PostgreSQL con un XML legado.
+            // Esa reconciliación era la causa de que una cuenta seller pudiera terminar
+            // apuntando a otra tienda válida y, por tanto, ver un buzón de pedidos vacío.
             if(_database!=null && _database.Enabled)
             {
                 try
@@ -2910,23 +2943,7 @@ namespace NexoMarket.CentralServer
                     if(a!=null)
                     {
                         CentralUser dbUser=CentralUser.From(a);
-                        if(dbUser!=null && dbUser.Role=="seller" && legacyUser!=null && legacyUser.Role=="seller")
-                        {
-                            string legacyStore=NormalizeStoreId(legacyUser.StoreId);
-                            string dbStore=NormalizeStoreId(dbUser.StoreId);
-                            bool legacyExists=false;
-                            lock(_sync)
-                            {
-                                XElement stores=_doc.Root==null?null:_doc.Root.Element("Stores");
-                                legacyExists=stores!=null && legacyStore.Length>0 && stores.Elements("Store").Any(x=>string.Equals(NormalizeStoreId(S(x,"StoreId")),legacyStore,StringComparison.OrdinalIgnoreCase));
-                            }
-                            if(legacyExists && !string.Equals(legacyStore,dbStore,StringComparison.OrdinalIgnoreCase))
-                            {
-                                try{_database.SetAccountStore(email,legacyStore);}catch{}
-                                dbUser.StoreId=legacyStore;
-                            }
-                        }
-                        return dbUser;
+                        if(dbUser!=null) return dbUser;
                     }
                 }
                 catch { }
