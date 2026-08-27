@@ -1010,7 +1010,7 @@ namespace NexoMarket.CentralServer
                 XElement root = od.Root == null ? null : od.Root.Element("Orders");
                 if (root != null)
                 {
-                    foreach (XElement o in root.Elements("Order").Where(x => string.Equals(NormalizeStoreId(S(x, "StoreId")), NormalizeStoreId(u.StoreId), StringComparison.OrdinalIgnoreCase)))
+                    foreach (XElement o in root.Elements("Order").Where(x => OrderBelongsToSeller(x, u)))
                     {
                         string status = S(o, "Status");
                         if (status == "Pendiente")
@@ -1518,7 +1518,10 @@ namespace NexoMarket.CentralServer
                 }
             }
             string centralId=Guid.NewGuid().ToString("N"); string now=DateTime.UtcNow.ToString("o");
-            lock(_sync){XDocument d=LoadFile(_ordersFile,"NexoMarketOrders","Orders");XElement e=new XElement("Order",new XElement("CentralOrderId",centralId),new XElement("StoreId",storeId),new XElement("CustomerId",Get(f,"customerId")),new XElement("CustomerName",customerName),new XElement("CustomerEmail",Get(f,"customerEmail")),new XElement("Phone",Get(f,"phone")),new XElement("Fulfillment",fulfillment),new XElement("Address",address),new XElement("Notes",Get(f,"notes")),new XElement("NoPaymentProof",noPaymentProof?"1":"0"),new XElement("NoPaymentProofReason",noPaymentProofReason),new XElement("Status",string.IsNullOrWhiteSpace(Get(f,"status"))?"Pendiente":Get(f,"status")),new XElement("Total",total.ToString(System.Globalization.CultureInfo.InvariantCulture)),new XElement("CouponCode",couponCode),new XElement("CouponDiscount",couponDiscount),new XElement("CouponConsumed",string.IsNullOrWhiteSpace(couponCode)?"0":"1"),new XElement("PaymentMethod",Get(f,"paymentMethod")),new XElement("PaymentStatus",string.IsNullOrWhiteSpace(Get(f,"paymentStatus"))?"Pendiente":Get(f,"paymentStatus")),new XElement("PaymentReference",Get(f,"paymentReference")),new XElement("PaymentProofPath",paymentProofPath),new XElement("ShippingCost",Get(f,"shippingCost")),new XElement("TrackingNumber",Get(f,"trackingNumber")),new XElement("Carrier",Get(f,"carrier")),new XElement("ItemsJson",Get(f,"itemsJson")),new XElement("BuyerMessage",Get(f,"buyerMessage")),new XElement("CreatedAt",now),new XElement("Ack", "0")); d.Root.Element("Orders").Add(e);SaveDoc(_ordersFile,d);}
+            CentralUser orderSeller=FindSellerByStore(storeId);
+            string sellerAccountId=orderSeller==null?"":(orderSeller.Id??"");
+            string sellerEmail=orderSeller==null?"":(orderSeller.Email??"");
+            lock(_sync){XDocument d=LoadFile(_ordersFile,"NexoMarketOrders","Orders");XElement e=new XElement("Order",new XElement("CentralOrderId",centralId),new XElement("StoreId",storeId),new XElement("SellerAccountId",sellerAccountId),new XElement("SellerEmail",sellerEmail),new XElement("CustomerId",Get(f,"customerId")),new XElement("CustomerName",customerName),new XElement("CustomerEmail",Get(f,"customerEmail")),new XElement("Phone",Get(f,"phone")),new XElement("Fulfillment",fulfillment),new XElement("Address",address),new XElement("Notes",Get(f,"notes")),new XElement("NoPaymentProof",noPaymentProof?"1":"0"),new XElement("NoPaymentProofReason",noPaymentProofReason),new XElement("Status",string.IsNullOrWhiteSpace(Get(f,"status"))?"Pendiente":Get(f,"status")),new XElement("Total",total.ToString(System.Globalization.CultureInfo.InvariantCulture)),new XElement("CouponCode",couponCode),new XElement("CouponDiscount",couponDiscount),new XElement("CouponConsumed",string.IsNullOrWhiteSpace(couponCode)?"0":"1"),new XElement("PaymentMethod",Get(f,"paymentMethod")),new XElement("PaymentStatus",string.IsNullOrWhiteSpace(Get(f,"paymentStatus"))?"Pendiente":Get(f,"paymentStatus")),new XElement("PaymentReference",Get(f,"paymentReference")),new XElement("PaymentProofPath",paymentProofPath),new XElement("ShippingCost",Get(f,"shippingCost")),new XElement("TrackingNumber",Get(f,"trackingNumber")),new XElement("Carrier",Get(f,"carrier")),new XElement("ItemsJson",Get(f,"itemsJson")),new XElement("BuyerMessage",Get(f,"buyerMessage")),new XElement("CreatedAt",now),new XElement("Ack", "0")); d.Root.Element("Orders").Add(e);SaveDoc(_ordersFile,d);}
             string result="OK|"+centralId+"|"+now+"|"+total.ToString(System.Globalization.CultureInfo.InvariantCulture);
             SaveIdempotency(idempotencyKey,result);
             Audit("order_created",storeId,Get(f,"customerEmail"),centralId,"total="+total.ToString(CultureInfo.InvariantCulture));
@@ -1598,8 +1601,24 @@ namespace NexoMarket.CentralServer
             return "";
         }
 
+        // Vinculación comprador -> tienda -> cuenta del vendedor.
+        // Los pedidos nuevos llevan identidad explícita del vendedor; los históricos
+        // siguen siendo visibles por StoreId.
+        private bool OrderBelongsToSeller(XElement order, CentralUser seller)
+        {
+            if(order==null || seller==null || !string.Equals(seller.Role,"seller",StringComparison.OrdinalIgnoreCase)) return false;
+            string sid=NormalizeStoreId(seller.StoreId);
+            string osid=NormalizeStoreId(S(order,"StoreId"));
+            if(!string.IsNullOrWhiteSpace(sid) && string.Equals(osid,sid,StringComparison.OrdinalIgnoreCase)) return true;
+            string oid=S(order,"SellerAccountId");
+            if(!string.IsNullOrWhiteSpace(oid) && !string.IsNullOrWhiteSpace(seller.Id) && string.Equals(oid,seller.Id,StringComparison.OrdinalIgnoreCase)) return true;
+            string oe=S(order,"SellerEmail");
+            return !string.IsNullOrWhiteSpace(oe) && !string.IsNullOrWhiteSpace(seller.Email) && string.Equals(oe,seller.Email,StringComparison.OrdinalIgnoreCase);
+        }
+
         private string PendingOrders(string storeId, string syncKey)
         {
+            storeId=NormalizeStoreId(storeId??"");
             if(string.IsNullOrWhiteSpace(storeId) || !ValidateStoreSyncKey(storeId, syncKey)) return "[]";
             lock(_sync){XDocument d=LoadFile(_ordersFile,"NexoMarketOrders","Orders");DateTime recentCutoff=DateTime.UtcNow.AddDays(-30); List<XElement> list=d.Root.Element("Orders").Elements("Order").Where(x=>S(x,"StoreId")==storeId && ((S(x,"Status")!="Entregado" && S(x,"Status")!="Cancelado" && S(x,"Status")!="Rechazado") || ParseUtcDate(S(x,"CreatedAt"))>=recentCutoff)).OrderBy(x=>S(x,"CreatedAt")).ToList();StringBuilder b=new StringBuilder("[");for(int i=0;i<list.Count;i++){if(i>0)b.Append(',');XElement x=list[i];b.Append("{\"centralOrderId\":").Append(JsonString(S(x,"CentralOrderId"))).Append(",\"customerId\":").Append(JsonString(S(x,"CustomerId"))).Append(",\"customerName\":").Append(JsonString(S(x,"CustomerName"))).Append(",\"customerEmail\":").Append(JsonString(S(x,"CustomerEmail"))).Append(",\"phone\":").Append(JsonString(S(x,"Phone"))).Append(",\"fulfillment\":").Append(JsonString(S(x,"Fulfillment"))).Append(",\"address\":").Append(JsonString(S(x,"Address"))).Append(",\"notes\":").Append(JsonString(S(x,"Notes"))).Append(",\"status\":").Append(JsonString(S(x,"Status"))).Append(",\"total\":").Append(JsonString(S(x,"Total"))).Append(",\"paymentMethod\":").Append(JsonString(S(x,"PaymentMethod"))).Append(",\"paymentStatus\":").Append(JsonString(S(x,"PaymentStatus"))).Append(",\"paymentReference\":").Append(JsonString(S(x,"PaymentReference"))).Append(",\"paymentProofPath\":").Append(JsonString(S(x,"PaymentProofPath"))).Append(",\"shippingCost\":").Append(JsonString(S(x,"ShippingCost"))).Append(",\"trackingNumber\":").Append(JsonString(S(x,"TrackingNumber"))).Append(",\"carrier\":").Append(JsonString(S(x,"Carrier"))).Append(",\"itemsJson\":").Append(JsonString(S(x,"ItemsJson"))).Append(",\"buyerMessage\":").Append(JsonString(S(x,"BuyerMessage"))).Append(",\"createdAt\":").Append(JsonString(S(x,"CreatedAt"))).Append('}');}b.Append(']');return b.ToString();}
         }
@@ -1612,7 +1631,7 @@ namespace NexoMarket.CentralServer
         }
         private string OrderJson(XElement x)
         {
-            return "{\"centralOrderId\":"+JsonString(S(x,"CentralOrderId"))+",\"customerId\":"+JsonString(S(x,"CustomerId"))+",\"customerName\":"+JsonString(S(x,"CustomerName"))+",\"customerEmail\":"+JsonString(S(x,"CustomerEmail"))+",\"phone\":"+JsonString(S(x,"Phone"))+",\"fulfillment\":"+JsonString(S(x,"Fulfillment"))+",\"address\":"+JsonString(S(x,"Address"))+",\"notes\":"+JsonString(S(x,"Notes"))+",\"status\":"+JsonString(S(x,"Status"))+",\"total\":"+JsonString(S(x,"Total"))+",\"paymentMethod\":"+JsonString(S(x,"PaymentMethod"))+",\"paymentStatus\":"+JsonString(S(x,"PaymentStatus"))+",\"paymentReference\":"+JsonString(S(x,"PaymentReference"))+",\"paymentProofPath\":"+JsonString(S(x,"PaymentProofPath"))+",\"shippingCost\":"+JsonString(S(x,"ShippingCost"))+",\"trackingNumber\":"+JsonString(S(x,"TrackingNumber"))+",\"carrier\":"+JsonString(S(x,"Carrier"))+",\"itemsJson\":"+JsonString(S(x,"ItemsJson"))+",\"buyerMessage\":"+JsonString(S(x,"BuyerMessage"))+",\"createdAt\":"+JsonString(S(x,"CreatedAt"))+",\"updatedAt\":"+JsonString(S(x,"UpdatedAt"))+"}";
+            return "{\"centralOrderId\":"+JsonString(S(x,"CentralOrderId"))+",\"storeId\":"+JsonString(S(x,"StoreId"))+",\"sellerAccountId\":"+JsonString(S(x,"SellerAccountId"))+",\"sellerEmail\":"+JsonString(S(x,"SellerEmail"))+",\"customerId\":"+JsonString(S(x,"CustomerId"))+",\"customerName\":"+JsonString(S(x,"CustomerName"))+",\"customerEmail\":"+JsonString(S(x,"CustomerEmail"))+",\"phone\":"+JsonString(S(x,"Phone"))+",\"fulfillment\":"+JsonString(S(x,"Fulfillment"))+",\"address\":"+JsonString(S(x,"Address"))+",\"notes\":"+JsonString(S(x,"Notes"))+",\"status\":"+JsonString(S(x,"Status"))+",\"total\":"+JsonString(S(x,"Total"))+",\"paymentMethod\":"+JsonString(S(x,"PaymentMethod"))+",\"paymentStatus\":"+JsonString(S(x,"PaymentStatus"))+",\"paymentReference\":"+JsonString(S(x,"PaymentReference"))+",\"paymentProofPath\":"+JsonString(S(x,"PaymentProofPath"))+",\"shippingCost\":"+JsonString(S(x,"ShippingCost"))+",\"trackingNumber\":"+JsonString(S(x,"TrackingNumber"))+",\"carrier\":"+JsonString(S(x,"Carrier"))+",\"itemsJson\":"+JsonString(S(x,"ItemsJson"))+",\"buyerMessage\":"+JsonString(S(x,"BuyerMessage"))+",\"createdAt\":"+JsonString(S(x,"CreatedAt"))+",\"updatedAt\":"+JsonString(S(x,"UpdatedAt"))+"}";
         }
 
         private string AckOrder(Dictionary<string,string> f)
@@ -2968,7 +2987,7 @@ namespace NexoMarket.CentralServer
                 products=cd.Root.Element("Products")==null?new List<XElement>():cd.Root.Element("Products").Elements("Product").Where(x=>S(x,"StoreId")==u.StoreId).OrderBy(x=>S(x,"Name")).ToList();
                 promotions=cd.Root.Element("Promotions")==null?new List<XElement>():cd.Root.Element("Promotions").Elements("Promotion").Where(x=>S(x,"StoreId")==u.StoreId).OrderByDescending(x=>S(x,"From")).ToList();
                 XDocument od=LoadFile(_ordersFile,"NexoMarketOrders","Orders");
-                orders=od.Root.Element("Orders")==null?new List<XElement>():od.Root.Element("Orders").Elements("Order").Where(x=>S(x,"StoreId")==u.StoreId).OrderByDescending(x=>S(x,"CreatedAt")).ToList();
+                orders=od.Root.Element("Orders")==null?new List<XElement>():od.Root.Element("Orders").Elements("Order").Where(x=>OrderBelongsToSeller(x,u)).OrderByDescending(x=>S(x,"CreatedAt")).ToList();
             }
             StringBuilder b=new StringBuilder(AuthShellStart("Seller Center · NexoMarket"));
             b.Append(SellerCenterCss());
