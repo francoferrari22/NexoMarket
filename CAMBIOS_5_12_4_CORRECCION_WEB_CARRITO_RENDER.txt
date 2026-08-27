@@ -1,0 +1,31 @@
+NexoMarket 5.12.4 — Corrección profesional Web
+
+1. BUSCAR TIENDA POR NOMBRE
+- El campo y su contenedor quedan transparentes sobre el fondo.
+- Se fuerza background/background-color transparent con !important.
+- Se neutraliza el autofill del navegador para evitar que vuelva a aparecer blanco.
+- El texto escrito y el cursor permanecen visibles.
+
+2. AGREGAR PRODUCTOS / CARRITO
+- Se corrigió un error de JavaScript en render() que generaba atributos HTML inválidos (data-id).
+- Ese error impedía ejecutar el JavaScript de la tienda, dejando inoperativos AGREGAR, carrito, cantidades, cupones y parte del pedido.
+- AGREGAR vuelve a sumar el producto, abre el carrito y recalcula los importes.
+- Se mantienen los controles − / cantidad / + y edición directa de unidades.
+
+3. CUPONES
+- Vuelve a funcionar la validación automática del código y el cálculo del descuento una vez restaurada la ejecución normal del JavaScript.
+
+4. EMOTICONES
+- Se conserva UTF-8 y la barra de emoticones de reseñas.
+- Se conservan los emojis de Delivery, Retiro, ubicación, horario, pagos y estados.
+
+5. TARJETA DORADA DE TIENDA
+- Información de la tienda a la izquierda.
+- Opiniones y puntuación grande a la derecha.
+- Ambas columnas comparten el mismo tamaño de campo.
+- En móvil se apilan de forma responsive.
+
+6. RENDER
+- Dockerfile actualizado a 5.12.4.
+- Se agregó una comprobación de build para detectar nuevamente el patrón JavaScript roto antes del publish.
+- Sin bin/obj ni temporales.
