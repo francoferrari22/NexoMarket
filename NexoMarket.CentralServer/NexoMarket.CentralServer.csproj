@@ -9,6 +9,9 @@
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
   <ItemGroup>
+    <Content Include="Assets\NexoMarket_Alerta_Pedido_6s.wav" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="CentralServerService.cs" />
     <Compile Include="R2ObjectStore.cs" />
