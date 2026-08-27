@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
+using System.Xml.Linq;
 using Npgsql;
 
 namespace NexoMarket.CentralServer
@@ -56,6 +57,20 @@ namespace NexoMarket.CentralServer
                     cmd.CommandText = @"
 CREATE TABLE IF NOT EXISTS nexomarket_documents(dataset TEXT PRIMARY KEY, content TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
 CREATE INDEX IF NOT EXISTS idx_nexomarket_documents_updated_at ON nexomarket_documents(updated_at);
+CREATE TABLE IF NOT EXISTS nexomarket_orders (
+    central_order_id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL DEFAULT '',
+    seller_account_id TEXT NOT NULL DEFAULT '',
+    seller_email TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'Pendiente',
+    ack BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    content TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_nexomarket_orders_store_created ON nexomarket_orders(store_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_nexomarket_orders_seller_created ON nexomarket_orders(seller_account_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_nexomarket_orders_email_created ON nexomarket_orders(lower(seller_email), created_at DESC);
 CREATE TABLE IF NOT EXISTS nexomarket_accounts(
     account_id TEXT PRIMARY KEY,
     email TEXT NOT NULL UNIQUE,
@@ -135,6 +150,64 @@ CREATE INDEX IF NOT EXISTS idx_nexomarket_pairings_expiry ON nexomarket_pairings
             if(!Enabled||string.IsNullOrWhiteSpace(dataset)||content==null)return false;
             try{using(NpgsqlConnection c=Open()){EnsureInitialized(c);using(NpgsqlCommand cmd=c.CreateCommand()){cmd.CommandText="INSERT INTO nexomarket_documents(dataset,content,updated_at) VALUES(@dataset,@content,NOW()) ON CONFLICT(dataset) DO UPDATE SET content=EXCLUDED.content,updated_at=NOW();";cmd.Parameters.AddWithValue("dataset",dataset);cmd.Parameters.AddWithValue("content",content);cmd.ExecuteNonQuery();}}return true;}catch{return false;}
         }
+        public bool SaveOrdersDocument(string xml)
+        {
+            if(!Enabled || string.IsNullOrWhiteSpace(xml)) return false;
+            try
+            {
+                XDocument d=XDocument.Parse(xml);
+                XElement root=d.Root==null?null:d.Root.Element("Orders");
+                using(NpgsqlConnection c=Open())
+                {
+                    EnsureInitialized(c);
+                    using(NpgsqlTransaction tx=c.BeginTransaction())
+                    {
+                        if(root!=null)
+                        {
+                            foreach(XElement o in root.Elements("Order"))
+                            {
+                                string id=V(o,"CentralOrderId"); if(string.IsNullOrWhiteSpace(id)) continue;
+                                using(NpgsqlCommand cmd=c.CreateCommand())
+                                {
+                                    cmd.Transaction=tx;
+                                    cmd.CommandText=@"INSERT INTO nexomarket_orders(central_order_id,store_id,seller_account_id,seller_email,status,ack,created_at,updated_at,content)
+VALUES(@id,@store,@seller,@email,@status,@ack,@created,@updated,@content)
+ON CONFLICT(central_order_id) DO UPDATE SET store_id=EXCLUDED.store_id,seller_account_id=EXCLUDED.seller_account_id,seller_email=EXCLUDED.seller_email,status=EXCLUDED.status,ack=EXCLUDED.ack,created_at=EXCLUDED.created_at,updated_at=EXCLUDED.updated_at,content=EXCLUDED.content";
+                                    cmd.Parameters.AddWithValue("id",id); cmd.Parameters.AddWithValue("store",V(o,"StoreId")); cmd.Parameters.AddWithValue("seller",V(o,"SellerAccountId")); cmd.Parameters.AddWithValue("email",V(o,"SellerEmail")); cmd.Parameters.AddWithValue("status",string.IsNullOrWhiteSpace(V(o,"Status"))?"Pendiente":V(o,"Status")); cmd.Parameters.AddWithValue("ack",V(o,"Ack")=="1");
+                                    cmd.Parameters.AddWithValue("created",ParseDate(V(o,"CreatedAt"))); cmd.Parameters.AddWithValue("updated",ParseDate(string.IsNullOrWhiteSpace(V(o,"UpdatedAt"))?V(o,"CreatedAt"):V(o,"UpdatedAt"))); cmd.Parameters.AddWithValue("content",o.ToString(SaveOptions.None)); cmd.ExecuteNonQuery();
+                                }
+                            }
+                        }
+                        tx.Commit();
+                    }
+                }
+                return true;
+            }
+            catch { return false; }
+        }
+
+        public List<string> GetOrdersForSeller(string storeId,string sellerAccountId,string sellerEmail)
+        {
+            var list=new List<string>(); if(!Enabled) return list;
+            try
+            {
+                using(NpgsqlConnection c=Open())
+                {
+                    EnsureInitialized(c);
+                    using(NpgsqlCommand cmd=c.CreateCommand())
+                    {
+                        cmd.CommandText=@"SELECT content FROM nexomarket_orders WHERE lower(store_id)=lower(@store) OR (@seller<>'' AND seller_account_id=@seller) OR (@email<>'' AND lower(seller_email)=lower(@email)) ORDER BY created_at DESC";
+                        cmd.Parameters.AddWithValue("store",storeId??""); cmd.Parameters.AddWithValue("seller",sellerAccountId??""); cmd.Parameters.AddWithValue("email",sellerEmail??"");
+                        using(NpgsqlDataReader r=cmd.ExecuteReader()) while(r.Read()) list.Add(r.GetString(0));
+                    }
+                }
+            } catch { }
+            return list;
+        }
+
+        private static string V(XElement e,string n){XElement x=e==null?null:e.Element(n);return x==null?"":x.Value??"";}
+        private static DateTime ParseDate(string s){DateTime d;if(DateTime.TryParse(s,null,System.Globalization.DateTimeStyles.RoundtripKind,out d)) return d.ToUniversalTime();return DateTime.UtcNow;}
+
         public bool EnsureDocument(string dataset,string content){if(!Enabled)return false;return GetDocument(dataset)!=null||SaveDocument(dataset,content);}
         public string Status(){if(!Enabled)return "disabled";try{using(NpgsqlConnection c=Open()){EnsureInitialized(c);using(NpgsqlCommand cmd=c.CreateCommand()){cmd.CommandText="SELECT COUNT(*) FROM nexomarket_documents";long n=Convert.ToInt64(cmd.ExecuteScalar());return "connected|documents="+n.ToString(System.Globalization.CultureInfo.InvariantCulture);}}}catch(Exception ex){return "error|"+ex.GetType().Name;}}
 
