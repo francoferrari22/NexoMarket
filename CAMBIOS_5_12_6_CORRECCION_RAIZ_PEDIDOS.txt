@@ -1,0 +1,17 @@
+NexoMarket 5.12.6 — Corrección raíz del rechazo de pedidos
+
+Diagnóstico de la 5.12.5:
+- El cliente seguía recibiendo ERROR|store.
+- La 5.12.5 había agregado otra búsqueda por slug, pero todavía existían rutas de resolución diferentes entre la página pública y CreateOrder.
+- Si el registro central de Stores quedaba desincronizado/perdido aunque el catálogo o la cuenta vendedora siguieran presentes, CreateOrder rechazaba el pedido.
+
+Corrección profesional:
+1. Storefront y CreateOrder comparten ahora una única rutina ResolveStoreIdentityLocked.
+2. Se normalizan StoreId y Slug de la misma forma en ambos flujos.
+3. Si el registro Store se perdió pero existe evidencia persistente del StoreId en catálogo o cuenta seller, Central reconstruye automáticamente el registro mínimo y lo persiste en PostgreSQL/R2/XML.
+4. Un campo Active ausente en datos antiguos ya no se interpreta como tienda cerrada; solo Active=0 cierra.
+5. Se conserva la protección contra bloqueo de plataforma y el cierre automático por horario.
+6. Se agregan trazas de diagnóstico en logs para saber exactamente por qué una tienda no pudo resolverse.
+7. Se mantiene idempotencia de pedidos y todo el sistema de alertas/polling del Seller Center.
+
+Objetivo: que una inconsistencia de registro no vuelva a inutilizar la compra pública mientras los datos de la tienda/catálogo sigan existiendo.

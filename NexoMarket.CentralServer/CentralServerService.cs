@@ -302,6 +302,7 @@ namespace NexoMarket.CentralServer
                         string body = Body(request); string path = target; string query = ""; int q = path.IndexOf('?');
                         if (q >= 0) { query = path.Substring(q + 1); path = path.Substring(0, q); }
                         if (path == "/health" || path == "/healt") { Write(stream, 200, "text/plain", "NexoMarket Central OK\n"); return; }
+                        if (path == "/api/version" && method == "GET") { Write(stream, 200, "application/json; charset=utf-8", "{\"version\":\"5.12.6\",\"ordersResolver\":\"unified-recovery\"}"); return; }
                         if (path.StartsWith("/media/", StringComparison.OrdinalIgnoreCase) && method == "GET") { ServeMedia(stream, path.Substring(7)); return; }
                         if (path == "/api/central/status" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", CentralDatabaseStatus()); return; }
                         if (path == "/api/admin/stores" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", AdminStores(HeaderValue(request,"X-Nexo-Admin-Key"))); return; }
@@ -1373,34 +1374,33 @@ namespace NexoMarket.CentralServer
             string existingResult=GetIdempotentOrder(idempotencyKey);
             if(!string.IsNullOrWhiteSpace(existingResult)) return existingResult;
 
-            // El navegador puede conservar una página anterior a un cambio de StoreId.
-            // El slug público es la identidad estable para el comprador, por lo que
-            // se utiliza como segunda vía de resolución del local.
+            // IMPORTANTE: el pedido y la página pública deben resolver la tienda con
+            // exactamente la misma lógica. Las versiones anteriores tenían varias vías
+            // de resolución repartidas por el código y eso podía producir ERROR|store
+            // aun cuando el catálogo público seguía siendo visible.
             lock(_sync)
             {
-                XElement store=FindStoreElement(storeId);
-                XElement storesRoot=_doc.Root==null?null:_doc.Root.Element("Stores");
-                if(store==null && storesRoot!=null && !string.IsNullOrWhiteSpace(storeSlug))
+                XElement store=ResolveStoreIdentityLocked(rawStoreId,storeSlug);
+                if(store==null)
                 {
-                    string decodedSlug;
-                    try { decodedSlug=Uri.UnescapeDataString(storeSlug).Trim('/'); }
-                    catch { decodedSlug=storeSlug.Trim('/'); }
-                    store=storesRoot.Elements("Store").FirstOrDefault(x =>
-                        string.Equals(S(x,"Slug"),decodedSlug,StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(NormalizeStoreId(S(x,"Slug")),NormalizeStoreId(decodedSlug),StringComparison.OrdinalIgnoreCase));
+                    // Recuperación segura: si el registro de Stores se perdió o quedó
+                    // desincronizado, pero el catálogo o la cuenta vendedora todavía
+                    // demuestra que el StoreId existe, reconstruimos el registro mínimo.
+                    store=RecoverStoreRegistryEntryLocked(rawStoreId,storeSlug);
                 }
-                // Compatibilidad con clientes antiguos que podían enviar el slug
-                // dentro de storeId.
-                if(store==null && storesRoot!=null && !string.IsNullOrWhiteSpace(rawStoreId))
+                if(store==null)
                 {
-                    store=storesRoot.Elements("Store").FirstOrDefault(x =>
-                        string.Equals(S(x,"Slug"),rawStoreId,StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(NormalizeStoreId(S(x,"Slug")),NormalizeStoreId(rawStoreId),StringComparison.OrdinalIgnoreCase));
+                    Console.Error.WriteLine("[NexoMarket] ORDER_STORE_RESOLUTION_FAILED storeId='"+rawStoreId+"' slug='"+storeSlug+"'");
+                    return "ERROR|store";
                 }
-                if(store==null) return "ERROR|store";
-                storeId=S(store,"StoreId");
+                storeId=NormalizeStoreId(S(store,"StoreId"));
+                if(string.IsNullOrWhiteSpace(storeId)) return "ERROR|store";
                 ApplyAutomaticStoreSchedule(store);
-                if(S(store,"Active")!="1") return "ERROR|store_closed";
+                // Datos antiguos pueden no tener Active. Para una tienda recuperada
+                // o migrada, la ausencia del campo no debe convertirla silenciosamente
+                // en una tienda cerrada. Solo '0' significa cerrada.
+                if(S(store,"Active")=="0") return "ERROR|store_closed";
+                if(S(store,"Active")!="1") { store.SetElementValue("Active","1"); Save(); }
                 if(IsStorePlatformBlocked(storeId)) return "ERROR|platform_blocked";
             }
             decimal total; if(!decimal.TryParse(Get(f,"total"),System.Globalization.NumberStyles.Any,System.Globalization.CultureInfo.InvariantCulture,out total) || total<=0m) return "ERROR|total";
@@ -1946,6 +1946,71 @@ namespace NexoMarket.CentralServer
         {
             XDocument d=LoadFile(_platformPaymentsFile,"NexoMarketPlatformPayments","Payments"); XElement root=d.Root==null?null:d.Root.Element("Payments"); return root==null?null:root.Elements("Payment").FirstOrDefault(x=>string.Equals(S(x,"StoreId"),storeId,StringComparison.OrdinalIgnoreCase)&&string.Equals(S(x,"Month"),month,StringComparison.OrdinalIgnoreCase));
         }
+        private XElement ResolveStoreIdentityLocked(string rawStoreId,string storeSlug)
+        {
+            XElement stores=_doc.Root==null?null:_doc.Root.Element("Stores");
+            if(stores==null)return null;
+            string id=NormalizeStoreId(rawStoreId);
+            string slug=(storeSlug??"").Trim();
+            try { slug=Uri.UnescapeDataString(slug).Trim('/'); } catch { slug=slug.Trim('/'); }
+            XElement store=null;
+            if(!string.IsNullOrWhiteSpace(id))
+                store=stores.Elements("Store").FirstOrDefault(x=>
+                    string.Equals(NormalizeStoreId(S(x,"StoreId")),id,StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(NormalizeStoreId(S(x,"Slug")),id,StringComparison.OrdinalIgnoreCase));
+            if(store==null && !string.IsNullOrWhiteSpace(slug))
+                store=stores.Elements("Store").FirstOrDefault(x=>
+                    string.Equals(S(x,"Slug"),slug,StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(NormalizeStoreId(S(x,"Slug")),NormalizeStoreId(slug),StringComparison.OrdinalIgnoreCase));
+            return store;
+        }
+
+        private XElement RecoverStoreRegistryEntryLocked(string rawStoreId,string storeSlug)
+        {
+            string id=NormalizeStoreId(rawStoreId);
+            if(string.IsNullOrWhiteSpace(id))return null;
+            XDocument catalog=LoadFile(_catalogFile,"NexoMarketCatalog","Products");
+            XElement products=catalog.Root==null?null:catalog.Root.Element("Products");
+            bool hasCatalogEvidence=products!=null && products.Elements("Product").Any(x=>
+                string.Equals(NormalizeStoreId(S(x,"StoreId")),id,StringComparison.OrdinalIgnoreCase) &&
+                S(x,"Deleted")!="1");
+            bool hasAccountEvidence=false;
+            try
+            {
+                XDocument accounts=LoadFile(_accountsFile,"NexoMarketAccounts","Users");
+                XElement users=accounts.Root==null?null:accounts.Root.Element("Users");
+                hasAccountEvidence=users!=null && users.Elements("User").Any(x=>
+                    string.Equals(S(x,"Role"),"seller",StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(NormalizeStoreId(S(x,"StoreId")),id,StringComparison.OrdinalIgnoreCase));
+            }
+            catch { }
+            if(!hasCatalogEvidence && !hasAccountEvidence)return null;
+
+            XElement stores=_doc.Root.Element("Stores");
+            if(stores==null){stores=new XElement("Stores");_doc.Root.Add(stores);}
+            string slug=(storeSlug??"").Trim();
+            try { slug=Uri.UnescapeDataString(slug).Trim('/'); } catch { slug=slug.Trim('/'); }
+            if(string.IsNullOrWhiteSpace(slug))slug="tienda-"+id.ToLowerInvariant();
+            string name=slug.Replace('-',' ').Trim();
+            try
+            {
+                XDocument accounts=LoadFile(_accountsFile,"NexoMarketAccounts","Users");
+                XElement users=accounts.Root==null?null:accounts.Root.Element("Users");
+                XElement seller=users==null?null:users.Elements("User").FirstOrDefault(x=>string.Equals(S(x,"Role"),"seller",StringComparison.OrdinalIgnoreCase)&&string.Equals(NormalizeStoreId(S(x,"StoreId")),id,StringComparison.OrdinalIgnoreCase));
+                if(seller!=null&&!string.IsNullOrWhiteSpace(S(seller,"Name")))name=S(seller,"Name");
+            }catch{}
+            XElement recovered=new XElement("Store",
+                new XElement("StoreId",id),new XElement("SyncKey",ComputeStorePairKey(id)),
+                new XElement("Name",name),new XElement("Slug",slug),new XElement("PublicUrl","/store/"+Uri.EscapeDataString(slug)),
+                new XElement("Active","1"),new XElement("Delivery","1"),new XElement("Pickup","1"),
+                new XElement("Listed","1"),new XElement("LastActivityAt",DateTime.UtcNow.ToString("o")),
+                new XElement("PlatformBlockOverride","0"));
+            stores.Add(recovered);
+            Save();
+            Console.Error.WriteLine("[NexoMarket] ORDER_STORE_REGISTRY_RECOVERED storeId='"+id+"' catalogEvidence="+(hasCatalogEvidence?"1":"0")+" accountEvidence="+(hasAccountEvidence?"1":"0"));
+            return recovered;
+        }
+
         private XElement FindStoreElement(string storeId)
         {
             string id=NormalizeStoreId(storeId);
@@ -2192,7 +2257,7 @@ namespace NexoMarket.CentralServer
         {
             string storeId = Uri.UnescapeDataString(slug ?? "").Trim('/');
             XElement store = null;
-            lock (_sync) { store = _doc.Root.Element("Stores").Elements("Store").FirstOrDefault(x => string.Equals(S(x,"StoreId"),storeId,StringComparison.OrdinalIgnoreCase) || string.Equals(S(x,"Slug"),storeId,StringComparison.OrdinalIgnoreCase)); if(store!=null) ApplyAutomaticStoreSchedule(store); }
+            lock (_sync) { store = ResolveStoreIdentityLocked(storeId,storeId); if(store!=null) ApplyAutomaticStoreSchedule(store); }
             if(store==null) return "<!doctype html><html><body style='font-family:Arial;background:#080b10;color:#fff;padding:40px'><h1>Tienda no disponible</h1><a href='/' style='color:#39ff66'>Volver a NexoMarket</a></body></html>";
             string realId=S(store,"StoreId"); bool storePlatformBlocked=IsStorePlatformBlocked(realId); string reviewSummary=ReviewSummaryForStore(realId); string featuredHtml=S(store,"SuperFeatured")=="1"?"<div class='super-featured-badge' style='--sf:"+E(string.IsNullOrWhiteSpace(S(store,"FeaturedNeonColor"))?"#39ff66":S(store,"FeaturedNeonColor"))+"'>★ SÚPER DESTACADA</div>":(S(store,"Featured")=="1"?"<div class='featured-badge'>★ TIENDA DESTACADA EN LA PLATAFORMA</div>":""); string[] reviewParts=reviewSummary.Split('|'); string reviewAvg=reviewParts.Length>0?reviewParts[0]:"0.0"; string reviewCount=reviewParts.Length>1?reviewParts[1]:"0"; string openTime=S(store,"OpenTime"); string closeTime=S(store,"CloseTime");
             StringBuilder b=new StringBuilder();
