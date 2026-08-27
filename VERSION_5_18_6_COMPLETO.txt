@@ -1,0 +1,6 @@
+NexoMarket 5.18.6 - paquete completo
+Base funcional: 5.18.2_RENDER_FINAL.
+Cambio funcional: ninguno.
+Cambio visual: tarjetas compactas del directorio principal; 3 por fila en escritorio; portada de fondo; logo flotante; estrella destacada; neón; estados Abierto/Cerrado.
+Variables/API/secrets: no incluidos ni modificados. render.yaml conservado.
+Incluye CentralServer, Admin, SuperAdmin, Installer, herramientas, assets, Dockerfile y soluciones.
