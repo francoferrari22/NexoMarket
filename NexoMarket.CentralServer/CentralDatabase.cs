@@ -246,6 +246,11 @@ CREATE INDEX IF NOT EXISTS idx_nexomarket_pairings_expiry ON nexomarket_pairings
             if(!Enabled||string.IsNullOrWhiteSpace(email))return false;
             try{using(NpgsqlConnection c=Open()){EnsureInitialized(c);using(NpgsqlCommand cmd=c.CreateCommand()){cmd.CommandText="UPDATE nexomarket_accounts SET trial_expires_at=NOW()+(@days * INTERVAL '1 day'), active=TRUE, updated_at=NOW() WHERE lower(email)=lower(@email)";cmd.Parameters.AddWithValue("email",email.Trim());cmd.Parameters.AddWithValue("days",days);return cmd.ExecuteNonQuery()>0;}}}catch{return false;}
         }
+        public bool SetAccountPermanent(string email)
+        {
+            if(!Enabled||string.IsNullOrWhiteSpace(email))return false;
+            try{using(NpgsqlConnection c=Open()){EnsureInitialized(c);using(NpgsqlCommand cmd=c.CreateCommand()){cmd.CommandText="UPDATE nexomarket_accounts SET trial_expires_at=NULL, active=TRUE, updated_at=NOW() WHERE lower(email)=lower(@email)";cmd.Parameters.AddWithValue("email",email.Trim());return cmd.ExecuteNonQuery()>0;}}}catch{return false;}
+        }
         public bool SetAccountActive(string email,bool active)
         {
             if(!Enabled||string.IsNullOrWhiteSpace(email))return false;
