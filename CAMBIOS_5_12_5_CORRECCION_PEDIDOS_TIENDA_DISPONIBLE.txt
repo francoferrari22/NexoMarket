@@ -1,0 +1,17 @@
+NexoMarket 5.12.5 - Corrección raíz del envío de pedidos
+
+Problema corregido:
+- El comprador podía ver correctamente la tienda, pero al enviar el pedido el servidor devolvía ERROR|store.
+- Esto podía ocurrir cuando una página de compra conservaba un StoreId anterior o cuando el identificador interno cambiaba mientras el slug público de la tienda seguía siendo válido.
+
+Corrección:
+1. El formulario público ahora envía StoreId + StoreSlug.
+2. CentralServer intenta resolver primero por StoreId y, si no coincide, por el slug público estable.
+3. Se mantiene compatibilidad con clientes antiguos que envían el slug dentro de storeId.
+4. Se agregó una clave de idempotencia por pedido para evitar duplicados por doble envío/reintento.
+5. Se agregaron mensajes específicos para tienda cerrada y bloqueo de plataforma.
+6. No se modificó el sistema de alertas del Seller Center: continúa usando polling, sonido y parpadeo de hasta 10 ciclos cuando aparece un pedido nuevo.
+
+Nota de validación:
+- El entorno de esta sesión no tiene instalado .NET SDK, por lo que no fue posible ejecutar dotnet build aquí.
+- El cambio se realizó sobre el código fuente existente y se verificaron las inserciones clave.
