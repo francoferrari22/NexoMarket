@@ -1,3 +1,12 @@
 NexoMarket 5.12.0
-Comisiones por cuenta + pagos mensuales + reputación + ubicación + directorio + sincronización Web/Windows reforzada.
-Render build corregido.
+
+Cambios seguros sobre 5.11.2:
+- Alerta de pedido nuevo en Seller Center: cartel rojo visible 10 segundos, 10 parpadeos y 10 sonidos.
+- Windows Seller/Admin: alerta roja durante 10 segundos, 10 parpadeos y 10 sonidos.
+- Reseñas por tienda: puntuación 1-5, promedio con un decimal, comentarios y emojis para cuentas de comprador.
+- Una cuenta de comprador puede reseñar una tienda aunque no haya comprado; una reseña por comprador y tienda, editable.
+- Tarjeta dorada de reputación debajo de la cabecera de la tienda.
+- Sección Reputación del Seller Center muestra puntuación y cantidad de reseñas.
+- Catálogo móvil de tienda pública: 3 productos por fila con imágenes más grandes.
+- Persistencia de reseñas en archivo central y respaldo R2 cuando está configurado.
+- No se modifican las rutas ni el flujo existente de sincronización de pedidos/productos.

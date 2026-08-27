@@ -47,6 +47,9 @@ namespace NexoMarket.Admin
         private Panel _newOrderAlertPanel;
         private Label _newOrderAlertLabel;
         private Timer _newOrderAlertTimer;
+        private Timer _newOrderBlinkTimer;
+        private int _newOrderBlinkTicks;
+        private int _newOrderBeepCount;
 
         private sealed class CartLine
         {
@@ -91,7 +94,6 @@ namespace NexoMarket.Admin
             {
                 if (IsDisposed) return;
                 if (InvokeRequired) { BeginInvoke(new Action(HandleNewCentralOrder)); return; }
-                try { SystemSounds.Exclamation.Play(); } catch { try { Console.Beep(880, 180); } catch { } }
                 if (_newOrderAlertPanel != null)
                 {
                     _newOrderAlertLabel.Text = "🔴  NUEVO PEDIDO RECIBIDO  ·  Revisá Pedidos nuevos";
@@ -99,6 +101,12 @@ namespace NexoMarket.Admin
                     _newOrderAlertPanel.BringToFront();
                     _newOrderAlertTimer.Stop();
                     _newOrderAlertTimer.Start();
+                    _newOrderBlinkTicks = 0;
+                    _newOrderBeepCount = 0;
+                    _newOrderBlinkTimer.Stop();
+                    _newOrderBlinkTimer.Start();
+                    try { SystemSounds.Exclamation.Play(); } catch { try { Console.Beep(880, 180); } catch { } }
+                    _newOrderBeepCount = 1;
                 }
                 if (!string.Equals(_currentPage, "Pedidos nuevos", StringComparison.OrdinalIgnoreCase))
                 {
@@ -155,6 +163,23 @@ namespace NexoMarket.Admin
             _newOrderAlertPanel.BringToFront();
             _newOrderAlertTimer = new Timer { Interval = 10000 };
             _newOrderAlertTimer.Tick += delegate { _newOrderAlertTimer.Stop(); if (!IsDisposed) _newOrderAlertPanel.Visible = false; };
+            _newOrderBlinkTimer = new Timer { Interval = 500 };
+            _newOrderBlinkTimer.Tick += delegate
+            {
+                if (IsDisposed || _newOrderAlertPanel == null) { _newOrderBlinkTimer.Stop(); return; }
+                _newOrderBlinkTicks++;
+                _newOrderAlertPanel.Visible = !_newOrderAlertPanel.Visible;
+                if (_newOrderBlinkTicks % 2 == 1 && _newOrderBeepCount < 10)
+                {
+                    try { SystemSounds.Exclamation.Play(); } catch { try { Console.Beep(880, 180); } catch { } }
+                    _newOrderBeepCount++;
+                }
+                if (_newOrderBlinkTicks >= 20)
+                {
+                    _newOrderBlinkTimer.Stop();
+                    _newOrderAlertPanel.Visible = true;
+                }
+            };
             // Estructura estable: barra lateral + host principal. Cada página vive
             // exclusivamente dentro de _content para evitar solapamientos por Z-Order.
             _sidebar = new TexturedPanel
