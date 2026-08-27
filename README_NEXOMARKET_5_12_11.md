@@ -1,4 +1,4 @@
-# NexoMarket 5.12.11
+# NexoMarket 5.12.13
 
 ## Corrección crítica: vinculación de pedidos comprador → vendedor
 
@@ -24,4 +24,4 @@ El Seller Center Web considera un pedido perteneciente a su cuenta si coincide p
 Los pedidos anteriores siguen siendo visibles por `StoreId`.
 
 ### Versión
-`5.12.11`
+`5.12.13`

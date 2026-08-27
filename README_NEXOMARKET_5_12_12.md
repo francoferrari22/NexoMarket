@@ -1,4 +1,4 @@
-# NexoMarket 5.12.12
+# NexoMarket 5.12.13
 
 ## Corrección estructural del circuito comprador -> vendedor
 
@@ -11,4 +11,4 @@ Se mantiene `/api/orders/create` como alias de compatibilidad.
 
 Se conserva el SuperAdmin completo. Se elimina únicamente el panel/herramientas Windows heredadas y el instalador del panel Windows.
 
-Versión: 5.12.12
+Versión: 5.12.13

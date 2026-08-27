@@ -302,7 +302,7 @@ namespace NexoMarket.CentralServer
                         string body = Body(request); string path = target; string query = ""; int q = path.IndexOf('?');
                         if (q >= 0) { query = path.Substring(q + 1); path = path.Substring(0, q); }
                         if (path == "/health" || path == "/healt") { Write(stream, 200, "text/plain", "NexoMarket Central OK\n"); return; }
-                        if (path == "/api/version" && method == "GET") { Write(stream, 200, "application/json; charset=utf-8", "{\"version\":\"5.12.12\",\"ordersResolver\":\"product-evidence-recovery\",\"proofResolver\":\"same-product-evidence-recovery\"}"); return; }
+                        if (path == "/api/version" && method == "GET") { Write(stream, 200, "application/json; charset=utf-8", "{\"version\":\"5.12.13\",\"ordersResolver\":\"product-evidence-recovery\",\"proofResolver\":\"same-product-evidence-recovery\"}"); return; }
                         if (path.StartsWith("/media/", StringComparison.OrdinalIgnoreCase) && method == "GET") { ServeMedia(stream, path.Substring(7)); return; }
                         if (path == "/api/central/status" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", CentralDatabaseStatus()); return; }
                         if (path == "/api/admin/stores" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", AdminStores(HeaderValue(request,"X-Nexo-Admin-Key"))); return; }
@@ -1434,12 +1434,33 @@ namespace NexoMarket.CentralServer
                 if(store==null) return "ERROR|seller_binding";
                 string storeId=NormalizeStoreId(S(store,"StoreId"));
                 if(string.IsNullOrWhiteSpace(storeId)) return "ERROR|seller_binding";
+                // La tienda es la identidad de enrutamiento obligatoria del pedido.
+                // La cuenta vendedora es un vínculo adicional, nunca una condición
+                // que pueda impedir una compra válida. En instalaciones antiguas
+                // puede existir la tienda y su catálogo pero faltar la fila de cuenta
+                // en PostgreSQL; el Seller Center sigue pudiendo recibir por StoreId.
                 CentralUser seller=FindSellerByStore(storeId);
-                if(seller==null || !seller.Active || !string.Equals(seller.Role,"seller",StringComparison.OrdinalIgnoreCase)) return "ERROR|seller_account_not_found";
+                if(seller!=null && seller.Active && string.Equals(seller.Role,"seller",StringComparison.OrdinalIgnoreCase))
+                {
+                    f["sellerAccountId"]=seller.Id??"";
+                    f["sellerEmail"]=seller.Email??"";
+                    // Repara silenciosamente la cuenta central si solo existía en el
+                    // almacenamiento legado/local. El fallo de esta reparación NO
+                    // bloquea el pedido: StoreId sigue siendo la clave canónica.
+                    try
+                    {
+                        if(_database!=null && _database.Enabled && !string.IsNullOrWhiteSpace(seller.Email))
+                            _database.UpsertAccount(seller.Id,seller.Name,seller.Email,seller.Phone,"seller",storeId,seller.Salt,seller.PasswordHash,seller.CreatedAt);
+                    }catch{}
+                }
+                else
+                {
+                    f["sellerAccountId"]="";
+                    f["sellerEmail"]="";
+                    Console.Error.WriteLine("[NexoMarket] ORDER_SELLER_ACCOUNT_MISSING storeId='"+storeId+"' — se enruta por StoreId");
+                }
                 // La identidad canónica queda fijada antes de crear el pedido.
                 f["storeId"]=storeId;
-                f["sellerAccountId"]=seller.Id??"";
-                f["sellerEmail"]=seller.Email??"";
             }
             return CreateOrder(f);
         }
@@ -1558,7 +1579,27 @@ namespace NexoMarket.CentralServer
             string sellerAccountId=Get(f,"sellerAccountId").Trim();
             string sellerEmail=Get(f,"sellerEmail").Trim();
             if(orderSeller!=null){ if(string.IsNullOrWhiteSpace(sellerAccountId)) sellerAccountId=orderSeller.Id??""; if(string.IsNullOrWhiteSpace(sellerEmail)) sellerEmail=orderSeller.Email??""; }
-            lock(_sync){XDocument d=LoadFile(_ordersFile,"NexoMarketOrders","Orders");XElement e=new XElement("Order",new XElement("CentralOrderId",centralId),new XElement("StoreId",storeId),new XElement("SellerAccountId",sellerAccountId),new XElement("SellerEmail",sellerEmail),new XElement("CustomerId",Get(f,"customerId")),new XElement("CustomerName",customerName),new XElement("CustomerEmail",Get(f,"customerEmail")),new XElement("Phone",Get(f,"phone")),new XElement("Fulfillment",fulfillment),new XElement("Address",address),new XElement("Notes",Get(f,"notes")),new XElement("NoPaymentProof",noPaymentProof?"1":"0"),new XElement("NoPaymentProofReason",noPaymentProofReason),new XElement("Status",string.IsNullOrWhiteSpace(Get(f,"status"))?"Pendiente":Get(f,"status")),new XElement("Total",total.ToString(System.Globalization.CultureInfo.InvariantCulture)),new XElement("CouponCode",couponCode),new XElement("CouponDiscount",couponDiscount),new XElement("CouponConsumed",string.IsNullOrWhiteSpace(couponCode)?"0":"1"),new XElement("PaymentMethod",Get(f,"paymentMethod")),new XElement("PaymentStatus",string.IsNullOrWhiteSpace(Get(f,"paymentStatus"))?"Pendiente":Get(f,"paymentStatus")),new XElement("PaymentReference",Get(f,"paymentReference")),new XElement("PaymentProofPath",paymentProofPath),new XElement("ShippingCost",Get(f,"shippingCost")),new XElement("TrackingNumber",Get(f,"trackingNumber")),new XElement("Carrier",Get(f,"carrier")),new XElement("ItemsJson",Get(f,"itemsJson")),new XElement("BuyerMessage",Get(f,"buyerMessage")),new XElement("CreatedAt",now),new XElement("Ack", "0")); d.Root.Element("Orders").Add(e);SaveDoc(_ordersFile,d);}
+            XDocument orderDocument;
+            lock(_sync)
+            {
+                XDocument d=LoadFile(_ordersFile,"NexoMarketOrders","Orders");
+                XElement e=new XElement("Order",new XElement("CentralOrderId",centralId),new XElement("StoreId",storeId),new XElement("SellerAccountId",sellerAccountId),new XElement("SellerEmail",sellerEmail),new XElement("CustomerId",Get(f,"customerId")),new XElement("CustomerName",customerName),new XElement("CustomerEmail",Get(f,"customerEmail")),new XElement("Phone",Get(f,"phone")),new XElement("Fulfillment",fulfillment),new XElement("Address",address),new XElement("Notes",Get(f,"notes")),new XElement("NoPaymentProof",noPaymentProof?"1":"0"),new XElement("NoPaymentProofReason",noPaymentProofReason),new XElement("Status",string.IsNullOrWhiteSpace(Get(f,"status"))?"Pendiente":Get(f,"status")),new XElement("Total",total.ToString(System.Globalization.CultureInfo.InvariantCulture)),new XElement("CouponCode",couponCode),new XElement("CouponDiscount",couponDiscount),new XElement("CouponConsumed",string.IsNullOrWhiteSpace(couponCode)?"0":"1"),new XElement("PaymentMethod",Get(f,"paymentMethod")),new XElement("PaymentStatus",string.IsNullOrWhiteSpace(Get(f,"paymentStatus"))?"Pendiente":Get(f,"paymentStatus")),new XElement("PaymentReference",Get(f,"paymentReference")),new XElement("PaymentProofPath",paymentProofPath),new XElement("ShippingCost",Get(f,"shippingCost")),new XElement("TrackingNumber",Get(f,"trackingNumber")),new XElement("Carrier",Get(f,"carrier")),new XElement("ItemsJson",Get(f,"itemsJson")),new XElement("BuyerMessage",Get(f,"buyerMessage")),new XElement("CreatedAt",now),new XElement("Ack", "0"));
+                d.Root.Element("Orders").Add(e);
+                orderDocument=new XDocument(d);
+                SaveDoc(_ordersFile,d);
+            }
+            // En un entorno web multi-instancia, PostgreSQL es la fuente de verdad.
+            // Nunca devolvemos "OK" si la persistencia central del pedido falló.
+            if(_database!=null && _database.Enabled)
+            {
+                bool persisted=false;
+                try { persisted=_database.SaveOrdersDocument(orderDocument.ToString(SaveOptions.None)); } catch { persisted=false; }
+                if(!persisted)
+                {
+                    Console.Error.WriteLine("[NexoMarket] ORDER_CENTRAL_PERSISTENCE_FAILED id='"+centralId+"' storeId='"+storeId+"'");
+                    return "ERROR|order_persistence_failed";
+                }
+            }
             string result="OK|"+centralId+"|"+now+"|"+total.ToString(System.Globalization.CultureInfo.InvariantCulture);
             SaveIdempotency(idempotencyKey,result);
             Audit("order_created",storeId,Get(f,"customerEmail"),centralId,"total="+total.ToString(CultureInfo.InvariantCulture));
