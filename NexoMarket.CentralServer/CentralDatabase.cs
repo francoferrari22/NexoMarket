@@ -363,6 +363,26 @@ ON CONFLICT(central_order_id) DO UPDATE SET store_id=EXCLUDED.store_id,seller_ac
             if(!Enabled||string.IsNullOrWhiteSpace(email))return null;
             try{using(NpgsqlConnection c=Open()){EnsureInitialized(c);using(NpgsqlCommand cmd=c.CreateCommand()){cmd.CommandText="SELECT account_id,name,email,phone,role,store_id,salt,password_hash,created_at,active,trial_expires_at,commission_rate FROM nexomarket_accounts WHERE lower(email)=lower(@email) LIMIT 1";cmd.Parameters.AddWithValue("email",email.Trim());using(NpgsqlDataReader r=cmd.ExecuteReader()){if(!r.Read())return null;return new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){{"id",r.GetString(0)},{"name",r.GetString(1)},{"email",r.GetString(2)},{"phone",r.GetString(3)},{"role",r.GetString(4)},{"storeId",r.GetString(5)},{"salt",r.GetString(6)},{"passwordHash",r.GetString(7)},{"createdAt",r.GetDateTime(8).ToUniversalTime().ToString("o")},{"active",r.GetBoolean(9)?"1":"0"},{"trialExpiresAt",r.IsDBNull(10)?"":r.GetDateTime(10).ToUniversalTime().ToString("o")},{"commissionRate",r.IsDBNull(11)?"0":r.GetDecimal(11).ToString("0.####",System.Globalization.CultureInfo.InvariantCulture)}};}}}}catch{return null;}
         }
+        public bool SetAccountStore(string email, string storeId)
+        {
+            if(!Enabled || string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(storeId)) return false;
+            try
+            {
+                using(NpgsqlConnection c=Open())
+                {
+                    EnsureInitialized(c);
+                    using(NpgsqlCommand cmd=c.CreateCommand())
+                    {
+                        cmd.CommandText="UPDATE nexomarket_accounts SET store_id=@store, updated_at=NOW() WHERE lower(email)=lower(@email) AND role='seller'";
+                        cmd.Parameters.AddWithValue("email",email.Trim());
+                        cmd.Parameters.AddWithValue("store",storeId.Trim());
+                        return cmd.ExecuteNonQuery()>0;
+                    }
+                }
+            }
+            catch { return false; }
+        }
+
         public Dictionary<string,string> GetSellerByStore(string storeId)
         {
             if(!Enabled||string.IsNullOrWhiteSpace(storeId))return null;
