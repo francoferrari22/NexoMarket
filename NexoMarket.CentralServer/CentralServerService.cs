@@ -15,7 +15,7 @@ namespace NexoMarket.CentralServer
     /// <summary>
     /// Directorio central liviano, sin IIS ni dependencias externas.
     /// Recibe tiendas por StoreId y sirve la página principal del marketplace.
-    /// Está pensado para .NET 8 y ejecución multiplataforma (Web/Linux/Render).
+    /// Está pensado para .NET 8 y ejecución multiplataforma (Windows/Linux/Render).
     /// </summary>
     public sealed class CentralServerService : IDisposable
     {
@@ -79,33 +79,20 @@ namespace NexoMarket.CentralServer
 
         private void MigrateLegacyAccountsToPostgres()
         {
-            if(_database==null || !_database.Enabled) return;
+            if(_database==null||!_database.Enabled)return;
             try
             {
                 lock(_sync)
                 {
-                    XDocument d=LoadFile(_accountsFile,"NexoMarketAccounts","Users");
-                    XElement users=d.Root==null?null:d.Root.Element("Users");
-                    if(users==null) return;
+                    XDocument d=LoadFile(_accountsFile,"NexoMarketAccounts","Users"); XElement users=d.Root.Element("Users");
+                    if(users==null)return;
                     foreach(XElement e in users.Elements("User"))
                     {
-                        string email=S(e,"Email").Trim(); string role=S(e,"Role").Trim().ToLowerInvariant(); string storeId=NormalizeStoreId(S(e,"StoreId"));
-                        if(email.Length==0) continue;
-                        Dictionary<string,string> db=_database.GetAccount(email);
-                        if(db==null) _database.UpsertAccount(S(e,"Id"),S(e,"Name"),email,S(e,"Phone"),S(e,"Role"),storeId,S(e,"Salt"),S(e,"PasswordHash"),S(e,"CreatedAt"));
-                        else if(role=="seller" && storeId.Length>0)
-                        {
-                            string dbStore=NormalizeStoreId(db.ContainsKey("storeId")?db["storeId"]:"");
-                            if(!string.Equals(dbStore,storeId,StringComparison.OrdinalIgnoreCase))
-                            {
-                                XElement st=_doc.Root==null?null:_doc.Root.Element("Stores")==null?null:_doc.Root.Element("Stores").Elements("Store").FirstOrDefault(x=>string.Equals(NormalizeStoreId(S(x,"StoreId")),storeId,StringComparison.OrdinalIgnoreCase));
-                                if(st!=null) _database.SetAccountStore(email,storeId);
-                            }
-                        }
+                        string email=S(e,"Email"); if(string.IsNullOrWhiteSpace(email)||_database.GetAccount(email)!=null)continue;
+                        _database.UpsertAccount(S(e,"Id"),S(e,"Name"),email,S(e,"Phone"),S(e,"Role"),S(e,"StoreId"),S(e,"Salt"),S(e,"PasswordHash"),S(e,"CreatedAt"));
                     }
                 }
-            }
-            catch(Exception ex){Console.Error.WriteLine("[NexoMarket] ACCOUNT_STORE_RECONCILE_FAILED "+ex.GetType().Name);}
+            }catch{}
         }
 
         public bool Start()
@@ -315,7 +302,6 @@ namespace NexoMarket.CentralServer
                         string body = Body(request); string path = target; string query = ""; int q = path.IndexOf('?');
                         if (q >= 0) { query = path.Substring(q + 1); path = path.Substring(0, q); }
                         if (path == "/health" || path == "/healt") { Write(stream, 200, "text/plain", "NexoMarket Central OK\n"); return; }
-                        if (path == "/api/version" && method == "GET") { Write(stream, 200, "application/json; charset=utf-8", "{\"version\":\"5.12.14\",\"ordersResolver\":\"canonical-seller-store-plus-central-orders\",\"proofResolver\":\"same-product-evidence-recovery\"}"); return; }
                         if (path.StartsWith("/media/", StringComparison.OrdinalIgnoreCase) && method == "GET") { ServeMedia(stream, path.Substring(7)); return; }
                         if (path == "/api/central/status" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", CentralDatabaseStatus()); return; }
                         if (path == "/api/admin/stores" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", AdminStores(HeaderValue(request,"X-Nexo-Admin-Key"))); return; }
@@ -378,7 +364,6 @@ namespace NexoMarket.CentralServer
                         if (path == "/api/products/publish" && method == "POST") { Write(stream, 200, "text/plain", PublishProduct(Form(body))); return; }
                         if (path == "/api/products/delete" && method == "POST") { Write(stream, 200, "text/plain", DeleteProduct(Form(body))); return; }
                         if (path == "/api/promotions/publish" && method == "POST") { Write(stream, 200, "text/plain", PublishPromotion(Form(body))); return; }
-                        if (path == "/api/promotions" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", PromotionLines(QueryValue(query, "storeId"), QueryValue(query, "syncKey"))); return; }
                         if (path == "/api/coupons/publish" && method == "POST") { Write(stream, 200, "text/plain", PublishCoupon(Form(body))); return; }
                         if (path == "/api/coupons" && method == "GET") { Write(stream, 200, "text/plain; charset=utf-8", CouponLines(QueryValue(query, "storeId"), QueryValue(query, "syncKey"))); return; }
                         if (path == "/api/catalog" && method == "GET") { Write(stream, 200, "application/json; charset=utf-8", CatalogJson(QueryValue(query, "storeId"))); return; }
@@ -392,8 +377,7 @@ namespace NexoMarket.CentralServer
                         if (path == "/api/order-proof/upload" && method == "POST") { Write(stream, 200, "text/plain; charset=utf-8", UploadOrderProof(Form(body))); return; }
                         if (path == "/api/reviews" && method == "GET") { Write(stream, 200, "application/json; charset=utf-8", ReviewsJson(QueryValue(query, "storeId"))); return; } if (path == "/api/coupon/validate" && method == "GET") { Write(stream, 200, "application/json; charset=utf-8", ValidateCouponJson(QueryValue(query, "storeId"), QueryValue(query, "code"))); return; }
                         if (path == "/api/reviews" && method == "POST") { Write(stream, 200, "text/plain; charset=utf-8", CreateReview(Form(body))); return; }
-                        if (path == "/api/cart/checkout" && method == "POST") { Write(stream, 200, "text/plain; charset=utf-8", CheckoutCart(Form(body))); return; }
-                        if (path == "/api/orders/create" && method == "POST") { Write(stream, 200, "text/plain; charset=utf-8", CheckoutCart(Form(body))); return; }
+                        if (path == "/api/orders/create" && method == "POST") { Write(stream, 200, "text/plain; charset=utf-8", CreateOrder(Form(body))); return; }
                         if (path == "/api/orders/payment" && method == "POST") { Write(stream, 200, "text/plain; charset=utf-8", UpdateOrderPayment(Form(body))); return; }
                         if (path == "/api/payments/webhook" && method == "POST") { Write(stream, 200, "text/plain; charset=utf-8", PaymentWebhook(request, body)); return; }
                         if (path == "/api/orders/cancel" && method == "POST") { Write(stream, 200, "text/plain; charset=utf-8", CancelOrder(Form(body))); return; }
@@ -531,8 +515,8 @@ namespace NexoMarket.CentralServer
                 XElement old = stores.Elements("Store").FirstOrDefault(x => string.Equals(S(x, "StoreId"), id, StringComparison.OrdinalIgnoreCase));
                 string existingKey = old == null ? "" : S(old, "SyncKey");
                 // Store ID is the canonical pairing identity. If the Web created the store
-                // first, keep Central's SyncKey; Web will learn it on the next connect.
-                // If Web created it first, its SyncKey is accepted. Never create a second store.
+                // first, keep Central's SyncKey; Windows will learn it on the next connect.
+                // If Windows created it first, its SyncKey is accepted. Never create a second store.
                 if (old != null && !string.IsNullOrWhiteSpace(existingKey)) syncKey = existingKey;
                 string active = Get(f, "active"); if (active != "0") active = "1";
                 string activity = old == null ? DateTime.UtcNow.ToString("o") : S(old, "LastActivityAt");
@@ -555,9 +539,9 @@ namespace NexoMarket.CentralServer
 
         /// <summary>
         /// Bootstrap seguro por StoreId. El StoreId es la credencial de emparejamiento:
-        /// no se solicita correo ni contraseña al programa Web. Si la tienda todavía
+        /// no se solicita correo ni contraseña al programa Windows. Si la tienda todavía
         /// no fue registrada en Central, se crea con la clave de sincronización enviada
-        /// por la instalación Web. Si ya existe, nunca reemplaza una clave distinta.
+        /// por la instalación Windows. Si ya existe, nunca reemplaza una clave distinta.
         /// </summary>
         private string ClaimStore(Dictionary<string,string> f)
         {
@@ -571,9 +555,9 @@ namespace NexoMarket.CentralServer
                 if (existing != null)
                 {
                     string existingKey = S(existing, "SyncKey");
-                    // El Store ID es el código de emparejamiento común. Si Web y Web
+                    // El Store ID es el código de emparejamiento común. Si Windows y Web
                     // llegan con claves internas diferentes, Central conserva la clave canónica
-                    // de la tienda y Web la adoptará al conectar. No se crean dos tiendas.
+                    // de la tienda y Windows la adoptará al conectar. No se crean dos tiendas.
                     existing.SetElementValue("SyncKey", syncKey);
                     if (string.IsNullOrWhiteSpace(S(existing, "Name"))) existing.SetElementValue("Name", string.IsNullOrWhiteSpace(Get(f,"name")) ? "Tienda NexoMarket" : Get(f,"name"));
                     if (S(existing,"Active") != "1") existing.SetElementValue("Active", "1");
@@ -632,33 +616,6 @@ namespace NexoMarket.CentralServer
         private XDocument LoadFile(string file, string rootName, string childName)
         {
             string dataset = DatasetForFile(file);
-
-            // WEB-FIRST / MULTI-INSTANCE: nunca confiamos únicamente en el disco local.
-            // Render puede atender comprador y vendedor en procesos/contenedores distintos.
-            // Todos los cambios de pedidos se escriben en R2 como respaldo externo; para
-            // el dataset de pedidos lo usamos como fuente inmediata y, si no existe,
-            // PostgreSQL. Esto evita que el comprador cree el pedido en una instancia y
-            // el Seller Center consulte otra instancia con un XML local viejo.
-            string r2Key = "data/" + Path.GetFileName(file);
-            if (_r2 != null && _r2.Enabled)
-            {
-                try
-                {
-                    string external = _r2.GetText(r2Key);
-                    if (!string.IsNullOrWhiteSpace(external))
-                    {
-                        try
-                        {
-                            XDocument parsed = XDocument.Parse(external);
-                            File.WriteAllText(file, external, Encoding.UTF8);
-                            return parsed;
-                        }
-                        catch { }
-                    }
-                }
-                catch { }
-            }
-
             if (_database != null && _database.Enabled)
             {
                 string central = _database.GetDocument(dataset);
@@ -671,13 +628,11 @@ namespace NexoMarket.CentralServer
                 {
                     XDocument d = XDocument.Load(file);
                     if (_database != null && _database.Enabled) _database.SaveDocument(dataset, d.ToString(SaveOptions.None));
-                    if (_r2 != null && _r2.Enabled) _r2.PutText(r2Key, d.ToString(SaveOptions.None));
                     return d;
                 }
             } catch { }
             XDocument fresh = new XDocument(new XElement(rootName, new XElement(childName)));
             if (_database != null && _database.Enabled) _database.SaveDocument(dataset, fresh.ToString(SaveOptions.None));
-            if (_r2 != null && _r2.Enabled) _r2.PutText(r2Key, fresh.ToString(SaveOptions.None));
             return fresh;
         }
 
@@ -700,7 +655,7 @@ namespace NexoMarket.CentralServer
             doc.Save(temp);
             if (File.Exists(file)) File.Delete(file);
             File.Move(temp, file);
-            if (_database != null && _database.Enabled) { string ds=DatasetForFile(file); _database.SaveDocument(ds, xml); if (ds=="orders") _database.SaveOrdersDocument(xml); }
+            if (_database != null && _database.Enabled) _database.SaveDocument(DatasetForFile(file), xml);
             if (_r2 != null && _r2.Enabled)
             {
                 string key = "data/" + Path.GetFileName(file);
@@ -915,24 +870,6 @@ namespace NexoMarket.CentralServer
                 if(old!=null)old.ReplaceWith(e);else d.Root.Element("Promotions").Add(e);SaveDoc(_catalogFile,d); } return "OK|promotion";
         }
 
-        private string PromotionLines(string storeId, string syncKey)
-        {
-            storeId=NormalizeStoreId(storeId);
-            if(storeId.Length==0 || !ValidateStoreSyncKey(storeId,syncKey)) return "ERROR|sync_key";
-            StringBuilder b=new StringBuilder();
-            lock(_sync)
-            {
-                XDocument d=LoadFile(_catalogFile,"NexoMarketCatalog","Products");
-                XElement root=d.Root==null?null:d.Root.Element("Promotions");
-                if(root==null)return "";
-                foreach(XElement x in root.Elements("Promotion").Where(x=>string.Equals(S(x,"StoreId"),storeId,StringComparison.OrdinalIgnoreCase)))
-                {
-                    b.Append("PROMOTION|").Append(Escape(S(x,"PromotionId"))).Append('|').Append(Escape(S(x,"Name"))).Append('|').Append(Escape(S(x,"ProductIds"))).Append('|').Append(Escape(S(x,"PromotionalPrice"))).Append('|').Append(Escape(S(x,"Active"))).Append('|').Append(Escape(S(x,"From"))).Append('|').Append(Escape(S(x,"To"))).Append('|').Append(Escape(S(x,"UpdatedAt"))).Append('\n');
-                }
-            }
-            return b.ToString();
-        }
-
         private string PublishCoupon(Dictionary<string,string> f)
         {
             string storeId=Get(f,"storeId").Trim(), couponId=Get(f,"couponId").Trim(), code=Get(f,"code").Trim().ToUpperInvariant();
@@ -943,7 +880,7 @@ namespace NexoMarket.CentralServer
                 XDocument d=LoadFile(_catalogFile,"NexoMarketCatalog","Products");
                 if(d.Root.Element("Coupons")==null)d.Root.Add(new XElement("Coupons"));
                 // Idempotencia por StoreId + CouponId, pero también por StoreId + Code.
-                // Web puede tener un Id local distinto al que nació en Seller Center;
+                // Windows puede tener un Id local distinto al que nació en Seller Center;
                 // en ese caso actualizamos el cupón central existente en lugar de duplicarlo.
                 XElement old=d.Root.Element("Coupons").Elements("Coupon").FirstOrDefault(x=>
                     S(x,"StoreId")==storeId &&
@@ -1010,106 +947,27 @@ namespace NexoMarket.CentralServer
             }
         }
 
-        private List<XElement> LoadOrdersForSeller(CentralUser u)
-        {
-            List<XElement> result=new List<XElement>();
-            if(u==null || !string.Equals(u.Role,"seller",StringComparison.OrdinalIgnoreCase)) return result;
-            string canonical=ResolveSellerCanonicalStore(u);
-            if(!string.IsNullOrWhiteSpace(canonical)) u.StoreId=canonical;
-            HashSet<string> seen=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if(_database!=null && _database.Enabled)
-            {
-                try
-                {
-                    foreach(string raw in _database.GetOrdersForSeller(NormalizeStoreId(u.StoreId),u.Id,u.Email))
-                    {
-                        try
-                        {
-                            XElement x=XElement.Parse(raw);
-                            string id=S(x,"CentralOrderId");
-                            if(id.Length==0 || !seen.Add(id)) continue;
-                            // La consulta SQL ya acota por tienda/cuenta/correo. Si el StoreId
-                            // del usuario estuvo desfasado, ResolveSellerCanonicalStore lo repara
-                            // antes de llegar aquí. Conservamos una defensa final por identidad.
-                            if(OrderBelongsToSeller(x,u) ||
-                               string.Equals(NormalizeStoreId(S(x,"StoreId")),NormalizeStoreId(u.StoreId),StringComparison.OrdinalIgnoreCase) ||
-                               string.Equals(S(x,"SellerAccountId"),u.Id,StringComparison.OrdinalIgnoreCase) ||
-                               string.Equals(S(x,"SellerEmail"),u.Email,StringComparison.OrdinalIgnoreCase))
-                                result.Add(x);
-                            else seen.Remove(id);
-                        }
-                        catch { }
-                    }
-                }
-                catch { }
-            }
-            // Segundo canal de lectura: documento central de PostgreSQL.
-            // Esto permite recibir pedidos aunque la tabla de índice de pedidos esté desfasada.
-            if(_database!=null && _database.Enabled)
-            {
-                try
-                {
-                    string centralXml=_database.GetDocument("orders");
-                    if(!string.IsNullOrWhiteSpace(centralXml))
-                    {
-                        XDocument d=XDocument.Parse(centralXml);
-                        XElement root=d.Root==null?null:d.Root.Element("Orders");
-                        if(root!=null) foreach(XElement x in root.Elements("Order"))
-                        {
-                            string id=S(x,"CentralOrderId");
-                            if(id.Length==0 || seen.Contains(id)) continue;
-                            if(OrderBelongsToSeller(x,u)) { seen.Add(id); result.Add(new XElement(x)); }
-                        }
-                    }
-                }
-                catch { }
-            }
-            try
-            {
-                lock(_sync)
-                {
-                    XDocument d=LoadFile(_ordersFile,"NexoMarketOrders","Orders");
-                    XElement root=d.Root==null?null:d.Root.Element("Orders");
-                    if(root!=null) foreach(XElement x in root.Elements("Order"))
-                    {
-                        string id=S(x,"CentralOrderId");
-                        if(id.Length==0 || seen.Contains(id)) continue;
-                        if(OrderBelongsToSeller(x,u)) { seen.Add(id); result.Add(new XElement(x)); }
-                    }
-                }
-            }
-            catch { }
-            result.Sort((a,b)=>ParseUtcDate(S(b,"CreatedAt")).CompareTo(ParseUtcDate(S(a,"CreatedAt"))));
-            return result;
-        }
-
         private void CentralSellerLive(NetworkStream stream, string cookie)
         {
-            CentralUser u=SessionUser(cookie);
-            if(u==null || !string.Equals(u.Role,"seller",StringComparison.OrdinalIgnoreCase))
+            CentralUser u = SessionUser(cookie);
+            if (u == null || u.Role != "seller") { Write(stream, 401, "application/json; charset=utf-8", "{\"error\":\"unauthorized\"}"); return; }
+            string catalog = CatalogLiveJson(u.StoreId);
+            int pending = 0; DateTime latestOrder = DateTime.MinValue;
+            lock (_sync)
             {
-                Write(stream,401,"application/json; charset=utf-8","{\"error\":\"unauthorized\"}");
-                return;
+                XDocument od = LoadFile(_ordersFile, "NexoMarketOrders", "Orders");
+                XElement root = od.Root == null ? null : od.Root.Element("Orders");
+                if (root != null)
+                {
+                    foreach (XElement o in root.Elements("Order").Where(x => string.Equals(S(x, "StoreId"), u.StoreId, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        if (S(o, "Status") == "Pendiente") pending++;
+                        DateTime t = ParseUtcDate(S(o, "CreatedAt")); if (t > latestOrder) latestOrder = t;
+                    }
+                }
             }
-            List<XElement> orders=LoadOrdersForSeller(u);
-            int pending=orders.Count(x=>string.Equals(S(x,"Status"),"Pendiente",StringComparison.OrdinalIgnoreCase));
-            int unack=orders.Count(x=>string.Equals(S(x,"Status"),"Pendiente",StringComparison.OrdinalIgnoreCase)&&S(x,"Ack")!="1");
-            int delivery=orders.Count(x=>(string.Equals(S(x,"Fulfillment"),"Delivery",StringComparison.OrdinalIgnoreCase)||string.Equals(S(x,"Fulfillment"),"En reparto",StringComparison.OrdinalIgnoreCase))&&!string.Equals(S(x,"Status"),"Entregado",StringComparison.OrdinalIgnoreCase)&&!string.Equals(S(x,"Status"),"Cancelado",StringComparison.OrdinalIgnoreCase));
-            XElement latest=orders.Where(x=>string.Equals(S(x,"Status"),"Pendiente",StringComparison.OrdinalIgnoreCase)&&S(x,"Ack")!="1").OrderByDescending(x=>ParseUtcDate(S(x,"CreatedAt"))).FirstOrDefault();
-            StringBuilder b=new StringBuilder("{\"ok\":true");
-            b.Append(",\"storeId\":").Append(JsonString(NormalizeStoreId(u.StoreId)));
-            b.Append(",\"sellerAccountId\":").Append(JsonString(u.Id??""));
-            b.Append(",\"sellerEmail\":").Append(JsonString(u.Email??""));
-            b.Append(",\"pendingOrders\":").Append(pending.ToString(CultureInfo.InvariantCulture));
-            b.Append(",\"unacknowledgedOrders\":").Append(unack.ToString(CultureInfo.InvariantCulture));
-            b.Append(",\"deliveryOrders\":").Append(delivery.ToString(CultureInfo.InvariantCulture));
-            b.Append(",\"latestPendingId\":").Append(JsonString(latest==null?"":S(latest,"CentralOrderId")));
-            b.Append(",\"latestOrderAt\":").Append(JsonString(orders.Count==0?"":S(orders[0],"CreatedAt")));
-            b.Append(",\"updatedAt\":").Append(JsonString(DateTime.UtcNow.ToString("o")));
-            b.Append(",\"orders\":[");
-            for(int i=0;i<orders.Count;i++){if(i>0)b.Append(',');b.Append(OrderJson(orders[i]));}
-            b.Append("]}");
-            Write(stream,200,"application/json; charset=utf-8",b.ToString());
+            string extra = catalog.TrimEnd('}') + ",\"pendingOrders\":" + pending.ToString(CultureInfo.InvariantCulture) + ",\"latestOrderAt\":" + JsonString(latestOrder == DateTime.MinValue ? "" : latestOrder.ToString("o")) + "}";
+            Write(stream, 200, "application/json; charset=utf-8", extra);
         }
 
         private void EnsureOperationalFiles()
@@ -1484,110 +1342,20 @@ namespace NexoMarket.CentralServer
             return diff == 0;
         }
 
-        // NUEVO FLUJO WEB: carrito -> tienda -> cuenta vendedora -> pedido central.
-        // Este es el único punto de entrada del checkout del comprador. El endpoint
-        // antiguo /api/orders/create queda como alias para compatibilidad.
-        private string CheckoutCart(Dictionary<string,string> f)
-        {
-            string items=Get(f,"itemsJson")??"";
-            string requestedStore=Get(f,"storeId").Trim();
-            if(string.IsNullOrWhiteSpace(items)) return "ERROR|cart_empty";
-            lock(_sync)
-            {
-                string resolved=ResolveOrderStoreFromProductsLocked(items,requestedStore);
-                if(string.IsNullOrWhiteSpace(resolved)) return "ERROR|seller_binding";
-                XElement store=ResolveStoreIdentityLocked(resolved,Get(f,"storeSlug"));
-                if(store==null) store=RecoverStoreRegistryEntryLocked(resolved,Get(f,"storeSlug"));
-                if(store==null) return "ERROR|seller_binding";
-                string storeId=NormalizeStoreId(S(store,"StoreId"));
-                if(string.IsNullOrWhiteSpace(storeId)) return "ERROR|seller_binding";
-                // La tienda es la identidad de enrutamiento obligatoria del pedido.
-                // La cuenta vendedora es un vínculo adicional, nunca una condición
-                // que pueda impedir una compra válida. En instalaciones antiguas
-                // puede existir la tienda y su catálogo pero faltar la fila de cuenta
-                // en PostgreSQL; el Seller Center sigue pudiendo recibir por StoreId.
-                CentralUser seller=FindSellerByStore(storeId);
-                if(seller!=null && seller.Active && string.Equals(seller.Role,"seller",StringComparison.OrdinalIgnoreCase))
-                {
-                    f["sellerAccountId"]=seller.Id??"";
-                    f["sellerEmail"]=seller.Email??"";
-                    // Repara silenciosamente la cuenta central si solo existía en el
-                    // almacenamiento legado/local. El fallo de esta reparación NO
-                    // bloquea el pedido: StoreId sigue siendo la clave canónica.
-                    try
-                    {
-                        if(_database!=null && _database.Enabled && !string.IsNullOrWhiteSpace(seller.Email))
-                            _database.UpsertAccount(seller.Id,seller.Name,seller.Email,seller.Phone,"seller",storeId,seller.Salt,seller.PasswordHash,seller.CreatedAt);
-                    }catch{}
-                }
-                else
-                {
-                    f["sellerAccountId"]="";
-                    f["sellerEmail"]="";
-                    Console.Error.WriteLine("[NexoMarket] ORDER_SELLER_ACCOUNT_MISSING storeId='"+storeId+"' — se enruta por StoreId");
-                }
-                // La identidad canónica queda fijada antes de crear el pedido.
-                f["storeId"]=storeId;
-            }
-            return CreateOrder(f);
-        }
-
         private string CreateOrder(Dictionary<string,string> f)
         {
             lock (_orderCreateGate)
             {
-            string rawStoreId=(Get(f,"storeId")??"").Trim();
-            string storeSlug=(Get(f,"storeSlug")??"").Trim();
-            string storeId=NormalizeStoreId(rawStoreId);
-            if(string.IsNullOrWhiteSpace(storeId) && string.IsNullOrWhiteSpace(storeSlug)) return "ERROR|storeId";
-            string itemsJson = Get(f,"itemsJson");
+            string storeId=NormalizeStoreId(Get(f,"storeId")); if(string.IsNullOrWhiteSpace(storeId)) return "ERROR|storeId";
             string idempotencyKey=Get(f,"idempotencyKey").Trim();
             string existingResult=GetIdempotentOrder(idempotencyKey);
             if(!string.IsNullOrWhiteSpace(existingResult)) return existingResult;
-
-            // IMPORTANTE: el pedido y la página pública deben resolver la tienda con
-            // exactamente la misma lógica. Las versiones anteriores tenían varias vías
-            // de resolución repartidas por el código y eso podía producir ERROR|store
-            // aun cuando el catálogo público seguía siendo visible.
             lock(_sync)
             {
-                // FUENTE DE VERDAD DEL PEDIDO: los productos que el cliente realmente
-                // puso en el carrito. Si el StoreId/slug del HTML quedó viejo, no
-                // debemos rechazar una compra válida: podemos identificar el local
-                // directamente desde ProductId -> StoreId en el catálogo central.
-                string evidenceStoreId=ResolveOrderStoreFromProductsLocked(itemsJson,rawStoreId);
-                if(!string.IsNullOrWhiteSpace(evidenceStoreId))
-                {
-                    string requested=NormalizeStoreId(rawStoreId);
-                    if(string.IsNullOrWhiteSpace(requested) || !string.Equals(requested,evidenceStoreId,StringComparison.OrdinalIgnoreCase))
-                    {
-                        Console.Error.WriteLine("[NexoMarket] ORDER_STORE_CORRECTED_FROM_PRODUCTS requested='"+rawStoreId+"' resolved='"+evidenceStoreId+"'");
-                        rawStoreId=evidenceStoreId;
-                        storeId=evidenceStoreId;
-                    }
-                }
-
-                XElement store=ResolveStoreIdentityLocked(rawStoreId,storeSlug);
-                if(store==null && !string.IsNullOrWhiteSpace(evidenceStoreId))
-                    store=ResolveStoreIdentityLocked(evidenceStoreId,"");
-                if(store==null)
-                {
-                    // Última recuperación: si Stores se perdió pero catálogo/cuenta
-                    // todavía demuestran que la tienda existe, reconstruimos el registro.
-                    store=RecoverStoreRegistryEntryLocked(string.IsNullOrWhiteSpace(evidenceStoreId)?rawStoreId:evidenceStoreId,storeSlug);
-                }
-                if(store==null)
-                {
-                    Console.Error.WriteLine("[NexoMarket] ORDER_STORE_RESOLUTION_FAILED storeId='"+rawStoreId+"' slug='"+storeSlug+"' productEvidence='"+evidenceStoreId+"'");
-                    return "ERROR|store";
-                }
-                storeId=NormalizeStoreId(S(store,"StoreId"));
-                if(string.IsNullOrWhiteSpace(storeId)) return "ERROR|store";
+                XElement store=_doc.Root.Element("Stores").Elements("Store").FirstOrDefault(x=>S(x,"StoreId")==storeId);
+                if(store==null) return "ERROR|store";
                 ApplyAutomaticStoreSchedule(store);
-                // Solo Active=0 significa cerrada. Datos históricos sin Active siguen
-                // siendo pedidos válidos y se normalizan a Active=1.
-                if(S(store,"Active")=="0") return "ERROR|store_closed";
-                if(S(store,"Active")!="1") { store.SetElementValue("Active","1"); Save(); }
+                if(S(store,"Active")!="1") return "ERROR|store_closed";
                 if(IsStorePlatformBlocked(storeId)) return "ERROR|platform_blocked";
             }
             decimal total; if(!decimal.TryParse(Get(f,"total"),System.Globalization.NumberStyles.Any,System.Globalization.CultureInfo.InvariantCulture,out total) || total<=0m) return "ERROR|total";
@@ -1605,6 +1373,7 @@ namespace NexoMarket.CentralServer
                     decimal discount=pct>0m?Math.Round(total*pct/100m,2):fixedAmount; discount=Math.Min(total,Math.Max(0m,discount)); total-=discount; couponDiscount=discount.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 }
             }
+            string itemsJson = Get(f,"itemsJson");
             string paymentProofPath = Get(f,"paymentProofPath").Trim();
             bool noPaymentProof = Get(f,"noPaymentProof") == "1";
             string noPaymentProofReason = Get(f,"noPaymentProofReason").Trim();
@@ -1642,31 +1411,7 @@ namespace NexoMarket.CentralServer
                 }
             }
             string centralId=Guid.NewGuid().ToString("N"); string now=DateTime.UtcNow.ToString("o");
-            CentralUser orderSeller=FindSellerByStore(storeId);
-            string sellerAccountId=Get(f,"sellerAccountId").Trim();
-            string sellerEmail=Get(f,"sellerEmail").Trim();
-            if(orderSeller!=null){ if(string.IsNullOrWhiteSpace(sellerAccountId)) sellerAccountId=orderSeller.Id??""; if(string.IsNullOrWhiteSpace(sellerEmail)) sellerEmail=orderSeller.Email??""; }
-            XDocument orderDocument;
-            lock(_sync)
-            {
-                XDocument d=LoadFile(_ordersFile,"NexoMarketOrders","Orders");
-                XElement e=new XElement("Order",new XElement("CentralOrderId",centralId),new XElement("StoreId",storeId),new XElement("SellerAccountId",sellerAccountId),new XElement("SellerEmail",sellerEmail),new XElement("CustomerId",Get(f,"customerId")),new XElement("CustomerName",customerName),new XElement("CustomerEmail",Get(f,"customerEmail")),new XElement("Phone",Get(f,"phone")),new XElement("Fulfillment",fulfillment),new XElement("Address",address),new XElement("Notes",Get(f,"notes")),new XElement("NoPaymentProof",noPaymentProof?"1":"0"),new XElement("NoPaymentProofReason",noPaymentProofReason),new XElement("Status",string.IsNullOrWhiteSpace(Get(f,"status"))?"Pendiente":Get(f,"status")),new XElement("Total",total.ToString(System.Globalization.CultureInfo.InvariantCulture)),new XElement("CouponCode",couponCode),new XElement("CouponDiscount",couponDiscount),new XElement("CouponConsumed",string.IsNullOrWhiteSpace(couponCode)?"0":"1"),new XElement("PaymentMethod",Get(f,"paymentMethod")),new XElement("PaymentStatus",string.IsNullOrWhiteSpace(Get(f,"paymentStatus"))?"Pendiente":Get(f,"paymentStatus")),new XElement("PaymentReference",Get(f,"paymentReference")),new XElement("PaymentProofPath",paymentProofPath),new XElement("ShippingCost",Get(f,"shippingCost")),new XElement("TrackingNumber",Get(f,"trackingNumber")),new XElement("Carrier",Get(f,"carrier")),new XElement("ItemsJson",Get(f,"itemsJson")),new XElement("BuyerMessage",Get(f,"buyerMessage")),new XElement("CreatedAt",now),new XElement("Ack", "0"));
-                d.Root.Element("Orders").Add(e);
-                orderDocument=new XDocument(d);
-                SaveDoc(_ordersFile,d);
-            }
-            // En un entorno web multi-instancia, PostgreSQL es la fuente de verdad.
-            // Nunca devolvemos "OK" si la persistencia central del pedido falló.
-            if(_database!=null && _database.Enabled)
-            {
-                bool persisted=false;
-                try { persisted=_database.SaveOrdersDocument(orderDocument.ToString(SaveOptions.None)); } catch { persisted=false; }
-                if(!persisted)
-                {
-                    Console.Error.WriteLine("[NexoMarket] ORDER_CENTRAL_PERSISTENCE_FAILED id='"+centralId+"' storeId='"+storeId+"'");
-                    return "ERROR|order_persistence_failed";
-                }
-            }
+            lock(_sync){XDocument d=LoadFile(_ordersFile,"NexoMarketOrders","Orders");XElement e=new XElement("Order",new XElement("CentralOrderId",centralId),new XElement("StoreId",storeId),new XElement("CustomerId",Get(f,"customerId")),new XElement("CustomerName",customerName),new XElement("CustomerEmail",Get(f,"customerEmail")),new XElement("Phone",Get(f,"phone")),new XElement("Fulfillment",fulfillment),new XElement("Address",address),new XElement("Notes",Get(f,"notes")),new XElement("NoPaymentProof",noPaymentProof?"1":"0"),new XElement("NoPaymentProofReason",noPaymentProofReason),new XElement("Status",string.IsNullOrWhiteSpace(Get(f,"status"))?"Pendiente":Get(f,"status")),new XElement("Total",total.ToString(System.Globalization.CultureInfo.InvariantCulture)),new XElement("CouponCode",couponCode),new XElement("CouponDiscount",couponDiscount),new XElement("CouponConsumed",string.IsNullOrWhiteSpace(couponCode)?"0":"1"),new XElement("PaymentMethod",Get(f,"paymentMethod")),new XElement("PaymentStatus",string.IsNullOrWhiteSpace(Get(f,"paymentStatus"))?"Pendiente":Get(f,"paymentStatus")),new XElement("PaymentReference",Get(f,"paymentReference")),new XElement("PaymentProofPath",paymentProofPath),new XElement("ShippingCost",Get(f,"shippingCost")),new XElement("TrackingNumber",Get(f,"trackingNumber")),new XElement("Carrier",Get(f,"carrier")),new XElement("ItemsJson",Get(f,"itemsJson")),new XElement("BuyerMessage",Get(f,"buyerMessage")),new XElement("CreatedAt",now),new XElement("Ack", "0")); d.Root.Element("Orders").Add(e);SaveDoc(_ordersFile,d);}
             string result="OK|"+centralId+"|"+now+"|"+total.ToString(System.Globalization.CultureInfo.InvariantCulture);
             SaveIdempotency(idempotencyKey,result);
             Audit("order_created",storeId,Get(f,"customerEmail"),centralId,"total="+total.ToString(CultureInfo.InvariantCulture));
@@ -1681,34 +1426,6 @@ namespace NexoMarket.CentralServer
 
         }
 
-
-        private string ResolveOrderStoreFromProductsLocked(string itemsJson,string requestedStoreId)
-        {
-            if(string.IsNullOrWhiteSpace(itemsJson)) return "";
-            HashSet<string> ids=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach(Match m in Regex.Matches(itemsJson,@"""id""\s*:\s*""([^""]+)""",RegexOptions.IgnoreCase))
-            {
-                string id=m.Groups[1].Value;
-                if(!string.IsNullOrWhiteSpace(id) && !id.StartsWith("promo:",StringComparison.OrdinalIgnoreCase)) ids.Add(id);
-            }
-            if(ids.Count==0) return "";
-            XDocument d=LoadFile(_catalogFile,"NexoMarketCatalog","Products");
-            XElement products=d.Root==null?null:d.Root.Element("Products");
-            if(products==null) return "";
-            HashSet<string> stores=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach(string id in ids)
-            {
-                XElement p=products.Elements("Product").FirstOrDefault(x=>string.Equals(S(x,"ProductId"),id,StringComparison.OrdinalIgnoreCase) && S(x,"Deleted")!="1");
-                if(p==null) continue;
-                string sid=NormalizeStoreId(S(p,"StoreId"));
-                if(!string.IsNullOrWhiteSpace(sid)) stores.Add(sid);
-            }
-            if(stores.Count!=1) return "";
-            string resolved=stores.First();
-            // Si hay evidencia inequívoca en el carrito, esa identidad tiene prioridad
-            // sobre un StoreId viejo enviado por una página previamente cacheada.
-            return resolved;
-        }
 
         private string ValidateAndReserveStock(string storeId, string itemsJson)
         {
@@ -1728,15 +1445,15 @@ namespace NexoMarket.CentralServer
                 XElement products=d.Root.Element("Products");
                 foreach(KeyValuePair<string,int> pair in requested)
                 {
-                    XElement p=products==null?null:products.Elements("Product").FirstOrDefault(x=>string.Equals(NormalizeStoreId(S(x,"StoreId")),storeId,StringComparison.OrdinalIgnoreCase)&&string.Equals(S(x,"ProductId"),pair.Key,StringComparison.OrdinalIgnoreCase)&&S(x,"Deleted")!="1");
-                    if(p==null)return "ERROR|product_not_found|"+Escape(pair.Key);
+                    XElement p=products==null?null:products.Elements("Product").FirstOrDefault(x=>S(x,"StoreId")==storeId&&S(x,"ProductId")==pair.Key);
+                    if(p==null)continue;
                     int stock; if(!int.TryParse(S(p,"Stock"),out stock))stock=0;
                     if(stock<pair.Value)return "ERROR|stock|"+S(p,"Name")+"|"+stock;
                 }
                 foreach(KeyValuePair<string,int> pair in requested)
                 {
-                    XElement p=products.Elements("Product").FirstOrDefault(x=>string.Equals(NormalizeStoreId(S(x,"StoreId")),storeId,StringComparison.OrdinalIgnoreCase)&&string.Equals(S(x,"ProductId"),pair.Key,StringComparison.OrdinalIgnoreCase)&&S(x,"Deleted")!="1");
-                    if(p==null)return "ERROR|product_not_found|"+Escape(pair.Key);
+                    XElement p=products.Elements("Product").FirstOrDefault(x=>S(x,"StoreId")==storeId&&S(x,"ProductId")==pair.Key);
+                    if(p==null)continue;
                     int stock; if(!int.TryParse(S(p,"Stock"),out stock))stock=0;
                     p.SetElementValue("Stock",Math.Max(0,stock-pair.Value).ToString(System.Globalization.CultureInfo.InvariantCulture));
                     p.SetElementValue("UpdatedAt",DateTime.UtcNow.ToString("o"));
@@ -1746,24 +1463,8 @@ namespace NexoMarket.CentralServer
             return "";
         }
 
-        // Vinculación comprador -> tienda -> cuenta del vendedor.
-        // Los pedidos nuevos llevan identidad explícita del vendedor; los históricos
-        // siguen siendo visibles por StoreId.
-        private bool OrderBelongsToSeller(XElement order, CentralUser seller)
-        {
-            if(order==null || seller==null || !string.Equals(seller.Role,"seller",StringComparison.OrdinalIgnoreCase)) return false;
-            string sid=NormalizeStoreId(seller.StoreId);
-            string osid=NormalizeStoreId(S(order,"StoreId"));
-            if(!string.IsNullOrWhiteSpace(sid) && string.Equals(osid,sid,StringComparison.OrdinalIgnoreCase)) return true;
-            string oid=S(order,"SellerAccountId");
-            if(!string.IsNullOrWhiteSpace(oid) && !string.IsNullOrWhiteSpace(seller.Id) && string.Equals(oid,seller.Id,StringComparison.OrdinalIgnoreCase)) return true;
-            string oe=S(order,"SellerEmail");
-            return !string.IsNullOrWhiteSpace(oe) && !string.IsNullOrWhiteSpace(seller.Email) && string.Equals(oe,seller.Email,StringComparison.OrdinalIgnoreCase);
-        }
-
         private string PendingOrders(string storeId, string syncKey)
         {
-            storeId=NormalizeStoreId(storeId??"");
             if(string.IsNullOrWhiteSpace(storeId) || !ValidateStoreSyncKey(storeId, syncKey)) return "[]";
             lock(_sync){XDocument d=LoadFile(_ordersFile,"NexoMarketOrders","Orders");DateTime recentCutoff=DateTime.UtcNow.AddDays(-30); List<XElement> list=d.Root.Element("Orders").Elements("Order").Where(x=>S(x,"StoreId")==storeId && ((S(x,"Status")!="Entregado" && S(x,"Status")!="Cancelado" && S(x,"Status")!="Rechazado") || ParseUtcDate(S(x,"CreatedAt"))>=recentCutoff)).OrderBy(x=>S(x,"CreatedAt")).ToList();StringBuilder b=new StringBuilder("[");for(int i=0;i<list.Count;i++){if(i>0)b.Append(',');XElement x=list[i];b.Append("{\"centralOrderId\":").Append(JsonString(S(x,"CentralOrderId"))).Append(",\"customerId\":").Append(JsonString(S(x,"CustomerId"))).Append(",\"customerName\":").Append(JsonString(S(x,"CustomerName"))).Append(",\"customerEmail\":").Append(JsonString(S(x,"CustomerEmail"))).Append(",\"phone\":").Append(JsonString(S(x,"Phone"))).Append(",\"fulfillment\":").Append(JsonString(S(x,"Fulfillment"))).Append(",\"address\":").Append(JsonString(S(x,"Address"))).Append(",\"notes\":").Append(JsonString(S(x,"Notes"))).Append(",\"status\":").Append(JsonString(S(x,"Status"))).Append(",\"total\":").Append(JsonString(S(x,"Total"))).Append(",\"paymentMethod\":").Append(JsonString(S(x,"PaymentMethod"))).Append(",\"paymentStatus\":").Append(JsonString(S(x,"PaymentStatus"))).Append(",\"paymentReference\":").Append(JsonString(S(x,"PaymentReference"))).Append(",\"paymentProofPath\":").Append(JsonString(S(x,"PaymentProofPath"))).Append(",\"shippingCost\":").Append(JsonString(S(x,"ShippingCost"))).Append(",\"trackingNumber\":").Append(JsonString(S(x,"TrackingNumber"))).Append(",\"carrier\":").Append(JsonString(S(x,"Carrier"))).Append(",\"itemsJson\":").Append(JsonString(S(x,"ItemsJson"))).Append(",\"buyerMessage\":").Append(JsonString(S(x,"BuyerMessage"))).Append(",\"createdAt\":").Append(JsonString(S(x,"CreatedAt"))).Append('}');}b.Append(']');return b.ToString();}
         }
@@ -1776,7 +1477,7 @@ namespace NexoMarket.CentralServer
         }
         private string OrderJson(XElement x)
         {
-            return "{\"centralOrderId\":"+JsonString(S(x,"CentralOrderId"))+",\"storeId\":"+JsonString(S(x,"StoreId"))+",\"sellerAccountId\":"+JsonString(S(x,"SellerAccountId"))+",\"sellerEmail\":"+JsonString(S(x,"SellerEmail"))+",\"customerId\":"+JsonString(S(x,"CustomerId"))+",\"customerName\":"+JsonString(S(x,"CustomerName"))+",\"customerEmail\":"+JsonString(S(x,"CustomerEmail"))+",\"phone\":"+JsonString(S(x,"Phone"))+",\"fulfillment\":"+JsonString(S(x,"Fulfillment"))+",\"address\":"+JsonString(S(x,"Address"))+",\"notes\":"+JsonString(S(x,"Notes"))+",\"status\":"+JsonString(S(x,"Status"))+",\"total\":"+JsonString(S(x,"Total"))+",\"paymentMethod\":"+JsonString(S(x,"PaymentMethod"))+",\"paymentStatus\":"+JsonString(S(x,"PaymentStatus"))+",\"paymentReference\":"+JsonString(S(x,"PaymentReference"))+",\"paymentProofPath\":"+JsonString(S(x,"PaymentProofPath"))+",\"shippingCost\":"+JsonString(S(x,"ShippingCost"))+",\"trackingNumber\":"+JsonString(S(x,"TrackingNumber"))+",\"carrier\":"+JsonString(S(x,"Carrier"))+",\"itemsJson\":"+JsonString(S(x,"ItemsJson"))+",\"buyerMessage\":"+JsonString(S(x,"BuyerMessage"))+",\"createdAt\":"+JsonString(S(x,"CreatedAt"))+",\"updatedAt\":"+JsonString(S(x,"UpdatedAt"))+",\"ack\":"+JsonString(S(x,"Ack"))+"}";
+            return "{\"centralOrderId\":"+JsonString(S(x,"CentralOrderId"))+",\"customerId\":"+JsonString(S(x,"CustomerId"))+",\"customerName\":"+JsonString(S(x,"CustomerName"))+",\"customerEmail\":"+JsonString(S(x,"CustomerEmail"))+",\"phone\":"+JsonString(S(x,"Phone"))+",\"fulfillment\":"+JsonString(S(x,"Fulfillment"))+",\"address\":"+JsonString(S(x,"Address"))+",\"notes\":"+JsonString(S(x,"Notes"))+",\"status\":"+JsonString(S(x,"Status"))+",\"total\":"+JsonString(S(x,"Total"))+",\"paymentMethod\":"+JsonString(S(x,"PaymentMethod"))+",\"paymentStatus\":"+JsonString(S(x,"PaymentStatus"))+",\"paymentReference\":"+JsonString(S(x,"PaymentReference"))+",\"paymentProofPath\":"+JsonString(S(x,"PaymentProofPath"))+",\"shippingCost\":"+JsonString(S(x,"ShippingCost"))+",\"trackingNumber\":"+JsonString(S(x,"TrackingNumber"))+",\"carrier\":"+JsonString(S(x,"Carrier"))+",\"itemsJson\":"+JsonString(S(x,"ItemsJson"))+",\"buyerMessage\":"+JsonString(S(x,"BuyerMessage"))+",\"createdAt\":"+JsonString(S(x,"CreatedAt"))+",\"updatedAt\":"+JsonString(S(x,"UpdatedAt"))+"}";
         }
 
         private string AckOrder(Dictionary<string,string> f)
@@ -1902,19 +1603,8 @@ namespace NexoMarket.CentralServer
 
         private string Heartbeat(Dictionary<string,string> f)
         {
-            string storeId=NormalizeStoreId(Get(f,"storeId")); if(string.IsNullOrWhiteSpace(storeId))return "ERROR|storeId";
-            lock(_sync)
-            {
-                XElement store=FindStoreElement(storeId);
-                if(store==null)return "ERROR|store_not_found";
-                string active=Get(f,"active");
-                if(active=="0"||active=="1") store.SetElementValue("Active",active);
-                string delivery=Get(f,"delivery"); if(delivery=="0"||delivery=="1") store.SetElementValue("Delivery",delivery);
-                string pickup=Get(f,"pickup"); if(pickup=="0"||pickup=="1") store.SetElementValue("Pickup",pickup);
-                store.SetElementValue("LastActivityAt",DateTime.UtcNow.ToString("o"));
-                store.SetAttributeValue("UpdatedAt",DateTime.UtcNow.ToString("o"));
-                Save();
-            }
+            string storeId=Get(f,"storeId"); if(string.IsNullOrWhiteSpace(storeId))return "ERROR|storeId";
+            TouchStoreActivity(storeId);
             return "OK|"+storeId+"|"+DateTime.UtcNow.ToString("o");
         }
 
@@ -1928,7 +1618,7 @@ namespace NexoMarket.CentralServer
                 XElement store = stores == null ? null : stores.Elements("Store").FirstOrDefault(x => string.Equals(S(x, "StoreId"), storeId, StringComparison.OrdinalIgnoreCase));
                 if (store == null) return "ERROR|store_not_found|" + Escape(storeId);
                 ApplyAutomaticStoreSchedule(store);
-                // Active es el estado operativo de la tienda, no una condición para sincronizar Web.
+                // Active es el estado operativo de la tienda, no una condición para sincronizar Windows.
                 // Una tienda cerrada por horario debe seguir pudiendo sincronizar catálogo y pedidos.
                 // Desde 5.8 la SyncKey es derivada de forma determinista del StoreId.
                 // Esto repara automáticamente tiendas antiguas que no tenían clave o
@@ -1957,7 +1647,7 @@ namespace NexoMarket.CentralServer
                 }
 
                 // StoreId es la identidad de la instalación. La cuenta web es información
-                // complementaria; su ausencia NO debe impedir conectar Web a una tienda
+                // complementaria; su ausencia NO debe impedir conectar Windows a una tienda
                 // que ya existe y está activa.
                 return "OK|" + Escape(storeId) + "|" + Escape(S(store, "Name")) + "|1|" + Escape(syncKey) +
                     "|" + Escape(sellerEmail) + "|" + Escape(sellerName) + "|" +
@@ -2002,9 +1692,9 @@ namespace NexoMarket.CentralServer
         }
 
         /// <summary>
-        /// Delta de sincronización para Web. Devuelve únicamente productos modificados
+        /// Delta de sincronización para Windows. Devuelve únicamente productos modificados
         /// desde el cursor indicado y un cursor central nuevo. Central sigue siendo la fuente
-        /// de verdad; Web no vuelve a descargar el catálogo completo cada ciclo.
+        /// de verdad; Windows no vuelve a descargar el catálogo completo cada ciclo.
         /// </summary>
         private string SyncDelta(string storeId, string syncKey, string since)
         {
@@ -2137,26 +1827,26 @@ namespace NexoMarket.CentralServer
         }
         private string AdminSetStoreActive(string key,Dictionary<string,string> f)
         {
-            string denied=AdminDenied(key); if(denied!=null)return denied; string id=NormalizeStoreId(Get(f,"storeId")); bool active=Get(f,"active")!="0"; lock(_sync){XElement e=_doc.Root.Element("Stores").Elements("Store").FirstOrDefault(x=>string.Equals(S(x,"StoreId"),id,StringComparison.OrdinalIgnoreCase));if(e==null)return "ERROR|store_not_found";e.SetElementValue("Active",active?"1":"0");e.SetElementValue("PlatformBlockOverride","0");e.SetAttributeValue("UpdatedAt",DateTime.UtcNow.ToString("o"));Save();} return "OK|"+(active?"active":"inactive");
+            string denied=AdminDenied(key); if(denied!=null)return denied; string id=NormalizeStoreId(Get(f,"storeId")); bool active=Get(f,"active")!="0"; lock(_sync){XElement e=_doc.Root.Element("Stores").Elements("Store").FirstOrDefault(x=>string.Equals(S(x,"StoreId"),id,StringComparison.OrdinalIgnoreCase));if(e==null)return "ERROR|store_not_found";e.SetElementValue("Active",active?"1":"0");e.SetAttributeValue("UpdatedAt",DateTime.UtcNow.ToString("o"));Save();} return "OK|"+(active?"active":"inactive");
         }
         private string AdminReactivateStore(string key,Dictionary<string,string> f)
         {
             string denied=AdminDenied(key); if(denied!=null)return denied;
-            string id=NormalizeStoreId(Get(f,"storeId"));
+            string id=NormalizeStoreId(Get(f,"storeId")); if(id.Length==0)return "ERROR|store_required";
+            int days=7; int.TryParse(Get(f,"days"),out days); days=Math.Max(1,Math.Min(365,days));
+            CentralUser seller=FindSellerByStore(id);
             lock(_sync)
             {
-                XElement e=FindStoreElement(id);
-                if(e==null)return "ERROR|store_not_found";
+                XElement e=FindStoreElement(id); if(e==null)return "ERROR|store_not_found";
                 e.SetElementValue("Active","1");
-                e.SetElementValue("PlatformBlockOverride","1");
-                e.SetElementValue("LastActivityAt",DateTime.UtcNow.ToString("o"));
+                e.SetElementValue("PlatformAccessUntil",DateTime.UtcNow.AddDays(days).ToString("o"));
+                e.SetElementValue("PlatformManualUnlock","1");
                 e.SetAttributeValue("UpdatedAt",DateTime.UtcNow.ToString("o"));
                 Save();
             }
-            return "OK|reactivated|"+id+"|"+GetStoreName(id);
+            if(seller!=null && !string.IsNullOrWhiteSpace(seller.Email)) AdminSetAccountActive(key,new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){{"email",seller.Email},{"active","1"}});
+            return "OK|reactivated|"+Escape(id)+"|"+days.ToString(CultureInfo.InvariantCulture);
         }
-
-        
         private string AdminSetStoreFeatured(string key,Dictionary<string,string> f)
         {
             string denied=AdminDenied(key); if(denied!=null)return denied;
@@ -2200,81 +1890,9 @@ namespace NexoMarket.CentralServer
         {
             XDocument d=LoadFile(_platformPaymentsFile,"NexoMarketPlatformPayments","Payments"); XElement root=d.Root==null?null:d.Root.Element("Payments"); return root==null?null:root.Elements("Payment").FirstOrDefault(x=>string.Equals(S(x,"StoreId"),storeId,StringComparison.OrdinalIgnoreCase)&&string.Equals(S(x,"Month"),month,StringComparison.OrdinalIgnoreCase));
         }
-        private XElement ResolveStoreIdentityLocked(string rawStoreId,string storeSlug)
-        {
-            XElement stores=_doc.Root==null?null:_doc.Root.Element("Stores");
-            if(stores==null)return null;
-            string id=NormalizeStoreId(rawStoreId);
-            string slug=(storeSlug??"").Trim();
-            try { slug=Uri.UnescapeDataString(slug).Trim('/'); } catch { slug=slug.Trim('/'); }
-            XElement store=null;
-            if(!string.IsNullOrWhiteSpace(id))
-                store=stores.Elements("Store").FirstOrDefault(x=>
-                    string.Equals(NormalizeStoreId(S(x,"StoreId")),id,StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(NormalizeStoreId(S(x,"Slug")),id,StringComparison.OrdinalIgnoreCase));
-            if(store==null && !string.IsNullOrWhiteSpace(slug))
-                store=stores.Elements("Store").FirstOrDefault(x=>
-                    string.Equals(S(x,"Slug"),slug,StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(NormalizeStoreId(S(x,"Slug")),NormalizeStoreId(slug),StringComparison.OrdinalIgnoreCase));
-            return store;
-        }
-
-        private XElement RecoverStoreRegistryEntryLocked(string rawStoreId,string storeSlug)
-        {
-            string id=NormalizeStoreId(rawStoreId);
-            if(string.IsNullOrWhiteSpace(id))return null;
-            XDocument catalog=LoadFile(_catalogFile,"NexoMarketCatalog","Products");
-            XElement products=catalog.Root==null?null:catalog.Root.Element("Products");
-            bool hasCatalogEvidence=products!=null && products.Elements("Product").Any(x=>
-                string.Equals(NormalizeStoreId(S(x,"StoreId")),id,StringComparison.OrdinalIgnoreCase) &&
-                S(x,"Deleted")!="1");
-            bool hasAccountEvidence=false;
-            try
-            {
-                XDocument accounts=LoadFile(_accountsFile,"NexoMarketAccounts","Users");
-                XElement users=accounts.Root==null?null:accounts.Root.Element("Users");
-                hasAccountEvidence=users!=null && users.Elements("User").Any(x=>
-                    string.Equals(S(x,"Role"),"seller",StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(NormalizeStoreId(S(x,"StoreId")),id,StringComparison.OrdinalIgnoreCase));
-            }
-            catch { }
-            if(!hasCatalogEvidence && !hasAccountEvidence)return null;
-
-            XElement stores=_doc.Root.Element("Stores");
-            if(stores==null){stores=new XElement("Stores");_doc.Root.Add(stores);}
-            string slug=(storeSlug??"").Trim();
-            try { slug=Uri.UnescapeDataString(slug).Trim('/'); } catch { slug=slug.Trim('/'); }
-            if(string.IsNullOrWhiteSpace(slug))slug="tienda-"+id.ToLowerInvariant();
-            string name=slug.Replace('-',' ').Trim();
-            try
-            {
-                XDocument accounts=LoadFile(_accountsFile,"NexoMarketAccounts","Users");
-                XElement users=accounts.Root==null?null:accounts.Root.Element("Users");
-                XElement seller=users==null?null:users.Elements("User").FirstOrDefault(x=>string.Equals(S(x,"Role"),"seller",StringComparison.OrdinalIgnoreCase)&&string.Equals(NormalizeStoreId(S(x,"StoreId")),id,StringComparison.OrdinalIgnoreCase));
-                if(seller!=null&&!string.IsNullOrWhiteSpace(S(seller,"Name")))name=S(seller,"Name");
-            }catch{}
-            XElement recovered=new XElement("Store",
-                new XElement("StoreId",id),new XElement("SyncKey",ComputeStorePairKey(id)),
-                new XElement("Name",name),new XElement("Slug",slug),new XElement("PublicUrl","/store/"+Uri.EscapeDataString(slug)),
-                new XElement("Active","1"),new XElement("Delivery","1"),new XElement("Pickup","1"),
-                new XElement("Listed","1"),new XElement("LastActivityAt",DateTime.UtcNow.ToString("o")),
-                new XElement("PlatformBlockOverride","0"));
-            stores.Add(recovered);
-            Save();
-            Console.Error.WriteLine("[NexoMarket] ORDER_STORE_REGISTRY_RECOVERED storeId='"+id+"' catalogEvidence="+(hasCatalogEvidence?"1":"0")+" accountEvidence="+(hasAccountEvidence?"1":"0"));
-            return recovered;
-        }
-
         private XElement FindStoreElement(string storeId)
         {
-            string id=NormalizeStoreId(storeId);
-            XElement stores=_doc.Root==null?null:_doc.Root.Element("Stores");
-            if(stores==null)return null;
-            return stores.Elements("Store").FirstOrDefault(x=>
-                string.Equals(S(x,"StoreId"),id,StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(NormalizeStoreId(S(x,"StoreId")),id,StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(S(x,"Slug"),id,StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(NormalizeStoreId(S(x,"Slug")),id,StringComparison.OrdinalIgnoreCase));
+            XElement stores=_doc.Root==null?null:_doc.Root.Element("Stores"); return stores==null?null:stores.Elements("Store").FirstOrDefault(x=>string.Equals(S(x,"StoreId"),NormalizeStoreId(storeId),StringComparison.OrdinalIgnoreCase));
         }
         private DateTime PlatformDueDate(string storeId,string month)
         {
@@ -2282,24 +1900,7 @@ namespace NexoMarket.CentralServer
         }
         private bool IsStorePlatformBlocked(string storeId)
         {
-            lock(_sync)
-            {
-                XElement st=FindStoreElement(storeId);
-                if(st==null)return false;
-                // Reactivación manual desde SuperAdmin tiene prioridad sobre el bloqueo
-                // automático de plataforma. Se mantiene hasta que SuperAdmin lo quite.
-                if(S(st,"PlatformBlockOverride")=="1")return false;
-                DateTime until;
-                if(DateTime.TryParse(S(st,"PlatformAccessUntil"),null,DateTimeStyles.RoundtripKind,out until)&&until>DateTime.UtcNow)return false;
-                CentralUser seller=FindSellerByStore(S(st,"StoreId"));
-                decimal rate=CommissionDecimal(seller);
-                if(rate<=0)return false;
-                XElement p=FindPlatformPayment(S(st,"StoreId"),CurrentMonth());
-                if(p!=null&&S(p,"Status")=="Pagado")return false;
-                DateTime due=PlatformDueDate(S(st,"StoreId"),CurrentMonth());
-                int grace=0;int.TryParse(S(st,"PlatformGraceDays"),out grace);
-                return DateTime.UtcNow>due.AddDays(Math.Max(0,grace));
-            }
+            lock(_sync){XElement st=FindStoreElement(storeId);if(st==null)return false;if(S(st,"PlatformManualUnlock")=="1")return false;DateTime until;if(DateTime.TryParse(S(st,"PlatformAccessUntil"),null,DateTimeStyles.RoundtripKind,out until)&&until>DateTime.UtcNow)return false;CentralUser seller=FindSellerByStore(storeId);decimal rate=CommissionDecimal(seller);if(rate<=0)return false;XElement p=FindPlatformPayment(storeId,CurrentMonth());if(p!=null&&S(p,"Status")=="Pagado")return false;DateTime due=PlatformDueDate(storeId,CurrentMonth());int grace=0;int.TryParse(S(st,"PlatformGraceDays"),out grace);return DateTime.UtcNow>due.AddDays(Math.Max(0,grace));}
         }
         private string PlatformAccessMessage(string storeId)
         {
@@ -2336,7 +1937,7 @@ namespace NexoMarket.CentralServer
         }
         private string AdminSetPlatformPaymentStatus(string key,Dictionary<string,string> f)
         {
-            string denied=AdminDenied(key);if(denied!=null)return denied;string storeId=NormalizeStoreId(Get(f,"storeId"));string month=Get(f,"month").Trim();string status=Get(f,"status").Trim();if(storeId.Length==0||month.Length==0)return "ERROR|missing";if(status!="Pagado"&&status!="Pendiente"&&status!="Solicitado")return "ERROR|status";lock(_sync){XDocument d=LoadFile(_platformPaymentsFile,"NexoMarketPlatformPayments","Payments");XElement root=d.Root.Element("Payments");XElement p=FindPlatformPayment(storeId,month);if(p==null){p=new XElement("Payment",new XElement("StoreId",storeId),new XElement("Month",month),new XElement("Status",status),new XElement("RequestedAt",DateTime.UtcNow.ToString("o")),new XElement("PaidAt",status=="Pagado"?DateTime.UtcNow.ToString("o"):""));root.Add(p);}else{p.SetElementValue("Status",status);if(status=="Pagado")p.SetElementValue("PaidAt",DateTime.UtcNow.ToString("o"));}SaveDoc(_platformPaymentsFile,d);}return "OK|payment_status|"+Escape(status);
+            string denied=AdminDenied(key);if(denied!=null)return denied;string storeId=NormalizeStoreId(Get(f,"storeId"));string month=Get(f,"month").Trim();string status=Get(f,"status").Trim();if(storeId.Length==0||month.Length==0)return "ERROR|missing";if(status!="Pagado"&&status!="Pendiente"&&status!="Solicitado")return "ERROR|status";lock(_sync){XDocument d=LoadFile(_platformPaymentsFile,"NexoMarketPlatformPayments","Payments");XElement root=d.Root.Element("Payments");XElement p=FindPlatformPayment(storeId,month);if(p==null){p=new XElement("Payment",new XElement("StoreId",storeId),new XElement("Month",month),new XElement("Status",status),new XElement("RequestedAt",DateTime.UtcNow.ToString("o")),new XElement("PaidAt",status=="Pagado"?DateTime.UtcNow.ToString("o"):""));root.Add(p);}else{p.SetElementValue("Status",status);if(status=="Pagado")p.SetElementValue("PaidAt",DateTime.UtcNow.ToString("o"));}SaveDoc(_platformPaymentsFile,d);if(status=="Pagado"){XElement st=FindStoreElement(storeId);if(st!=null){st.SetElementValue("PlatformManualUnlock","0");st.SetElementValue("PlatformAccessUntil","");st.SetAttributeValue("UpdatedAt",DateTime.UtcNow.ToString("o"));Save();}}}return "OK|payment_status|"+Escape(status);
         }
         private void CentralSellerPlatformPaymentRequest(NetworkStream stream,string cookie,Dictionary<string,string> f)
         {
@@ -2511,12 +2112,12 @@ namespace NexoMarket.CentralServer
         {
             string storeId = Uri.UnescapeDataString(slug ?? "").Trim('/');
             XElement store = null;
-            lock (_sync) { store = ResolveStoreIdentityLocked(storeId,storeId); if(store!=null) ApplyAutomaticStoreSchedule(store); }
+            lock (_sync) { store = _doc.Root.Element("Stores").Elements("Store").FirstOrDefault(x => string.Equals(S(x,"StoreId"),storeId,StringComparison.OrdinalIgnoreCase) || string.Equals(S(x,"Slug"),storeId,StringComparison.OrdinalIgnoreCase)); if(store!=null) ApplyAutomaticStoreSchedule(store); }
             if(store==null) return "<!doctype html><html><body style='font-family:Arial;background:#080b10;color:#fff;padding:40px'><h1>Tienda no disponible</h1><a href='/' style='color:#39ff66'>Volver a NexoMarket</a></body></html>";
             string realId=S(store,"StoreId"); bool storePlatformBlocked=IsStorePlatformBlocked(realId); string reviewSummary=ReviewSummaryForStore(realId); string featuredHtml=S(store,"SuperFeatured")=="1"?"<div class='super-featured-badge' style='--sf:"+E(string.IsNullOrWhiteSpace(S(store,"FeaturedNeonColor"))?"#39ff66":S(store,"FeaturedNeonColor"))+"'>★ SÚPER DESTACADA</div>":(S(store,"Featured")=="1"?"<div class='featured-badge'>★ TIENDA DESTACADA EN LA PLATAFORMA</div>":""); string[] reviewParts=reviewSummary.Split('|'); string reviewAvg=reviewParts.Length>0?reviewParts[0]:"0.0"; string reviewCount=reviewParts.Length>1?reviewParts[1]:"0"; string openTime=S(store,"OpenTime"); string closeTime=S(store,"CloseTime");
             StringBuilder b=new StringBuilder();
             string logo=string.IsNullOrWhiteSpace(S(store,"Logo"))?"<div class='store-avatar'>N</div>":"<img class='store-avatar-img' src='"+E(S(store,"Logo"))+"' alt='"+E(S(store,"Name"))+"'/>";
-            b.Append("<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><meta http-equiv='Cache-Control' content='no-store'><title>").Append(E(S(store,"Name"))).Append(" · NexoMarket</title><style>body{font-family:'Segoe UI',Arial;background:#000;color:#fff;margin:0}.wrap{max-width:1240px;margin:auto;padding:20px 20px 100px}.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}.brand{font-weight:900;font-size:24px;color:#fff;text-decoration:none}.brand span{color:#39ff66}.nav a{color:#dbe6f0;text-decoration:none;margin-left:14px}.hero{display:flex;gap:18px;align-items:center;background:linear-gradient(135deg,#101923,#15102a);border:1px solid #2f3e55;border-radius:24px;padding:24px;box-shadow:0 16px 40px rgba(84,42,150,.16)}.store-avatar{width:82px;height:82px;border-radius:20px;background:#0b1118;border:1px solid #9b5cff;color:#c59cff;display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:900}.store-avatar-img{width:82px;height:82px;border-radius:20px;object-fit:cover;border:1px solid #9b5cff}.store-cover-photo{width:150px;height:92px;border-radius:16px;object-fit:cover;border:1px solid #39ff66}.hero h1{margin:0 0 6px;font-size:31px}.muted{color:#91a3b5}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:18px}.card{background:#0f1721;border:1px solid #28394e;border-radius:18px;padding:16px;min-height:220px;position:relative}.product-card{display:flex;flex-direction:column}.product-card h3{min-height:48px;margin:8px 0 0}.product-card .price{margin-top:auto}.product-card .btn{margin-top:12px;width:100%}.product-img{width:100%;height:170px;object-fit:cover;border-radius:13px;background:#0a1119;margin-bottom:12px}.price{font-size:21px;font-weight:900;margin-top:9px}.sale{color:#39ff66}.btn{background:#39ff66;color:#061009;border:0;border-radius:10px;padding:10px 14px;font-weight:900;cursor:pointer}.btn.violet{background:#fff;color:#000;box-shadow:0 0 18px rgba(255,255,255,.22)}.empty{padding:22px;color:#8b99a9;border:1px dashed #3c4b60;border-radius:16px}.promos{margin-top:25px}.promo-card{border-color:#7b4bd1}.cart-fab{position:fixed;right:22px;bottom:22px;z-index:30;background:#9b5cff;color:#fff;border:0;border-radius:999px;padding:14px 20px;font-weight:900;box-shadow:0 10px 30px rgba(0,0,0,.35);cursor:pointer}.cart-panel{position:fixed;right:20px;bottom:78px;width:min(430px,calc(100vw - 40px));max-height:78vh;overflow:auto;z-index:29;background:#0c141e;border:1px solid #7650bd;border-radius:20px;padding:18px;box-shadow:0 18px 50px rgba(0,0,0,.5);display:none}.cart-panel.open{display:block}.cart input,.cart select{background:#0d141d;color:#fff;border:1px solid #2a3b51;border-radius:9px;padding:10px;margin:4px;width:calc(100% - 18px)}.item{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid #223143;padding:10px 0}.item-info{min-width:0;flex:1}.item-info b{display:block;overflow-wrap:anywhere}.qty-control{display:flex;align-items:center;gap:5px;margin-top:7px}.qty-control button{width:32px;height:32px;border-radius:9px;border:1px solid #34465c;background:#111b26;color:#fff;font-weight:950;font-size:17px;cursor:pointer}.qty-control button:hover{border-color:#39ff66;color:#39ff66;box-shadow:0 0 12px rgba(57,255,102,.12)}.qty-control input{width:58px!important;margin:0!important;text-align:center;font-weight:900;background:#09111a!important;border-color:#30445a!important;color:#fff!important}.cart-product-total{font-weight:950;color:#fff;white-space:nowrap}.live{color:#8dffac;font-size:11px;font-weight:900}.section{margin-top:24px}.store-info-centered{text-align:center;width:100%}.store-info-row{display:flex;justify-content:center;align-items:center;gap:8px;flex-wrap:wrap;margin-top:7px;color:#b8c8d8;font-size:12px}.rating-box{margin-top:16px;padding:14px;border:1px solid rgba(255,215,106,.22);border-radius:15px;background:rgba(255,215,106,.04);text-align:center}.rating-score{font-size:26px;font-weight:950;color:#ffd76a}.store-gold-panel{margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid rgba(255,215,106,.34);border-radius:18px;background:linear-gradient(135deg,rgba(91,68,20,.22),rgba(255,215,106,.07) 48%,rgba(91,68,20,.20));box-shadow:0 0 24px rgba(255,215,106,.06),inset 0 1px 0 rgba(255,255,255,.06);overflow:hidden}.store-gold-info,.store-gold-reviews{min-height:170px;padding:22px;display:flex;flex-direction:column;justify-content:center}.store-gold-info{border-right:1px solid rgba(255,215,106,.22)}.store-gold-reviews{text-align:center;align-items:center}.gold-eyebrow{font-size:10px;letter-spacing:1.8px;font-weight:950;color:#ffd76a;margin-bottom:8px;text-shadow:0 0 12px rgba(255,215,106,.16)}.store-gold-panel .store-info-row{justify-content:flex-start;margin-top:6px}.gold-review-count{font-size:17px;font-weight:900;color:#fff;margin-top:5px}.gold-review-note{font-size:11px;color:#b9ad89;margin-top:7px}.store-gold-reviews .rating-score{font-size:38px;text-shadow:0 0 16px rgba(255,215,106,.16)}@media(max-width:650px){.store-gold-panel{grid-template-columns:1fr}.store-gold-info{border-right:0;border-bottom:1px solid rgba(255,215,106,.22)}.store-gold-info,.store-gold-reviews{min-height:0;padding:18px}.store-gold-reviews .rating-score{font-size:32px}}.reviews-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}.review-card{background:#0b1118;border:1px solid #26384b;border-radius:14px;padding:14px}.review-stars{color:#ffd76a;font-size:16px;letter-spacing:1px}.review-author{font-weight:900;margin-top:6px}.review-text{color:#aebdcc;font-size:13px;line-height:1.45;margin-top:6px}.review-form{display:grid;grid-template-columns:150px 1fr;gap:10px;align-items:start;margin-top:12px}.review-form textarea{min-height:100px;grid-column:1/-1;background:#0d141d;color:#fff;border:1px solid #2a3b51;border-radius:10px;padding:10px}.review-form select,.review-form input{background:#0d141d;color:#fff;border:1px solid #2a3b51;border-radius:10px;padding:10px}.review-form button{grid-column:1/-1}.review-rating-picker{grid-column:1/-1;display:flex;flex-direction:column;gap:7px}.star-picker{display:flex;gap:3px;align-items:center}.star-btn{background:transparent!important;border:0;color:#59636e;font-size:36px;line-height:1;padding:0 2px;cursor:pointer}.star-btn.selected{color:#ffd76a;text-shadow:0 0 10px rgba(255,215,106,.28)}.star-btn:hover{color:#ffd76a!important}.emoji-bar{grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap;padding:7px 0}.emoji-bar button{background:#111922;border:1px solid #2a3b51;border-radius:9px;padding:5px 8px;cursor:pointer;font-size:18px}.cart-summary-line{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #223143}.coupon-line{color:#7dff9e}.cart-total-line{display:flex;justify-content:space-between;margin-top:12px}.client-status-alert{position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:99999;display:none;min-width:min(620px,calc(100vw - 28px));padding:18px 24px;border:2px solid #39ff66;border-radius:16px;background:linear-gradient(135deg,#062b12,#0a7d31 55%,#063015);color:#fff;text-align:center;font-weight:900;box-shadow:0 0 24px rgba(57,255,102,.48),0 16px 45px rgba(0,0,0,.55)}.client-status-alert.red{border-color:#ff304f;background:linear-gradient(135deg,#5a0714,#a9001f 55%,#4d0612);box-shadow:0 0 22px rgba(255,48,79,.55),0 16px 45px rgba(0,0,0,.55)}.client-status-alert.show{display:block}.csa-title{font-size:21px;letter-spacing:1px}.csa-sub{font-size:12px;margin-top:5px;color:#e7fff0}.order-card>div{min-width:0}.order-card small,.order-card b,.order-card strong{overflow-wrap:anywhere}.order-actions{min-width:0}.confirm-order-btn{width:100%;margin-top:8px}.store-search-panel{margin:16px 0 6px;padding:0;background:transparent;border:0;box-shadow:none}.store-search-title{display:none}.store-name-search{width:100%;padding:12px 2px;border-radius:0;border:0;border-bottom:1px solid rgba(255,255,255,.18);background:transparent!important;background-color:transparent!important;color:#fff!important;outline:none;font-size:15px;box-shadow:none;-webkit-appearance:none;appearance:none;caret-color:#39ff66;-webkit-text-fill-color:#fff}.store-name-search:autofill,.store-name-search:-webkit-autofill{background:transparent!important;background-color:transparent!important;-webkit-box-shadow:0 0 0 1000px transparent inset!important;-webkit-text-fill-color:#fff!important}.store-name-search::placeholder{color:#8fa4b7}.store-name-search:focus{border-bottom-color:#39ff66;box-shadow:0 8px 18px rgba(57,255,102,.08)}.store-search-results{margin-top:10px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.store-search-result{display:flex;align-items:center;gap:10px;padding:11px;border:1px solid rgba(255,255,255,.10);border-radius:12px;background:#090f16;color:#fff;text-decoration:none}.store-search-result:hover{border-color:#39ff66}.store-search-result b{display:block}.store-search-result small{display:block;color:#8195a8;margin-top:3px}.store-search-empty{grid-column:1/-1;color:#8ea0b1;padding:10px}.back-home-float{position:fixed;left:16px;top:14px;z-index:9999;display:none;padding:9px 13px;border-radius:999px;background:rgba(5,10,14,.94);border:1px solid #39ff66;color:#39ff66;text-decoration:none;font-weight:950;font-size:12px;box-shadow:0 0 20px rgba(57,255,102,.16);backdrop-filter:blur(10px)}.back-home-float.show{display:block}.back-home-float{position:fixed;left:16px;top:14px;z-index:99999;display:none;padding:9px 13px;border-radius:999px;background:rgba(5,10,14,.96);border:1px solid #39ff66;color:#39ff66;text-decoration:none;font-weight:950;font-size:12px;box-shadow:0 0 20px rgba(57,255,102,.16);backdrop-filter:blur(10px)}.back-home-float.show{display:block}@media(max-width:950px){.store-search-results{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:950px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:650px){.wrap{padding:10px 8px 100px}.top,.hero{align-items:flex-start;flex-direction:column}.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.card{padding:8px;min-height:0;border-radius:11px}.product-img{width:100%;height:auto;aspect-ratio:1/1;object-fit:cover;border-radius:8px;margin-bottom:7px}.card h3{font-size:12px;line-height:1.2;margin:4px 0}.card .muted{font-size:9px;line-height:1.2;max-height:30px;overflow:hidden}.price{font-size:14px;margin-top:5px}.card .btn{font-size:10px;padding:7px 4px;border-radius:7px;width:100%}.nav a{margin-left:0;margin-right:12px}}body{position:relative;overflow-x:hidden}body:before{content:'';position:fixed;inset:-15%;pointer-events:none;z-index:0;background:radial-gradient(ellipse at 8% 18%,transparent 0 25%,rgba(57,255,102,.045) 25.1%,transparent 25.45%),radial-gradient(ellipse at 92% 72%,transparent 0 22%,rgba(167,103,255,.055) 22.1%,transparent 22.45%),radial-gradient(circle at 50% 5%,rgba(255,255,255,.03),transparent 26%);transform:rotate(-7deg)}body:after{content:'';position:fixed;width:80vw;height:45vh;left:-28vw;bottom:8vh;border:1px solid rgba(255,255,255,.07);border-right-color:rgba(57,255,102,.10);border-radius:50%;transform:rotate(-14deg);pointer-events:none;z-index:0;box-shadow:0 0 70px rgba(57,255,102,.025)}.wrap{position:relative;z-index:1}.card{background:linear-gradient(145deg,rgba(7,9,12,.96),rgba(12,15,20,.92));border-color:rgba(255,255,255,.09);box-shadow:0 12px 35px rgba(0,0,0,.30),inset 0 1px 0 rgba(255,255,255,.025);transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}.card:hover{transform:translateY(-4px);border-color:rgba(255,255,255,.35);box-shadow:0 0 22px rgba(255,255,255,.08),0 14px 35px rgba(0,0,0,.4)}.btn:hover{background:#fff!important;color:#000!important;box-shadow:0 0 14px rgba(255,255,255,.55),0 0 28px rgba(255,255,255,.12)!important}.price{text-shadow:0 0 10px rgba(255,255,255,.10)}body{position:relative;overflow-x:hidden}body:before{content:'';position:fixed;inset:-18%;pointer-events:none;z-index:0;background:radial-gradient(ellipse at 7% 20%,transparent 0 24%,rgba(57,255,102,.055) 24.1%,transparent 24.5%),radial-gradient(ellipse at 93% 70%,transparent 0 23%,rgba(167,103,255,.06) 23.1%,transparent 23.5%),radial-gradient(circle at 50% 10%,rgba(255,255,255,.035),transparent 26%);transform:rotate(-7deg)}body:after{content:'';position:fixed;width:85vw;height:42vh;right:-30vw;bottom:8vh;border:1px solid rgba(255,255,255,.06);border-left-color:rgba(167,103,255,.10);border-radius:50%;transform:rotate(-16deg);pointer-events:none;z-index:0;box-shadow:0 0 80px rgba(167,103,255,.025)}.wrap{position:relative;z-index:1}.hero,.panel,.card{background:linear-gradient(145deg,rgba(7,9,12,.95),rgba(12,15,20,.91));border-color:rgba(255,255,255,.09);box-shadow:0 14px 38px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.025)}.card:hover{border-color:rgba(255,255,255,.32);box-shadow:0 0 22px rgba(255,255,255,.07),0 14px 32px rgba(0,0,0,.36);transform:translateY(-4px)}.btn:hover{background:#fff!important;color:#000!important;box-shadow:0 0 14px rgba(255,255,255,.55),0 0 30px rgba(255,255,255,.12)!important}.closed-store-banner{margin:0 0 16px;padding:13px 15px;border:1px solid rgba(255,59,95,.45);border-radius:13px;background:rgba(255,59,95,.06);color:#ff8ca0;font-weight:800;box-shadow:0 0 20px rgba(255,59,95,.05)}.top,.section-head{position:relative}.top:after{content:'';position:absolute;left:0;right:0;bottom:4px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.16),rgba(57,255,102,.18),rgba(167,103,255,.18),transparent)}.proof-actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.proof-actions .btn{flex:1;min-width:140px}.native-picker{position:absolute!important;left:-10000px!important;top:auto!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important}.proof-preview img{max-width:100%;max-height:220px;border-radius:12px;margin-top:8px;object-fit:contain}</style></head><body><div class='wrap'><div class='top'><a class='brand' href='/'><span>NEXO</span>MARKET</a><div class='nav'><a href='/'>Tiendas</a><a href='/seller-login'>Ingresar como vendedor</a></div></div><div id='clientStatusAlert' class='client-status-alert green' role='alert' aria-live='assertive'></div><section class='hero'>").Append(logo).Append(featuredHtml).Append(string.IsNullOrWhiteSpace(S(store,"StorePhoto"))?"":"<img class='store-cover-photo' src='"+E(S(store,"StorePhoto"))+"' alt='Foto del local'/>").Append("<div><div class='live'>● TIENDA CENTRAL EN TIEMPO REAL</div><h1>").Append(E(S(store,"Name"))).Append("</h1><div class='muted'>").Append(E(S(store,"Category"))).Append(" · ").Append(E(S(store,"City"))).Append("</div><p class='muted'>").Append(E(S(store,"Description"))).Append("</p></div></section><section class='store-gold-panel'><div class='store-gold-info'><div class='gold-eyebrow'>INFORMACIÓN DE LA TIENDA</div><div class='store-info-row'><b>● " + (S(store,"Active")!="0"?"Abierto":"Cerrado") + "</b></div><div class='store-info-row'>" + (S(store,"Delivery")!="0"?"🚚 Delivery":"🏪 Retiro") + " · 📍 " + E(S(store,"Address")) + "</div><div class='store-info-row'>🕒 Horario: " + E(openTime) + " a " + E(closeTime) + "</div><div class='store-info-row'>💳 Pagos: Transferencia · Mercado Pago · Efectivo</div></div><div class='store-gold-reviews'><div class='gold-eyebrow'>OPINIONES DE CLIENTES</div><div class='rating-score'>⭐ " + E(reviewAvg) + " / 5</div><div class='gold-review-count'>" + E(reviewCount) + " opiniones</div><div class='gold-review-note'>La valoración de los clientes aparece aquí en grande.</div></div></section>" + (S(store,"Active")=="0"?"<div class='closed-store-banner'>🔴 TIENDA CERRADA · En este momento no se aceptan nuevos pedidos.</div>":"")+(storePlatformBlocked?"<div class='closed-store-banner'>🟠 TIENDA TEMPORALMENTE BLOQUEADA POR PAGO DE PLATAFORMA · El catálogo sigue visible, pero no se aceptan nuevos pedidos.</div>":"")+"<div class='section'><div style='display:flex;justify-content:space-between;align-items:end'><div><h2>Productos</h2><div class='muted'>El catálogo se actualiza automáticamente desde NexoMarket Central.</div></div><span id='liveState' class='live'>● LIVE</span></div><div id='products' class='grid'>");
+            b.Append("<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><meta http-equiv='Cache-Control' content='no-store'><title>").Append(E(S(store,"Name"))).Append(" · NexoMarket</title><style>body{font-family:'Segoe UI',Arial;background:#000;color:#fff;margin:0}.wrap{max-width:1240px;margin:auto;padding:20px 20px 100px}.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}.brand{font-weight:900;font-size:24px;color:#fff;text-decoration:none}.brand span{color:#39ff66}.nav a{color:#dbe6f0;text-decoration:none;margin-left:14px}.hero{display:flex;gap:18px;align-items:center;background:linear-gradient(135deg,#101923,#15102a);border:1px solid #2f3e55;border-radius:24px;padding:24px;box-shadow:0 16px 40px rgba(84,42,150,.16)}.store-avatar{width:82px;height:82px;border-radius:20px;background:#0b1118;border:1px solid #9b5cff;color:#c59cff;display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:900}.store-avatar-img{width:82px;height:82px;border-radius:20px;object-fit:cover;border:1px solid #9b5cff}.store-cover-photo{width:150px;height:92px;border-radius:16px;object-fit:cover;border:1px solid #39ff66}.hero h1{margin:0 0 6px;font-size:31px}.muted{color:#91a3b5}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:18px}.card{background:#0f1721;border:1px solid #28394e;border-radius:18px;padding:16px;min-height:220px;position:relative}.product-img{width:100%;height:170px;object-fit:cover;border-radius:13px;background:#0a1119;margin-bottom:12px}.price{font-size:21px;font-weight:900;margin-top:9px}.sale{color:#39ff66}.btn{background:#39ff66;color:#061009;border:0;border-radius:10px;padding:10px 14px;font-weight:900;cursor:pointer}.btn.violet{background:#fff;color:#000;box-shadow:0 0 18px rgba(255,255,255,.22)}.empty{padding:22px;color:#8b99a9;border:1px dashed #3c4b60;border-radius:16px}.promos{margin-top:25px}.promo-card{border-color:#7b4bd1}.cart-fab{position:fixed;right:22px;bottom:22px;z-index:30;background:#9b5cff;color:#fff;border:0;border-radius:999px;padding:14px 20px;font-weight:900;box-shadow:0 10px 30px rgba(0,0,0,.35);cursor:pointer}.cart-panel{position:fixed;right:20px;bottom:78px;width:min(430px,calc(100vw - 40px));max-height:78vh;overflow:auto;z-index:29;background:#0c141e;border:1px solid #7650bd;border-radius:20px;padding:18px;box-shadow:0 18px 50px rgba(0,0,0,.5);display:none}.cart-panel.open{display:block}.cart input,.cart select{background:#0d141d;color:#fff;border:1px solid #2a3b51;border-radius:9px;padding:10px;margin:4px;width:calc(100% - 18px)}.item{display:flex;justify-content:space-between;border-bottom:1px solid #223143;padding:8px 0}.live{color:#8dffac;font-size:11px;font-weight:900}.section{margin-top:24px}.store-info-centered{text-align:center;width:100%}.store-info-row{display:flex;justify-content:center;align-items:center;gap:8px;flex-wrap:wrap;margin-top:7px;color:#b8c8d8;font-size:12px}.rating-box{margin-top:16px;padding:14px;border:1px solid rgba(255,215,106,.22);border-radius:15px;background:rgba(255,215,106,.04);text-align:center}.rating-score{font-size:26px;font-weight:950;color:#ffd76a}.reviews-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}.review-card{background:#0b1118;border:1px solid #26384b;border-radius:14px;padding:14px}.review-stars{color:#ffd76a;font-size:16px;letter-spacing:1px}.review-author{font-weight:900;margin-top:6px}.review-text{color:#aebdcc;font-size:13px;line-height:1.45;margin-top:6px}.review-form{display:grid;grid-template-columns:150px 1fr;gap:10px;align-items:start;margin-top:12px}.review-form textarea{min-height:100px;grid-column:1/-1;background:#0d141d;color:#fff;border:1px solid #2a3b51;border-radius:10px;padding:10px}.review-form select,.review-form input{background:#0d141d;color:#fff;border:1px solid #2a3b51;border-radius:10px;padding:10px}.review-form button{grid-column:1/-1}.review-rating-picker{grid-column:1/-1;display:flex;flex-direction:column;gap:7px}.star-picker{display:flex;gap:3px;align-items:center}.star-btn{background:transparent!important;border:0;color:#59636e;font-size:36px;line-height:1;padding:0 2px;cursor:pointer}.star-btn.selected{color:#ffd76a;text-shadow:0 0 10px rgba(255,215,106,.28)}.star-btn:hover{color:#ffd76a!important}.emoji-bar{grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap;padding:7px 0}.emoji-bar button{background:#111922;border:1px solid #2a3b51;border-radius:9px;padding:5px 8px;cursor:pointer;font-size:18px}.cart-summary-line{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #223143}.coupon-line{color:#7dff9e}.cart-total-line{display:flex;justify-content:space-between;margin-top:12px}.client-status-alert{position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:99999;display:none;min-width:min(620px,calc(100vw - 28px));padding:18px 24px;border:2px solid #39ff66;border-radius:16px;background:linear-gradient(135deg,#062b12,#0a7d31 55%,#063015);color:#fff;text-align:center;font-weight:900;box-shadow:0 0 24px rgba(57,255,102,.48),0 16px 45px rgba(0,0,0,.55)}.client-status-alert.red{border-color:#ff304f;background:linear-gradient(135deg,#5a0714,#a9001f 55%,#4d0612);box-shadow:0 0 22px rgba(255,48,79,.55),0 16px 45px rgba(0,0,0,.55)}.client-status-alert.show{display:block}.csa-title{font-size:21px;letter-spacing:1px}.csa-sub{font-size:12px;margin-top:5px;color:#e7fff0}.order-card>div{min-width:0}.order-card small,.order-card b,.order-card strong{overflow-wrap:anywhere}.order-actions{min-width:0}.confirm-order-btn{width:100%;margin-top:8px}.store-search-panel{margin:16px 0 6px;padding:14px 16px;border:1px solid rgba(126,184,255,.18);border-radius:17px;background:rgba(7,13,20,.70);backdrop-filter:blur(14px);box-shadow:0 12px 30px rgba(0,0,0,.20)}.store-search-title{display:none}.store-name-search{width:100%;box-sizing:border-box;padding:12px 14px;border-radius:11px;border:1px solid rgba(82,170,255,.30);background:transparent;color:#fff;outline:none;font-size:15px}.store-name-search::placeholder{color:#9aaabd;opacity:1}.store-name-search:focus{background:rgba(5,10,16,.16)}.store-name-search:focus{border-color:#39ff66;box-shadow:0 0 18px rgba(57,255,102,.10)}.store-search-results{margin-top:10px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.store-search-result{display:flex;align-items:center;gap:10px;padding:11px;border:1px solid rgba(255,255,255,.10);border-radius:12px;background:#090f16;color:#fff;text-decoration:none}.store-search-result:hover{border-color:#39ff66}.store-search-result b{display:block}.store-search-result small{display:block;color:#8195a8;margin-top:3px}.store-search-empty{grid-column:1/-1;color:#8ea0b1;padding:10px}.back-home-float{position:fixed;left:16px;top:14px;z-index:9999;display:none;padding:9px 13px;border-radius:999px;background:rgba(5,10,14,.94);border:1px solid #39ff66;color:#39ff66;text-decoration:none;font-weight:950;font-size:12px;box-shadow:0 0 20px rgba(57,255,102,.16);backdrop-filter:blur(10px)}.back-home-float.show{display:block}.back-home-float{position:fixed;left:16px;top:14px;z-index:99999;display:none;padding:9px 13px;border-radius:999px;background:rgba(5,10,14,.96);border:1px solid #39ff66;color:#39ff66;text-decoration:none;font-weight:950;font-size:12px;box-shadow:0 0 20px rgba(57,255,102,.16);backdrop-filter:blur(10px)}.back-home-float.show{display:block}@media(max-width:950px){.store-search-results{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:950px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:650px){.wrap{padding:10px 8px 100px}.top,.hero{align-items:flex-start;flex-direction:column}.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.card{padding:8px;min-height:0;border-radius:11px}.product-img{width:100%;height:auto;aspect-ratio:1/1;object-fit:cover;border-radius:8px;margin-bottom:7px}.card h3{font-size:12px;line-height:1.2;margin:4px 0}.card .muted{font-size:9px;line-height:1.2;max-height:30px;overflow:hidden}.price{font-size:14px;margin-top:5px}.card .btn{font-size:10px;padding:7px 4px;border-radius:7px;width:100%}.nav a{margin-left:0;margin-right:12px}}body{position:relative;overflow-x:hidden}body:before{content:'';position:fixed;inset:-15%;pointer-events:none;z-index:0;background:radial-gradient(ellipse at 8% 18%,transparent 0 25%,rgba(57,255,102,.045) 25.1%,transparent 25.45%),radial-gradient(ellipse at 92% 72%,transparent 0 22%,rgba(167,103,255,.055) 22.1%,transparent 22.45%),radial-gradient(circle at 50% 5%,rgba(255,255,255,.03),transparent 26%);transform:rotate(-7deg)}body:after{content:'';position:fixed;width:80vw;height:45vh;left:-28vw;bottom:8vh;border:1px solid rgba(255,255,255,.07);border-right-color:rgba(57,255,102,.10);border-radius:50%;transform:rotate(-14deg);pointer-events:none;z-index:0;box-shadow:0 0 70px rgba(57,255,102,.025)}.wrap{position:relative;z-index:1}.card{background:linear-gradient(145deg,rgba(7,9,12,.96),rgba(12,15,20,.92));border-color:rgba(255,255,255,.09);box-shadow:0 12px 35px rgba(0,0,0,.30),inset 0 1px 0 rgba(255,255,255,.025);transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}.card:hover{transform:translateY(-4px);border-color:rgba(255,255,255,.35);box-shadow:0 0 22px rgba(255,255,255,.08),0 14px 35px rgba(0,0,0,.4)}.btn:hover{background:#fff!important;color:#000!important;box-shadow:0 0 14px rgba(255,255,255,.55),0 0 28px rgba(255,255,255,.12)!important}.price{text-shadow:0 0 10px rgba(255,255,255,.10)}body{position:relative;overflow-x:hidden}body:before{content:'';position:fixed;inset:-18%;pointer-events:none;z-index:0;background:radial-gradient(ellipse at 7% 20%,transparent 0 24%,rgba(57,255,102,.055) 24.1%,transparent 24.5%),radial-gradient(ellipse at 93% 70%,transparent 0 23%,rgba(167,103,255,.06) 23.1%,transparent 23.5%),radial-gradient(circle at 50% 10%,rgba(255,255,255,.035),transparent 26%);transform:rotate(-7deg)}body:after{content:'';position:fixed;width:85vw;height:42vh;right:-30vw;bottom:8vh;border:1px solid rgba(255,255,255,.06);border-left-color:rgba(167,103,255,.10);border-radius:50%;transform:rotate(-16deg);pointer-events:none;z-index:0;box-shadow:0 0 80px rgba(167,103,255,.025)}.wrap{position:relative;z-index:1}.hero,.panel,.card{background:linear-gradient(145deg,rgba(7,9,12,.95),rgba(12,15,20,.91));border-color:rgba(255,255,255,.09);box-shadow:0 14px 38px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.025)}.card:hover{border-color:rgba(255,255,255,.32);box-shadow:0 0 22px rgba(255,255,255,.07),0 14px 32px rgba(0,0,0,.36);transform:translateY(-4px)}.btn:hover{background:#fff!important;color:#000!important;box-shadow:0 0 14px rgba(255,255,255,.55),0 0 30px rgba(255,255,255,.12)!important}.closed-store-banner{margin:0 0 16px;padding:13px 15px;border:1px solid rgba(255,59,95,.45);border-radius:13px;background:rgba(255,59,95,.06);color:#ff8ca0;font-weight:800;box-shadow:0 0 20px rgba(255,59,95,.05)}.top,.section-head{position:relative}.top:after{content:'';position:absolute;left:0;right:0;bottom:4px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.16),rgba(57,255,102,.18),rgba(167,103,255,.18),transparent)}.proof-actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.proof-actions .btn{flex:1;min-width:140px}.native-picker{position:absolute!important;left:-10000px!important;top:auto!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important}.proof-preview img{max-width:100%;max-height:220px;border-radius:12px;margin-top:8px;object-fit:contain}</style></head><body><div class='wrap'><div class='top'><a class='brand' href='/'><span>NEXO</span>MARKET</a><div class='nav'><a href='/'>Tiendas</a><a href='/seller-login'>Ingresar como vendedor</a></div></div><div id='clientStatusAlert' class='client-status-alert green' role='alert' aria-live='assertive'></div><section class='hero'>").Append(logo).Append(featuredHtml).Append(string.IsNullOrWhiteSpace(S(store,"StorePhoto"))?"":"<img class='store-cover-photo' src='"+E(S(store,"StorePhoto"))+"' alt='Foto del local'/>").Append("<div><div class='live'>● TIENDA CENTRAL EN TIEMPO REAL</div><h1>").Append(E(S(store,"Name"))).Append("</h1><div class='muted'>").Append(E(S(store,"Category"))).Append(" · ").Append(E(S(store,"City"))).Append("</div><p class='muted'>").Append(E(S(store,"Description"))).Append("</p></div></section><section class='store-info-centered'><div class='store-info-row'><b>● " + (S(store,"Active")!="0"?"Abierto":"Cerrado") + "</b></div><div class='store-info-row'>" + (S(store,"Delivery")!="0"?"🚚 Delivery":"🏪 Retiro") + " · 📍 " + E(S(store,"Address")) + "</div><div class='store-info-row'>🕒 Horario: " + E(openTime) + " a " + E(closeTime) + "</div><div class='store-info-row'>💳 Pagos: Transferencia · Mercado Pago · Efectivo</div></section><div class='rating-box'><div class='rating-score'>⭐ " + E(reviewAvg) + " / 5</div><div class='muted'>" + E(reviewCount) + " opiniones de clientes</div></div>" + (S(store,"Active")=="0"?"<div class='closed-store-banner'>🔴 TIENDA CERRADA · En este momento no se aceptan nuevos pedidos.</div>":"")+(storePlatformBlocked?"<div class='closed-store-banner'>🟠 TIENDA TEMPORALMENTE BLOQUEADA POR PAGO DE PLATAFORMA · El catálogo sigue visible, pero no se aceptan nuevos pedidos.</div>":"")+"<div class='section'><div style='display:flex;justify-content:space-between;align-items:end'><div><h2>Productos</h2><div class='muted'>El catálogo se actualiza automáticamente desde NexoMarket Central.</div></div><span id='liveState' class='live'>● LIVE</span></div><div id='products' class='grid'>");
             lock(_sync)
             {
                 XDocument d=LoadFile(_catalogFile,"NexoMarketCatalog","Products");
@@ -2532,7 +2133,7 @@ namespace NexoMarket.CentralServer
                     string image = string.IsNullOrWhiteSpace(img) ? "" : "<img class='product-img' src='" + E(img) + "' alt='" + E(S(x, "Name")) + "' loading='eager' decoding='async' onerror=\"this.style.display='none';this.parentNode.classList.add('image-error')\"/>";
                     string onclick = "add(" + JsonString(id) + "," + JsonString(S(x, "Name")) + "," + JsonNumber(shown) + ")";
                     string addButton = storePlatformBlocked ? "<button class='btn' disabled>TIENDA BLOQUEADA</button>" : "<button class='btn' onclick='"+onclick+"'>AGREGAR</button>";
-                    b.Append("<div class='card product-card'>").Append(image).Append("<h3>").Append(E(S(x, "Name"))).Append("</h3><div class='muted'>")
+                    b.Append("<div class='card'>").Append(image).Append("<h3>").Append(E(S(x, "Name"))).Append("</h3><div class='muted'>")
                         .Append(E(S(x, "Category"))).Append(" · ").Append(E(S(x, "Brand"))).Append("</div><div class='muted'>")
                         .Append(E(S(x, "PublicDescription"))).Append("</div><div class='price ")
                         .Append(string.IsNullOrWhiteSpace(sale) || sale == "0" ? "" : "sale").Append("'>$ ").Append(E(shown))
@@ -2570,7 +2171,7 @@ namespace NexoMarket.CentralServer
                     b.Append("<div class='card'><div class='sale'>CUPÓN</div><h3>"+E(S(c,"Code"))+"</h3><div class='price sale'>"+E(discount)+" OFF</div><div class='muted'>"+E(S(c,"Description"))+"</div><button class='btn violet' onclick='useCoupon("+JsonString(S(c,"Code"))+")'>USAR CUPÓN</button></div>");
                 }
             }
-            b.Append("</div></section><section class='section'><div class='section-head'><div><h2>Reputación del local</h2><div class='muted'>Podés dejar una reseña con tu cuenta o desde este dispositivo.</div></div></div><form id='reviewForm' class='card review-form' onsubmit='return sendReview(event)'><div class='review-rating-picker'><b>¿Cuántas estrellas le das?</b><div id='reviewStars' class='star-picker' role='radiogroup' aria-label='Puntaje de 1 a 5'><button type='button' class='star-btn selected' data-value='1'>★</button><button type='button' class='star-btn selected' data-value='2'>★</button><button type='button' class='star-btn selected' data-value='3'>★</button><button type='button' class='star-btn selected' data-value='4'>★</button><button type='button' class='star-btn selected' data-value='5'>★</button></div><input type='hidden' id='reviewRating' value='5' required/><span id='reviewRatingText' class='muted'>5 estrellas</span></div><input id='reviewName' placeholder='Tu nombre (opcional)'/><div class='emoji-bar' aria-label='Emoticones'><button type='button' onclick='addReviewEmoji(&quot;😍&quot;)'>😍</button><button type='button' onclick='addReviewEmoji(&quot;😋&quot;)'>😋</button><button type='button' onclick='addReviewEmoji(&quot;😊&quot;)'>😊</button><button type='button' onclick='addReviewEmoji(&quot;😐&quot;)'>😐</button><button type='button' onclick='addReviewEmoji(&quot;😕&quot;)'>😕</button><button type='button' onclick='addReviewEmoji(&quot;😡&quot;)'>😡</button><button type='button' onclick='addReviewEmoji(&quot;❤️&quot;)'>❤️</button></div><textarea id='reviewText' placeholder='¿Cómo fue tu experiencia con este local? Podés usar emoticones.' required></textarea><button class='btn' type='submit'>DEJAR RESEÑA</button><div id='reviewState' class='muted'></div></form><div id='reviewsList' class='reviews-list'></div></section><a id='storeBackHome' class='back-home-float' href='/'>NEXO MARKET</a><button class='cart-fab' onclick='toggleCart()'>🛒 Carrito <span id='cartCount'>0</span></button>\").Append(\"<aside id='cartPanel' class='cart-panel cart'><h2>Tu carrito</h2><div id='cartItems'>Carrito vacío.</div><div class='cart-summary-line'><span>Subtotal</span><b>$ <span id='cartSubtotal'>0.00</span></b></div><div id='couponLine' class='cart-summary-line coupon-line' style='display:none'><span>🏷️ Descuento cupón</span><b>− $ <span id='couponDiscount'>0.00</span></b></div><div id='couponState' class='muted'></div><h3 class='cart-total-line'>Total: $ <span id='total'>0.00</span></h3><form onsubmit='return sendOrder(event)'><input type='hidden' id='storeId' value='\").Append(E(realId)).Append(\"'/><input type='hidden' id='storeSlug' value='\").Append(E(EnsureStoreSlug(store))).Append(\"'/><input id='name' placeholder='Nombre' required/><input id='email' type='email' placeholder='Correo (opcional)'/><input id='phone' placeholder='Teléfono (opcional)'/><select id='fulfillment'><option>Delivery</option><option>Retiro</option></select><input id='address' placeholder='Dirección de entrega'/><select id='paymentMethod'><option>Transferencia</option><option>Mercado Pago</option><option>Efectivo</option></select><input id='paymentReference' placeholder='Referencia de pago (opcional)'/><label class='proof-upload'><b>📎 COMPROBANTE DE PAGO (OPCIONAL)</b><small>Si lo tenés, podés subirlo. Se elimina automáticamente de R2 después de 3 días.</small><input id='paymentProofFile' class='native-picker' type='file' accept='image/jpeg,image/png,image/webp,image/gif'/><input id='paymentProofCamera' class='native-picker' type='file' accept='image/*' capture='environment'/><div class='proof-actions'><button type='button' class='btn' onclick='openProofFile()'>📁 SUBIR FOTO</button><button type='button' class='btn violet' onclick='openProofCamera()'>📷 SACAR FOTO</button></div><div id='proofPreview' class='proof-preview'></div><input type='hidden' id='paymentProofPath'/><span id='proofState' class='muted'>Comprobante no cargado.</span><label style='display:flex;gap:8px;align-items:center;margin-top:8px'><input id='noPaymentProof' type='checkbox' style='width:auto;margin:0' onchange='toggleNoProofReason()'/> No tengo comprobante</label><input id='noPaymentProofReason' placeholder='Explicación obligatoria: ¿por qué no tenés comprobante?' maxlength='500' style='display:none'/></label><input id='notes' placeholder='Notas para el vendedor (opcional)'/><input id='couponCode' placeholder='Código de cupón (opcional)'/><button class='btn' type='submit'>CONFIRMAR PEDIDO</button></form><hr style='border-color:#253447;margin:18px 0'><h3>Seguimiento</h3><div id='orderStatus' class='muted'>Después de confirmar un pedido aparecerá aquí.</div><button class='btn' id='confirmReceived' style='display:none' onclick='confirmReceived()'>CONFIRMAR RECEPCIÓN</button><button class='btn violet' style='margin-left:8px' onclick='loadHistory()'>VER HISTORIAL</button><div id='history' class='muted' style='margin-top:12px'></div></aside><script>var cart=[],lastOrderId='',lastStatusSeen='',couponRule=null,couponLookupTimer=null;function toggleCart(){document.getElementById('cartPanel').classList.toggle('open')}function addPromotion(id,name,price,productIds){var key='promo:'+id,x=cart.filter(function(i){return i.id===key})[0];if(x)x.qty++;else cart.push({id:key,name:name,price:price,qty:1,promotionId:id,productIds:productIds});render();toggleOpen()}function add(id,name,price){var x=cart.filter(function(i){return i.id===id})[0];if(x)x.qty++;else cart.push({id:id,name:name,price:price,qty:1});render();toggleOpen()}function toggleOpen(){document.getElementById('cartPanel').classList.add('open')}function calcCoupon(t){if(!couponRule||!couponRule.valid)return 0;var d=Number(couponRule.percent)>0?t*Number(couponRule.percent)/100:Number(couponRule.amount)||0;return Math.min(t,Math.max(0,d));}function cartEsc(v){return String(v==null?'':v).replace(/[&<>]/g,function(c){return c==='&'?'&amp;':c==='<'?'&lt;':'&gt;';});}function changeQty(id,delta){var x=cart.filter(function(i){return i.id===id})[0];if(!x)return;x.qty=Math.max(0,Number(x.qty||0)+Number(delta||0));if(x.qty<=0)cart=cart.filter(function(i){return i.id!==id});render();}function setQty(id,value){var n=parseInt(value,10);if(!isFinite(n)||n<1)n=1;var x=cart.filter(function(i){return i.id===id})[0];if(!x)return;x.qty=n;render();}function render(){var h='',t=0,c=0;cart.forEach(function(i){var id=String(i.id).replace(/'/g,'&#39;');h+='<div class=\"item\"><div class=\"item-info\"><b>'+cartEsc(i.name)+'</b><div class=\"qty-control\"><button type=\"button\" data-id=\"'+id+'\" onclick=\"changeQty(this.dataset.id,-1)\">−</button><input type=\"number\" min=\"1\" value=\"'+Number(i.qty||1)+'\" data-id=\"'+id+'\" onchange=\"setQty(this.dataset.id,this.value)\"><button type=\"button\" data-id=\"'+id+'\" onclick=\"changeQty(this.dataset.id,1)\">+</button></div></div><span class=\"cart-product-total\">$ '+((Number(i.price)||0)*(Number(i.qty)||0)).toFixed(2)+'</span></div>';t+=(Number(i.price)||0)*(Number(i.qty)||0);c+=Number(i.qty)||0});var discount=calcCoupon(t),finalTotal=Math.max(0,t-discount);document.getElementById('cartItems').innerHTML=h||'Carrito vacío.';document.getElementById('cartSubtotal').innerHTML=t.toFixed(2);document.getElementById('couponDiscount').innerHTML=discount.toFixed(2);document.getElementById('total').innerHTML=finalTotal.toFixed(2);document.getElementById('cartCount').innerHTML=c;var line=document.getElementById('couponLine');if(line)line.style.display=discount>0?'flex':'none';}function refreshCatalog(){var x=new XMLHttpRequest();x.open('GET','/api/catalog/live?storeId='+encodeURIComponent(document.getElementById('storeId').value),true);x.onreadystatechange=function(){if(x.readyState===4&&x.status===200){try{var d=JSON.parse(x.responseText);var stamp=d.updatedAt||'';if(window.lastCatalogStamp===undefined)window.lastCatalogStamp=stamp;else if(stamp!==window.lastCatalogStamp){window.lastCatalogStamp=stamp;location.reload();}document.getElementById('liveState').innerHTML='● LIVE '+(stamp?new Date(stamp).toLocaleTimeString():'');}catch(e){}}};x.send()}function playClientBeep(){try{window.nexoAudio=window.nexoAudio||new(window.AudioContext||window.webkitAudioContext)();if(window.nexoAudio.state==='suspended')window.nexoAudio.resume();var o=window.nexoAudio.createOscillator(),g=window.nexoAudio.createGain(),n=window.nexoAudio.currentTime;o.type='sine';o.frequency.setValueAtTime(880,n);o.frequency.linearRampToValueAtTime(1320,n+.12);g.gain.setValueAtTime(.12,n);g.gain.exponentialRampToValueAtTime(.001,n+.22);o.connect(g);g.connect(window.nexoAudio.destination);o.start(n);o.stop(n+.24);}catch(e){}}function requestBrowserNotifications(){try{if('Notification' in window&&Notification.permission==='default')Notification.requestPermission();}catch(e){}}function notifyBrowser(title,text){try{if('Notification' in window&&Notification.permission==='granted')new Notification(title,{body:text,tag:'nexomarket-order'});}catch(e){}}function flashClientStatus(text,kind){var el=document.getElementById('clientStatusAlert');if(!el)return;el.className='client-status-alert '+(kind||'green')+' show';el.innerHTML='<div class=\"csa-title\">'+text+'</div><div class=\"csa-sub\">NexoMarket · actualización del pedido</div>';var i=0;clearInterval(window.__clientFlashTimer);window.__clientFlashTimer=setInterval(function(){i++;el.classList.toggle('show');playClientBeep();if(i>=10){clearInterval(window.__clientFlashTimer);el.classList.remove('show');}},300);playClientBeep();notifyBrowser(text,'Tu pedido fue actualizado.');}function statusMessage(status){if(status==='Preparando')return ['🟢 PEDIDO CONFIRMADO','green'];if(status==='Listo')return ['🟢 PEDIDO LISTO','green'];if(status==='Enviado'||status==='En reparto')return ['🟢 PEDIDO EN DELIVERY','green'];if(status==='Entregado')return ['🟢 PEDIDO ENTREGADO','green'];if(status==='Rechazado'||status==='Cancelado')return ['🔴 PEDIDO CANCELADO','red'];return null;}function pollStatus(){if(!lastOrderId)return;var u='/api/orders/status?storeId='+encodeURIComponent(document.getElementById('storeId').value)+'&centralOrderId='+encodeURIComponent(lastOrderId),x=new XMLHttpRequest();x.open('GET',u,true);x.onreadystatechange=function(){if(x.readyState===4&&x.status===200){try{var d=JSON.parse(x.responseText);if(d.error)return;document.getElementById('orderStatus').innerHTML='Pedido <b>'+d.centralOrderId+'</b> · Estado: <b>'+d.status+'</b><br>Total: $ '+d.total+(d.updatedAt?' · Actualizado: '+new Date(d.updatedAt).toLocaleString():'');document.getElementById('confirmReceived').style.display=(d.status==='Entregado'&&!d.buyerConfirmed)?'inline-block':'none';if(lastStatusSeen==='')lastStatusSeen=d.status;else if(lastStatusSeen!==d.status){lastStatusSeen=d.status;var m=statusMessage(d.status);if(m)flashClientStatus(m[0],m[1]);}}catch(e){}}};x.send()}requestBrowserNotifications();document.addEventListener('click',function(){try{if(window.nexoAudio&&window.nexoAudio.state==='suspended')window.nexoAudio.resume();}catch(e){}});function loadHistory(){var email=document.getElementById('email').value;if(!email){alert('Ingresá tu correo para consultar el historial.');return}var x=new XMLHttpRequest();x.open('GET','/api/orders/history?storeId='+encodeURIComponent(document.getElementById('storeId').value)+'&email='+encodeURIComponent(email),true);x.onreadystatechange=function(){if(x.readyState===4&&x.status===200){try{var a=JSON.parse(x.responseText),h='';a.forEach(function(o){h+='<div class=item><span>'+o.centralOrderId+' · '+o.status+'</span><b>$ '+o.total+'</b></div>'});document.getElementById('history').innerHTML=h||'No hay pedidos para este correo.'}catch(e){document.getElementById('history').innerHTML='No se pudo cargar el historial.'}}};x.send()}function confirmReceived(){var data='storeId='+encodeURIComponent(document.getElementById('storeId').value)+'&centralOrderId='+encodeURIComponent(lastOrderId)+'&email='+encodeURIComponent(document.getElementById('email').value),x=new XMLHttpRequest();x.open('POST','/api/orders/confirm',true);x.setRequestHeader('Content-Type','application/x-www-form-urlencoded');x.onreadystatechange=function(){if(x.readyState===4&&x.status===200){alert(x.responseText.indexOf('OK|')===0?'Recepción confirmada.':'No se pudo confirmar.');pollStatus()}};x.send(data)}function useCoupon(code){document.getElementById('couponCode').value=code;validateCoupon();toggleOpen()}function validateCoupon(){var code=(document.getElementById('couponCode').value||'').trim().toUpperCase(),state=document.getElementById('couponState');clearTimeout(couponLookupTimer);if(!code){couponRule=null;render();if(state)state.textContent='';return;}couponLookupTimer=setTimeout(function(){var x=new XMLHttpRequest();x.open('GET','/api/coupon/validate?storeId='+encodeURIComponent(document.getElementById('storeId').value)+'&code='+encodeURIComponent(code),true);x.onreadystatechange=function(){if(x.readyState===4){try{couponRule=JSON.parse(x.responseText);if(!couponRule.valid){if(state)state.textContent='⚠ Cupón no válido o no vigente';}else if(state)state.textContent='✓ Cupón aplicado: '+code;render();}catch(e){couponRule=null;render();}}};x.send();},120)}function addReviewEmoji(e){var t=document.getElementById('reviewText');if(!t)return;t.value+=(t.value?' ':'')+e;t.focus();}function setReviewRating(v){v=Math.max(1,Math.min(5,Number(v)||5));document.getElementById('reviewRating').value=v;document.querySelectorAll('#reviewStars .star-btn').forEach(function(b){b.classList.toggle('selected',Number(b.getAttribute('data-value'))<=v);});document.getElementById('reviewRatingText').textContent=v+' '+(v===1?'estrella':'estrellas');}document.querySelectorAll('#reviewStars .star-btn').forEach(function(b){b.addEventListener('click',function(){setReviewRating(this.getAttribute('data-value'));});});document.getElementById('couponCode').addEventListener('input',validateCoupon);setReviewRating(5);function proofToBase64(file){return new Promise(function(resolve,reject){var r=new FileReader();r.onload=function(){resolve(r.result.split(',')[1]||'')};r.onerror=reject;r.readAsDataURL(file);});}function uploadProof(file){return new Promise(async function(resolve,reject){try{if(!file){reject(new Error('No se seleccionó comprobante.'));return}if(file.type.indexOf('image/')!==0){reject(new Error('El comprobante debe ser una imagen.'));return}if(file.size>5*1024*1024){reject(new Error('El comprobante supera 5 MB.'));return}var base=await proofToBase64(file),body='storeId='+encodeURIComponent(document.getElementById('storeId').value)+'&storeSlug='+encodeURIComponent(document.getElementById('storeSlug').value)+'&itemsJson='+encodeURIComponent(JSON.stringify(cart))+'&fileName='+encodeURIComponent('comprobante-'+Date.now()+'.jpg')+'&contentType='+encodeURIComponent(file.type)+'&base64='+encodeURIComponent(base);var x=new XMLHttpRequest();x.open('POST','/api/order-proof/upload',true);x.timeout=90000;x.setRequestHeader('Content-Type','application/x-www-form-urlencoded;charset=UTF-8');x.onreadystatechange=function(){if(x.readyState===4){if(x.status===200&&x.responseText.indexOf('OK|')===0)resolve(x.responseText.split('|')[2]);else reject(new Error(x.responseText||'No se pudo subir el comprobante.'));}};x.onerror=function(){reject(new Error('No se pudo conectar con el almacenamiento.'));};x.ontimeout=function(){reject(new Error('La carga tardó demasiado.'));};x.send(body); }catch(e){reject(e);}});}function handleProofInput(input){if(!input)return;input.addEventListener('change',async function(){var f=this.files&&this.files[0],pr=document.getElementById('proofPreview'),st=document.getElementById('proofState');if(!f)return;if(f.type.indexOf('image/')!==0){st.textContent='Error: el comprobante debe ser una imagen.';this.value='';return}pr.innerHTML='<img src=\"'+URL.createObjectURL(f)+'\" alt=\"Comprobante\">';st.textContent='Subiendo comprobante...';var nc=document.getElementById('noPaymentProof');if(nc)nc.checked=false;toggleNoProofReason();try{var url=await uploadProof(f);document.getElementById('paymentProofPath').value=url;st.textContent='✓ Comprobante cargado. Se eliminará de R2 en 3 días.';}catch(err){document.getElementById('paymentProofPath').value='';st.textContent='Error: '+err.message;this.value='';}});}var proofInput=document.getElementById('paymentProofFile'),proofCamera=document.getElementById('paymentProofCamera');handleProofInput(proofInput);handleProofInput(proofCamera);function openProofFile(){if(proofInput)proofInput.click();}function openProofCamera(){if(proofCamera)proofCamera.click();}function toggleNoProofReason(){var c=document.getElementById('noPaymentProof'),r=document.getElementById('noPaymentProofReason'),p=document.getElementById('paymentProofPath');if(!c||!r)return;r.style.display=c.checked?'block':'none';r.required=c.checked;if(c.checked&&p)p.value='';if(c.checked){var st=document.getElementById('proofState');if(st)st.textContent='Se realizará el pedido sin comprobante.';}}function getReviewDeviceId(){var k='nexo_review_device_id';try{var v=localStorage.getItem(k);if(!v){v='dev-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);localStorage.setItem(k,v);}return v;}catch(e){return 'dev-session-'+Math.random().toString(36).slice(2);}}function loadReviews(){var x=new XMLHttpRequest();x.open('GET','/api/reviews?storeId='+encodeURIComponent(document.getElementById('storeId').value),true);x.onreadystatechange=function(){if(x.readyState===4&&x.status===200){try{var d=JSON.parse(x.responseText),h='';function esc(v){return String(v==null?'':v).replace(/[&<>]/g,function(c){return c==='&'?'&amp;':c==='<'?'&lt;':c==='>'?'&gt;':'';});}(d.items||[]).forEach(function(r){var stars='';for(var i=1;i<=5;i++)stars+=i<=r.rating?'★':'☆';h+='<article class=review-card><div class=review-stars>'+stars+'</div><div class=review-author>'+esc(r.author||'Cliente')+'</div><div class=review-text>'+esc(r.text)+'</div></article>';});if(!h)h='<article class=review-card><div class=review-stars>★★★★★</div><div class=review-author>Ejemplo de cliente</div><div class=review-text>Muy buena atención y el pedido llegó en excelentes condiciones.</div></article><article class=review-card><div class=review-stars>★★★★☆</div><div class=review-author>Ejemplo de cliente</div><div class=review-text>Buena experiencia. La próxima vez volvería a comprar.</div></article><article class=review-card><div class=review-stars>★★★★★</div><div class=review-author>Ejemplo de cliente</div><div class=review-text>El local me pareció rápido, ordenado y fácil de usar.</div></article>';document.getElementById('reviewsList').innerHTML=h;}catch(e){}}};x.send();}function sendReview(e){e.preventDefault();var st=document.getElementById('reviewState'),text=(document.getElementById('reviewText').value||'').trim();if(text.length<3){st.textContent='Escribí un comentario un poco más completo.';return false;}var body='storeId='+encodeURIComponent(document.getElementById('storeId').value)+'&rating='+encodeURIComponent(document.getElementById('reviewRating').value)+'&text='+encodeURIComponent(text)+'&customerName='+encodeURIComponent(document.getElementById('reviewName').value||'')+'&customerEmail='+encodeURIComponent(document.getElementById('email').value||'')+'&sessionEmail='+encodeURIComponent(document.getElementById('email').value||'')+'&deviceId='+encodeURIComponent(getReviewDeviceId());var x=new XMLHttpRequest();x.open('POST','/api/reviews',true);x.setRequestHeader('Content-Type','application/x-www-form-urlencoded;charset=UTF-8');x.onreadystatechange=function(){if(x.readyState===4){if(x.status===200&&x.responseText.indexOf('OK|')===0){st.textContent='✓ Reseña publicada.';document.getElementById('reviewText').value='';loadReviews();}else{var m=x.responseText||'No se pudo publicar la reseña.';st.textContent=m.indexOf('already_reviewed')>=0?'Ya dejaste una reseña desde este usuario o dispositivo.':'No se pudo publicar la reseña: '+m;}}};x.send(body);return false;}function sendOrder(e){e.preventDefault();window.__nexoOrderIdempotency=window.__nexoOrderIdempotency||((window.crypto&&crypto.randomUUID)?crypto.randomUUID():String(Date.now())+'-'+Math.random().toString(36).slice(2));if(!cart.length){alert('Agregá al menos un producto.');return false}var name=(document.getElementById('name').value||'').trim();if(!name){alert('Ingresá tu nombre.');document.getElementById('name').focus();return false}var fulfillment=document.getElementById('fulfillment').value;var address=(document.getElementById('address').value||'').trim();if(fulfillment==='Delivery'&&!address){alert('Ingresá la dirección de entrega.');document.getElementById('address').focus();return false}var noProof=document.getElementById('noPaymentProof').checked;var proof=document.getElementById('paymentProofPath').value;if(!proof&&!noProof){alert('Subí el comprobante o seleccioná “No tengo comprobante”.');return false}var reason=(document.getElementById('noPaymentProofReason').value||'').trim();if(noProof&&!reason){alert('Explicá brevemente por qué no tenés comprobante.');document.getElementById('noPaymentProofReason').focus();return false}var total=cart.reduce(function(a,i){return a+(Number(i.price)||0)*(Number(i.qty)||0)},0);var data={storeId:document.getElementById('storeId').value,storeSlug:document.getElementById('storeSlug').value,idempotencyKey:(window.__nexoOrderIdempotency||''),customerName:name,customerEmail:document.getElementById('email').value,phone:document.getElementById('phone').value,fulfillment:fulfillment,address:address,paymentMethod:document.getElementById('paymentMethod').value,paymentReference:document.getElementById('paymentReference').value,paymentProofPath:proof,noPaymentProof:noProof?'1':'0',noPaymentProofReason:reason,notes:document.getElementById('notes').value,couponCode:document.getElementById('couponCode').value,total:total.toFixed(2),itemsJson:JSON.stringify(cart)},body=[];Object.keys(data).forEach(function(k){body.push(encodeURIComponent(k)+'='+encodeURIComponent(data[k]))});var btn=e.target.querySelector('button[type=submit]');if(btn){btn.disabled=true;btn.textContent='ENVIANDO PEDIDO...'}var x=new XMLHttpRequest();x.open('POST','/api/cart/checkout',true);x.setRequestHeader('Content-Type','application/x-www-form-urlencoded;charset=UTF-8');x.timeout=90000;x.onreadystatechange=function(){if(x.readyState===4){if(btn){btn.disabled=false;btn.textContent='CONFIRMAR PEDIDO'}if(x.status===200&&x.responseText.indexOf('OK|')===0){lastOrderId=x.responseText.split('|')[1];alert('Pedido enviado. Número central: '+lastOrderId);cart=[];render();pollStatus()}else{var msg=x.responseText||'sin respuesta';if(msg==='ERROR|store'&&data.storeSlug&&data.storeSlug!==data.storeId){var retryData={};Object.keys(data).forEach(function(k){retryData[k]=data[k]});retryData.storeId=data.storeSlug;var retryBody=[];Object.keys(retryData).forEach(function(k){retryBody.push(encodeURIComponent(k)+'='+encodeURIComponent(retryData[k]))});var r=new XMLHttpRequest();r.open('POST','/api/cart/checkout',true);r.setRequestHeader('Content-Type','application/x-www-form-urlencoded;charset=UTF-8');r.timeout=90000;r.onreadystatechange=function(){if(r.readyState===4){if(r.status===200&&r.responseText.indexOf('OK|')===0){lastOrderId=r.responseText.split('|')[1];alert('Pedido enviado. Número central: '+lastOrderId);cart=[];render();pollStatus();return}var rm=r.responseText||msg;var rmap={'ERROR|store':'La tienda no está disponible en este momento.','ERROR|store_closed':'La tienda está cerrada en este momento.','ERROR|platform_blocked':'La tienda no puede recibir pedidos en este momento.','ERROR|total':'El total del pedido no es válido.','ERROR|product_not_found':'No se pudo identificar uno de los productos.'};alert('No se pudo enviar el pedido: '+(rmap[rm]||rm));}};r.onerror=function(){alert('No se pudo conectar con NexoMarket.');};r.ontimeout=function(){alert('El envío tardó demasiado. Intentá nuevamente.');};r.send(retryBody.join('&'));return}var map={'ERROR|payment_proof_required':'Subí el comprobante o seleccioná “No tengo comprobante”.','ERROR|proof_reason_required':'Explicá brevemente por qué no tenés comprobante.','ERROR|customer_name_required':'Falta tu nombre.','ERROR|address_required':'Falta la dirección de entrega.','ERROR|store':'La tienda no está disponible en este momento.','ERROR|store_closed':'La tienda está cerrada en este momento.','ERROR|platform_blocked':'La tienda no puede recibir pedidos en este momento.','ERROR|total':'El total del pedido no es válido.','ERROR|storeId':'No se pudo identificar la tienda.','ERROR|coupon_invalid':'El cupón no es válido o ya venció.'};alert('No se pudo enviar el pedido: '+(map[msg]||msg));}}};x.onerror=function(){if(btn){btn.disabled=false;btn.textContent='CONFIRMAR PEDIDO'}alert('No se pudo conectar con NexoMarket.');};x.ontimeout=function(){if(btn){btn.disabled=false;btn.textContent='CONFIRMAR PEDIDO'}alert('El envío tardó demasiado. Intentá nuevamente.');};x.send(body.join('&'));return false}render();loadReviews();setInterval(refreshCatalog,1800);setInterval(pollStatus,4000);var back=document.getElementById('storeBackHome'),lastY=window.scrollY;window.addEventListener('scroll',function(){var y=window.scrollY;if(y>100&&y<lastY)back.classList.add('show');else if(y<=100||y>lastY)back.classList.remove('show');lastY=y;},{passive:true});</script></body></html>");
+            b.Append("</div></section><section class='section'><div class='section-head'><div><h2>Reputación del local</h2><div class='muted'>Podés dejar una reseña con tu cuenta o desde este dispositivo.</div></div></div><form id='reviewForm' class='card review-form' onsubmit='return sendReview(event)'><div class='review-rating-picker'><b>¿Cuántas estrellas le das?</b><div id='reviewStars' class='star-picker' role='radiogroup' aria-label='Puntaje de 1 a 5'><button type='button' class='star-btn selected' data-value='1'>★</button><button type='button' class='star-btn selected' data-value='2'>★</button><button type='button' class='star-btn selected' data-value='3'>★</button><button type='button' class='star-btn selected' data-value='4'>★</button><button type='button' class='star-btn selected' data-value='5'>★</button></div><input type='hidden' id='reviewRating' value='5' required/><span id='reviewRatingText' class='muted'>5 estrellas</span></div><input id='reviewName' placeholder='Tu nombre (opcional)'/><div class='emoji-bar' aria-label='Emoticones'><button type='button' onclick='addReviewEmoji(&quot;😍&quot;)'>😍</button><button type='button' onclick='addReviewEmoji(&quot;😋&quot;)'>😋</button><button type='button' onclick='addReviewEmoji(&quot;😊&quot;)'>😊</button><button type='button' onclick='addReviewEmoji(&quot;😐&quot;)'>😐</button><button type='button' onclick='addReviewEmoji(&quot;😕&quot;)'>😕</button><button type='button' onclick='addReviewEmoji(&quot;😡&quot;)'>😡</button><button type='button' onclick='addReviewEmoji(&quot;❤️&quot;)'>❤️</button></div><textarea id='reviewText' placeholder='¿Cómo fue tu experiencia con este local? Podés usar emoticones.' required></textarea><button class='btn' type='submit'>DEJAR RESEÑA</button><div id='reviewState' class='muted'></div></form><div id='reviewsList' class='reviews-list'></div></section><a id='storeBackHome' class='back-home-float' href='/'>NEXO MARKET</a><button class='cart-fab' onclick='toggleCart()'>🛒 Carrito <span id='cartCount'>0</span></button>\").Append(\"<aside id='cartPanel' class='cart-panel cart'><h2>Tu carrito</h2><div id='cartItems'>Carrito vacío.</div><div class='cart-summary-line'><span>Subtotal</span><b>$ <span id='cartSubtotal'>0.00</span></b></div><div id='couponLine' class='cart-summary-line coupon-line' style='display:none'><span>🏷️ Descuento cupón</span><b>− $ <span id='couponDiscount'>0.00</span></b></div><div id='couponState' class='muted'></div><h3 class='cart-total-line'>Total: $ <span id='total'>0.00</span></h3><form onsubmit='return sendOrder(event)'><input type='hidden' id='storeId' value='\").Append(E(realId)).Append(\"'/><input id='name' placeholder='Nombre' required/><input id='email' type='email' placeholder='Correo (opcional)'/><input id='phone' placeholder='Teléfono (opcional)'/><select id='fulfillment'><option>Delivery</option><option>Retiro</option></select><input id='address' placeholder='Dirección de entrega'/><select id='paymentMethod'><option>Transferencia</option><option>Mercado Pago</option><option>Efectivo</option></select><input id='paymentReference' placeholder='Referencia de pago (opcional)'/><label class='proof-upload'><b>📎 COMPROBANTE DE PAGO (OPCIONAL)</b><small>Si lo tenés, podés subirlo. Se elimina automáticamente de R2 después de 3 días.</small><input id='paymentProofFile' class='native-picker' type='file' accept='image/jpeg,image/png,image/webp,image/gif'/><input id='paymentProofCamera' class='native-picker' type='file' accept='image/*' capture='environment'/><div class='proof-actions'><button type='button' class='btn' onclick='openProofFile()'>📁 SUBIR FOTO</button><button type='button' class='btn violet' onclick='openProofCamera()'>📷 SACAR FOTO</button></div><div id='proofPreview' class='proof-preview'></div><input type='hidden' id='paymentProofPath'/><span id='proofState' class='muted'>Comprobante no cargado.</span><label style='display:flex;gap:8px;align-items:center;margin-top:8px'><input id='noPaymentProof' type='checkbox' style='width:auto;margin:0' onchange='toggleNoProofReason()'/> No tengo comprobante</label><input id='noPaymentProofReason' placeholder='Explicación breve (opcional)' maxlength='500' style='display:none'/></label><input id='notes' placeholder='Notas para el vendedor (opcional)'/><input id='couponCode' placeholder='Código de cupón (opcional)'/><button class='btn' type='submit'>CONFIRMAR PEDIDO</button></form><hr style='border-color:#253447;margin:18px 0'><h3>Seguimiento</h3><div id='orderStatus' class='muted'>Después de confirmar un pedido aparecerá aquí.</div><button class='btn' id='confirmReceived' style='display:none' onclick='confirmReceived()'>CONFIRMAR RECEPCIÓN</button><button class='btn violet' style='margin-left:8px' onclick='loadHistory()'>VER HISTORIAL</button><div id='history' class='muted' style='margin-top:12px'></div></aside><script>var cart=[],lastOrderId='',lastStatusSeen='',couponRule=null,couponLookupTimer=null;function toggleCart(){document.getElementById('cartPanel').classList.toggle('open')}function addPromotion(id,name,price,productIds){var key='promo:'+id,x=cart.filter(function(i){return i.id===key})[0];if(x)x.qty++;else cart.push({id:key,name:name,price:price,qty:1,promotionId:id,productIds:productIds});render();toggleOpen()}function add(id,name,price){var x=cart.filter(function(i){return i.id===id})[0];if(x)x.qty++;else cart.push({id:id,name:name,price:price,qty:1});render();toggleOpen()}function toggleOpen(){document.getElementById('cartPanel').classList.add('open')}function calcCoupon(t){if(!couponRule||!couponRule.valid)return 0;var d=Number(couponRule.percent)>0?t*Number(couponRule.percent)/100:Number(couponRule.amount)||0;return Math.min(t,Math.max(0,d));}function render(){var h='',t=0,c=0;cart.forEach(function(i){h+='<div class=item><span>'+i.name+' × '+i.qty+'</span><b>$ '+(i.price*i.qty).toFixed(2)+'</b></div>';t+=i.price*i.qty;c+=i.qty});var discount=calcCoupon(t),finalTotal=Math.max(0,t-discount);document.getElementById('cartItems').innerHTML=h||'Carrito vacío.';document.getElementById('cartSubtotal').innerHTML=t.toFixed(2);document.getElementById('couponDiscount').innerHTML=discount.toFixed(2);document.getElementById('total').innerHTML=finalTotal.toFixed(2);document.getElementById('cartCount').innerHTML=c;var line=document.getElementById('couponLine');if(line)line.style.display=discount>0?'flex':'none';}function refreshCatalog(){var x=new XMLHttpRequest();x.open('GET','/api/catalog/live?storeId='+encodeURIComponent(document.getElementById('storeId').value),true);x.onreadystatechange=function(){if(x.readyState===4&&x.status===200){try{var d=JSON.parse(x.responseText);var stamp=d.updatedAt||'';if(window.lastCatalogStamp===undefined)window.lastCatalogStamp=stamp;else if(stamp!==window.lastCatalogStamp){window.lastCatalogStamp=stamp;location.reload();}document.getElementById('liveState').innerHTML='● LIVE '+(stamp?new Date(stamp).toLocaleTimeString():'');}catch(e){}}};x.send()}function playClientBeep(){try{window.nexoAudio=window.nexoAudio||new(window.AudioContext||window.webkitAudioContext)();if(window.nexoAudio.state==='suspended')window.nexoAudio.resume();var o=window.nexoAudio.createOscillator(),g=window.nexoAudio.createGain(),n=window.nexoAudio.currentTime;o.type='sine';o.frequency.setValueAtTime(880,n);o.frequency.linearRampToValueAtTime(1320,n+.12);g.gain.setValueAtTime(.12,n);g.gain.exponentialRampToValueAtTime(.001,n+.22);o.connect(g);g.connect(window.nexoAudio.destination);o.start(n);o.stop(n+.24);}catch(e){}}function requestBrowserNotifications(){try{if('Notification' in window&&Notification.permission==='default')Notification.requestPermission();}catch(e){}}function notifyBrowser(title,text){try{if('Notification' in window&&Notification.permission==='granted')new Notification(title,{body:text,tag:'nexomarket-order'});}catch(e){}}function flashClientStatus(text,kind){var el=document.getElementById('clientStatusAlert');if(!el)return;el.className='client-status-alert '+(kind||'green')+' show';el.innerHTML='<div class=\"csa-title\">'+text+'</div><div class=\"csa-sub\">NexoMarket · actualización del pedido</div>';var i=0;clearInterval(window.__clientFlashTimer);window.__clientFlashTimer=setInterval(function(){i++;el.classList.toggle('show');playClientBeep();if(i>=10){clearInterval(window.__clientFlashTimer);el.classList.remove('show');}},300);playClientBeep();notifyBrowser(text,'Tu pedido fue actualizado.');}function statusMessage(status){if(status==='Preparando')return ['🟢 PEDIDO CONFIRMADO','green'];if(status==='Listo')return ['🟢 PEDIDO LISTO','green'];if(status==='Enviado'||status==='En reparto')return ['🟢 PEDIDO EN DELIVERY','green'];if(status==='Entregado')return ['🟢 PEDIDO ENTREGADO','green'];if(status==='Rechazado'||status==='Cancelado')return ['🔴 PEDIDO CANCELADO','red'];return null;}function pollStatus(){if(!lastOrderId)return;var u='/api/orders/status?storeId='+encodeURIComponent(document.getElementById('storeId').value)+'&centralOrderId='+encodeURIComponent(lastOrderId),x=new XMLHttpRequest();x.open('GET',u,true);x.onreadystatechange=function(){if(x.readyState===4&&x.status===200){try{var d=JSON.parse(x.responseText);if(d.error)return;document.getElementById('orderStatus').innerHTML='Pedido <b>'+d.centralOrderId+'</b> · Estado: <b>'+d.status+'</b><br>Total: $ '+d.total+(d.updatedAt?' · Actualizado: '+new Date(d.updatedAt).toLocaleString():'');document.getElementById('confirmReceived').style.display=(d.status==='Entregado'&&!d.buyerConfirmed)?'inline-block':'none';if(lastStatusSeen==='')lastStatusSeen=d.status;else if(lastStatusSeen!==d.status){lastStatusSeen=d.status;var m=statusMessage(d.status);if(m)flashClientStatus(m[0],m[1]);}}catch(e){}}};x.send()}requestBrowserNotifications();document.addEventListener('click',function(){try{if(window.nexoAudio&&window.nexoAudio.state==='suspended')window.nexoAudio.resume();}catch(e){}});function loadHistory(){var email=document.getElementById('email').value;if(!email){alert('Ingresá tu correo para consultar el historial.');return}var x=new XMLHttpRequest();x.open('GET','/api/orders/history?storeId='+encodeURIComponent(document.getElementById('storeId').value)+'&email='+encodeURIComponent(email),true);x.onreadystatechange=function(){if(x.readyState===4&&x.status===200){try{var a=JSON.parse(x.responseText),h='';a.forEach(function(o){h+='<div class=item><span>'+o.centralOrderId+' · '+o.status+'</span><b>$ '+o.total+'</b></div>'});document.getElementById('history').innerHTML=h||'No hay pedidos para este correo.'}catch(e){document.getElementById('history').innerHTML='No se pudo cargar el historial.'}}};x.send()}function confirmReceived(){var data='storeId='+encodeURIComponent(document.getElementById('storeId').value)+'&centralOrderId='+encodeURIComponent(lastOrderId)+'&email='+encodeURIComponent(document.getElementById('email').value),x=new XMLHttpRequest();x.open('POST','/api/orders/confirm',true);x.setRequestHeader('Content-Type','application/x-www-form-urlencoded');x.onreadystatechange=function(){if(x.readyState===4&&x.status===200){alert(x.responseText.indexOf('OK|')===0?'Recepción confirmada.':'No se pudo confirmar.');pollStatus()}};x.send(data)}function useCoupon(code){document.getElementById('couponCode').value=code;validateCoupon();toggleOpen()}function validateCoupon(){var code=(document.getElementById('couponCode').value||'').trim().toUpperCase(),state=document.getElementById('couponState');clearTimeout(couponLookupTimer);if(!code){couponRule=null;render();if(state)state.textContent='';return;}couponLookupTimer=setTimeout(function(){var x=new XMLHttpRequest();x.open('GET','/api/coupon/validate?storeId='+encodeURIComponent(document.getElementById('storeId').value)+'&code='+encodeURIComponent(code),true);x.onreadystatechange=function(){if(x.readyState===4){try{couponRule=JSON.parse(x.responseText);if(!couponRule.valid){if(state)state.textContent='⚠ Cupón no válido o no vigente';}else if(state)state.textContent='✓ Cupón aplicado: '+code;render();}catch(e){couponRule=null;render();}}};x.send();},120)}function addReviewEmoji(e){var t=document.getElementById('reviewText');if(!t)return;t.value+=(t.value?' ':'')+e;t.focus();}function setReviewRating(v){v=Math.max(1,Math.min(5,Number(v)||5));document.getElementById('reviewRating').value=v;document.querySelectorAll('#reviewStars .star-btn').forEach(function(b){b.classList.toggle('selected',Number(b.getAttribute('data-value'))<=v);});document.getElementById('reviewRatingText').textContent=v+' '+(v===1?'estrella':'estrellas');}document.querySelectorAll('#reviewStars .star-btn').forEach(function(b){b.addEventListener('click',function(){setReviewRating(this.getAttribute('data-value'));});});document.getElementById('couponCode').addEventListener('input',validateCoupon);setReviewRating(5);function proofToBase64(file){return new Promise(function(resolve,reject){var r=new FileReader();r.onload=function(){resolve(r.result.split(',')[1]||'')};r.onerror=reject;r.readAsDataURL(file);});}function uploadProof(file){return new Promise(async function(resolve,reject){try{if(!file){reject(new Error('No se seleccionó comprobante.'));return}if(file.type.indexOf('image/')!==0){reject(new Error('El comprobante debe ser una imagen.'));return}if(file.size>5*1024*1024){reject(new Error('El comprobante supera 5 MB.'));return}var base=await proofToBase64(file),body='storeId='+encodeURIComponent(document.getElementById('storeId').value)+'&fileName='+encodeURIComponent('comprobante-'+Date.now()+'.jpg')+'&contentType='+encodeURIComponent(file.type)+'&base64='+encodeURIComponent(base);var x=new XMLHttpRequest();x.open('POST','/api/order-proof/upload',true);x.timeout=90000;x.setRequestHeader('Content-Type','application/x-www-form-urlencoded;charset=UTF-8');x.onreadystatechange=function(){if(x.readyState===4){if(x.status===200&&x.responseText.indexOf('OK|')===0)resolve(x.responseText.split('|')[2]);else reject(new Error(x.responseText||'No se pudo subir el comprobante.'));}};x.onerror=function(){reject(new Error('No se pudo conectar con el almacenamiento.'));};x.ontimeout=function(){reject(new Error('La carga tardó demasiado.'));};x.send(body); }catch(e){reject(e);}});}function handleProofInput(input){if(!input)return;input.addEventListener('change',async function(){var f=this.files&&this.files[0],pr=document.getElementById('proofPreview'),st=document.getElementById('proofState');if(!f)return;if(f.type.indexOf('image/')!==0){st.textContent='Error: el comprobante debe ser una imagen.';this.value='';return}pr.innerHTML='<img src=\"'+URL.createObjectURL(f)+'\" alt=\"Comprobante\">';st.textContent='Subiendo comprobante...';var nc=document.getElementById('noPaymentProof');if(nc)nc.checked=false;toggleNoProofReason();try{var url=await uploadProof(f);document.getElementById('paymentProofPath').value=url;st.textContent='✓ Comprobante cargado. Se eliminará de R2 en 3 días.';}catch(err){document.getElementById('paymentProofPath').value='';st.textContent='Error: '+err.message;this.value='';}});}var proofInput=document.getElementById('paymentProofFile'),proofCamera=document.getElementById('paymentProofCamera');handleProofInput(proofInput);handleProofInput(proofCamera);function openProofFile(){if(proofInput)proofInput.click();}function openProofCamera(){if(proofCamera)proofCamera.click();}function toggleNoProofReason(){var c=document.getElementById('noPaymentProof'),r=document.getElementById('noPaymentProofReason'),p=document.getElementById('paymentProofPath');if(!c||!r)return;r.style.display=c.checked?'block':'none';r.required=c.checked;if(c.checked&&p)p.value='';if(c.checked){var st=document.getElementById('proofState');if(st)st.textContent='Se realizará el pedido sin comprobante.';}}function getReviewDeviceId(){var k='nexo_review_device_id';try{var v=localStorage.getItem(k);if(!v){v='dev-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);localStorage.setItem(k,v);}return v;}catch(e){return 'dev-session-'+Math.random().toString(36).slice(2);}}function loadReviews(){var x=new XMLHttpRequest();x.open('GET','/api/reviews?storeId='+encodeURIComponent(document.getElementById('storeId').value),true);x.onreadystatechange=function(){if(x.readyState===4&&x.status===200){try{var d=JSON.parse(x.responseText),h='';function esc(v){return String(v==null?'':v).replace(/[&<>]/g,function(c){return c==='&'?'&amp;':c==='<'?'&lt;':c==='>'?'&gt;':'';});}(d.items||[]).forEach(function(r){var stars='';for(var i=1;i<=5;i++)stars+=i<=r.rating?'★':'☆';h+='<article class=review-card><div class=review-stars>'+stars+'</div><div class=review-author>'+esc(r.author||'Cliente')+'</div><div class=review-text>'+esc(r.text)+'</div></article>';});if(!h)h='<article class=review-card><div class=review-stars>★★★★★</div><div class=review-author>Ejemplo de cliente</div><div class=review-text>Muy buena atención y el pedido llegó en excelentes condiciones.</div></article><article class=review-card><div class=review-stars>★★★★☆</div><div class=review-author>Ejemplo de cliente</div><div class=review-text>Buena experiencia. La próxima vez volvería a comprar.</div></article><article class=review-card><div class=review-stars>★★★★★</div><div class=review-author>Ejemplo de cliente</div><div class=review-text>El local me pareció rápido, ordenado y fácil de usar.</div></article>';document.getElementById('reviewsList').innerHTML=h;}catch(e){}}};x.send();}function sendReview(e){e.preventDefault();var st=document.getElementById('reviewState'),text=(document.getElementById('reviewText').value||'').trim();if(text.length<3){st.textContent='Escribí un comentario un poco más completo.';return false;}var body='storeId='+encodeURIComponent(document.getElementById('storeId').value)+'&rating='+encodeURIComponent(document.getElementById('reviewRating').value)+'&text='+encodeURIComponent(text)+'&customerName='+encodeURIComponent(document.getElementById('reviewName').value||'')+'&customerEmail='+encodeURIComponent(document.getElementById('email').value||'')+'&sessionEmail='+encodeURIComponent(document.getElementById('email').value||'')+'&deviceId='+encodeURIComponent(getReviewDeviceId());var x=new XMLHttpRequest();x.open('POST','/api/reviews',true);x.setRequestHeader('Content-Type','application/x-www-form-urlencoded;charset=UTF-8');x.onreadystatechange=function(){if(x.readyState===4){if(x.status===200&&x.responseText.indexOf('OK|')===0){st.textContent='✓ Reseña publicada.';document.getElementById('reviewText').value='';loadReviews();}else{var m=x.responseText||'No se pudo publicar la reseña.';st.textContent=m.indexOf('already_reviewed')>=0?'Ya dejaste una reseña desde este usuario o dispositivo.':'No se pudo publicar la reseña: '+m;}}};x.send(body);return false;}function sendOrder(e){e.preventDefault();if(!cart.length){alert('Agregá al menos un producto.');return false}var name=(document.getElementById('name').value||'').trim();if(!name){alert('Ingresá tu nombre.');document.getElementById('name').focus();return false}var fulfillment=document.getElementById('fulfillment').value;var address=(document.getElementById('address').value||'').trim();if(fulfillment==='Delivery'&&!address){alert('Ingresá la dirección de entrega.');document.getElementById('address').focus();return false}var noProof=document.getElementById('noPaymentProof').checked;var proof=document.getElementById('paymentProofPath').value;if(!proof&&!noProof){alert('Subí el comprobante o seleccioná “No tengo comprobante”.');return false}var reason=(document.getElementById('noPaymentProofReason').value||'').trim();if(noProof&&!reason){alert('Explicá brevemente por qué no tenés comprobante.');document.getElementById('noPaymentProofReason').focus();return false}var total=cart.reduce(function(a,i){return a+(Number(i.price)||0)*(Number(i.qty)||0)},0);var data={storeId:document.getElementById('storeId').value,customerName:name,customerEmail:document.getElementById('email').value,phone:document.getElementById('phone').value,fulfillment:fulfillment,address:address,paymentMethod:document.getElementById('paymentMethod').value,paymentReference:document.getElementById('paymentReference').value,paymentProofPath:proof,noPaymentProof:noProof?'1':'0',noPaymentProofReason:reason,notes:document.getElementById('notes').value,couponCode:document.getElementById('couponCode').value,total:total.toFixed(2),itemsJson:JSON.stringify(cart)},body=[];Object.keys(data).forEach(function(k){body.push(encodeURIComponent(k)+'='+encodeURIComponent(data[k]))});var btn=e.target.querySelector('button[type=submit]');if(btn){btn.disabled=true;btn.textContent='ENVIANDO PEDIDO...'}var x=new XMLHttpRequest();x.open('POST','/api/orders/create',true);x.setRequestHeader('Content-Type','application/x-www-form-urlencoded;charset=UTF-8');x.timeout=90000;x.onreadystatechange=function(){if(x.readyState===4){if(btn){btn.disabled=false;btn.textContent='CONFIRMAR PEDIDO'}if(x.status===200&&x.responseText.indexOf('OK|')===0){lastOrderId=x.responseText.split('|')[1];alert('Pedido enviado. Número central: '+lastOrderId);cart=[];render();pollStatus()}else{var msg=x.responseText||'sin respuesta';var map={'ERROR|payment_proof_required':'Subí el comprobante o seleccioná “No tengo comprobante”.','ERROR|proof_reason_required':'Explicá brevemente por qué no tenés comprobante.','ERROR|customer_name_required':'Falta tu nombre.','ERROR|address_required':'Falta la dirección de entrega.','ERROR|store':'La tienda no está disponible en este momento.','ERROR|total':'El total del pedido no es válido.','ERROR|storeId':'No se pudo identificar la tienda.','ERROR|coupon_invalid':'El cupón no es válido o ya venció.'};alert('No se pudo enviar el pedido: '+(map[msg]||msg));}}};x.onerror=function(){if(btn){btn.disabled=false;btn.textContent='CONFIRMAR PEDIDO'}alert('No se pudo conectar con NexoMarket.');};x.ontimeout=function(){if(btn){btn.disabled=false;btn.textContent='CONFIRMAR PEDIDO'}alert('El envío tardó demasiado. Intentá nuevamente.');};x.send(body.join('&'));return false}render();loadReviews();setInterval(refreshCatalog,1800);setInterval(pollStatus,4000);var back=document.getElementById('storeBackHome'),lastY=window.scrollY;window.addEventListener('scroll',function(){var y=window.scrollY;if(y>100&&y<lastY)back.classList.add('show');else if(y<=100||y>lastY)back.classList.remove('show');lastY=y;},{passive:true});</script></body></html>");
             return b.ToString();
         }
 
@@ -2679,7 +2280,7 @@ namespace NexoMarket.CentralServer
 
             CentralUser viewer=SessionUser(cookie); string accountLinks=viewer!=null && viewer.Role=="seller" ? "<a href='/'>Tiendas</a><a href='/seller'>Mi cuenta</a><a href='/store/"+Uri.EscapeDataString(viewer.StoreId??"")+"'>Mi tienda</a><a href='/logout'>Salir</a>" : "<a href='/'>Tiendas</a><a href='/login'>Ingresar</a><a href='/register'>Crear cuenta</a>"; b.Append("<div class='top'><a class='brand' href='/'><span class='n'>NEXO</span>MARKET</a><div>"+accountLinks+"</div></div>");
             b.Append("<section class='hero'><span class='eyebrow'>MARKETPLACE</span><div><span class='nexo'>NEXO</span><span class='market'>MARKET</span></div><div class='hero-sub'>Encontrá todas las tiendas disponibles y priorizá las más cercanas" + (hasCoords ? " a <b>" + E(locationTitle) + "</b>." : ".") + "</div><form class='location-box' method='get' action='/'><input id='q' name='q' value='" + E(q) + "' placeholder='¿Desde dónde estás? Ej.: Mendoza, Luján...'/><input type='hidden' id='lat' name='lat'/><input type='hidden' id='lon' name='lon'/><button class='btn' type='submit'>Buscar tiendas</button><button class='btn' type='button' onclick='geo()'>Usar mi ubicación</button></form><div class='hint'>La ubicación se convierte a coordenadas y las tiendas se ordenan por cercanía. Los datos se actualizan desde NexoMarket Central.</div></section>");
-            b.Append("<div class='section-head'><div><h2>Tiendas disponibles</h2><p>Todas las tiendas se muestran desde el directorio central. Las cerradas permanecen visibles con su estado.</p></div><span class='mini'>DIRECTORIO MULTI-TIENDA</span></div><section class='store-search-panel'><input id='storeNameSearch' class='store-name-search' type='search' autocomplete='off' placeholder='Buscar tienda por nombre...'/><div id='storeSearchResults' class='store-search-results' hidden></div></section>");
+            b.Append("<div class='section-head'><div><h2>Tiendas disponibles</h2><p>Todas las tiendas se muestran desde el directorio central. Las cerradas permanecen visibles con su estado.</p></div><span class='mini'>DIRECTORIO MULTI-TIENDA</span></div><section class='store-search-panel'><input id='storeNameSearch' class='store-name-search' type='search' autocomplete='off' aria-label='Buscar tienda por nombre' placeholder='🔎 Buscar tienda por nombre'/><div id='storeSearchResults' class='store-search-results' hidden></div></section>");
             if (stores.Count > 0) { b.Append("<div id='storeResults' class='grid store-directory-grid'>"); foreach (CentralStore cs in stores) { string href = "/store/" + Uri.EscapeDataString(cs.StoreId); string d = cs.Distance > 0 ? cs.Distance.ToString("0.0") + " km · " : ""; string logo = string.IsNullOrWhiteSpace(cs.Logo) ? "<span>N</span>" : "<img src='" + E(cs.Logo) + "' alt='" + E(cs.Name) + "' loading='lazy'/>"; string promoHtml=StorePromoBadges(cs.StoreId); string media=string.IsNullOrWhiteSpace(cs.StorePhoto)?("<div class='directory-logo'>"+logo+"</div>"):(("<div class='directory-cover'><img src='"+E(cs.StorePhoto)+"' alt='Portada de "+E(cs.Name)+"' loading='lazy'/><div class='directory-logo overlay'>"+logo+"</div></div>")); string reviewSummary=ReviewSummaryForStore(cs.StoreId); string[] reviewParts=reviewSummary.Split('|'); string reviewAvg=reviewParts.Length>0?reviewParts[0]:"0.0"; string reviewCount=reviewParts.Length>1?reviewParts[1]:"0"; string badge=cs.SuperFeatured ? "<div class='super-featured-badge' style='--sf:"+E(cs.FeaturedNeonColor)+"'>★ SÚPER DESTACADA</div>" : (cs.Featured ? "<div class='featured-badge'>★ TIENDA DESTACADA EN LA PLATAFORMA</div>" : ""); b.Append("<a class='card store-directory-card horizontal-store-card' href='" + E(href) + "'>"+media+"<div class='directory-body'>"+badge+"<div class='name'>" + E(cs.Name) + "</div><div class='meta'>" + E(cs.Category.Length == 0 ? "Comercio" : cs.Category) + " · " + E(cs.City) + "</div><div class='open " + (cs.Active ? "" : "closed") + "'>● " + (cs.Active ? "Abierto" : "Cerrado") + "</div><div class='meta directory-description'>"+E(cs.Description.Length>140?cs.Description.Substring(0,140)+"…":cs.Description)+"</div><div class='meta'>"+(cs.Delivery?"🚚 Delivery":"🏪 Retiro")+" · 📍 "+E(cs.Address)+"</div><div class='meta'>🕒 "+E(cs.OpenTime)+" a "+E(cs.CloseTime)+" · 💳 Pagos disponibles</div><div class='distance'>📍 " + E(d) + "</div><div class='rating-mini'>⭐ "+E(reviewAvg)+"/5 · "+E(reviewCount)+" opiniones</div>"+promoHtml+"</div></a>"); } b.Append("</div>"); }
             else b.Append("<div class='empty'><b>No hay tiendas publicadas todavía.</b><p>Cuando un vendedor publique o actualice su tienda, aparecerá automáticamente aquí. Si acabás de publicarla, volvé a cargar esta página.</p></div>");
             b.Append("<div class='auth-grid'><section class='panel centered-cta'><h2>¿Ya tenés cuenta?</h2><p>Creá tu cuenta y seguí tus pedidos desde NexoMarket.</p><a class='btn' href='/register'>CREAR CUENTA NUEVA</a></section><section class='panel centered-cta'><h2>¿Sos vendedor?</h2><p>Creá tu tienda online y empezá a vender.</p><a class='btn' href='/seller-register'>CREAR CUENTA DE VENDEDOR</a></section></div><div class='promo-platform'>🚀 <b>Probá NexoMarket y vendé más.</b><span>Tu tienda online lista para recibir pedidos.</span><a href='/seller-register'>Crear mi tienda</a></div><div class='footer'>NexoMarket Central · " + stores.Count + " tiendas encontradas · priorizamos las más cercanas cuando hay ubicación · datos actualizados sin caché</div><a id='backHomeFloat' class='back-home-float' href='/'>NEXO MARKET</a></div><script>function geo(){if(!navigator.geolocation){alert('Tu navegador no permite ubicación. Escribí una ciudad.');return;}navigator.geolocation.getCurrentPosition(function(p){document.getElementById('lat').value=p.coords.latitude;document.getElementById('lon').value=p.coords.longitude;document.getElementById('q').value='Mi ubicación';document.querySelector('.location-box').submit();},function(){alert('No se pudo obtener la ubicación.');},{enableHighAccuracy:true,timeout:10000,maximumAge:300000});}var ss=document.getElementById('storeNameSearch'),sr=document.getElementById('storeSearchResults'),timer=null;function renderStoreSearch(items){if(!sr)return;sr.hidden=false;sr.innerHTML='';if(!items.length){var empty=document.createElement('div');empty.className='store-search-empty';empty.textContent='No encontramos tiendas con ese nombre.';sr.appendChild(empty);return;}items.forEach(function(x){var a=document.createElement('a');a.className='store-search-result';a.href=x.publicUrl||'/';var icon=document.createElement('span');icon.textContent='🏪';icon.style.fontSize='22px';var box=document.createElement('span');var name=document.createElement('b');name.textContent=x.name||'Tienda';var meta=document.createElement('small');meta.textContent=(x.category||'Comercio')+(x.city?' · '+x.city:'');box.appendChild(name);box.appendChild(meta);a.appendChild(icon);a.appendChild(box);sr.appendChild(a);});}function doStoreSearch(){var q=(ss.value||'').trim();if(!q){sr.hidden=true;sr.innerHTML='';return;}clearTimeout(timer);timer=setTimeout(function(){fetch('/api/stores/search?q='+encodeURIComponent(q)).then(function(r){return r.json();}).then(renderStoreSearch).catch(function(){sr.hidden=false;sr.innerHTML='';var e=document.createElement('div');e.className='store-search-empty';e.textContent='No se pudo buscar ahora.';sr.appendChild(e);});},180);}if(ss)ss.addEventListener('input',doStoreSearch);var back=document.getElementById('backHomeFloat'),lastY=window.scrollY;window.addEventListener('scroll',function(){var y=window.scrollY;if(y>100&&y<lastY)back.classList.add('show');else if(y<=100||y>lastY)back.classList.remove('show');lastY=y;},{passive:true});</script></body></html>");
@@ -2719,7 +2320,7 @@ namespace NexoMarket.CentralServer
                 XElement root=d.Root.Element("Users");
                 XElement old=root.Elements("User").FirstOrDefault(x=>string.Equals(S(x,"Email"),email,StringComparison.OrdinalIgnoreCase));
                 // Para vendedores la identidad real es StoreId. Una tienda tiene una cuenta
-                // vendedora canónica; si Web y Web usaron correos distintos, el último
+                // vendedora canónica; si Web y Windows usaron correos distintos, el último
                 // emparejamiento reemplaza la identidad anterior en lugar de crear dos vendedores.
                 if(role=="seller" && !string.IsNullOrWhiteSpace(storeId))
                 {
@@ -2806,149 +2407,44 @@ namespace NexoMarket.CentralServer
             }
         }
 
-        private string ResolveSellerCanonicalStore(CentralUser user)
-        {
-            if(user==null || !string.Equals(user.Role,"seller",StringComparison.OrdinalIgnoreCase)) return "";
-            string current=NormalizeStoreId(user.StoreId);
-            // Identidad canónica Web: la cuenta PostgreSQL manda.
-            if(_database!=null && _database.Enabled && !string.IsNullOrWhiteSpace(user.Email))
-            {
-                try
-                {
-                    Dictionary<string,string> db=_database.GetAccount(user.Email);
-                    if(db!=null && string.Equals(db.ContainsKey("role")?db["role"]:"","seller",StringComparison.OrdinalIgnoreCase))
-                    {
-                        string dbStore=NormalizeStoreId(db.ContainsKey("storeId")?db["storeId"]:"");
-                        if(dbStore.Length>0) return dbStore;
-                    }
-                }
-                catch { }
-            }
-            lock(_sync)
-            {
-                XElement stores=_doc.Root==null?null:_doc.Root.Element("Stores");
-                if(stores!=null && current.Length>0)
-                {
-                    XElement same=stores.Elements("Store").FirstOrDefault(x=>string.Equals(NormalizeStoreId(S(x,"StoreId")),current,StringComparison.OrdinalIgnoreCase));
-                    if(same!=null) return NormalizeStoreId(S(same,"StoreId"));
-                }
-                if(stores!=null)
-                {
-                    XElement byOwner=stores.Elements("Store").FirstOrDefault(x=>
-                        (string.Equals(S(x,"OwnerEmail"),user.Email,StringComparison.OrdinalIgnoreCase) ||
-                         string.Equals(S(x,"SellerEmail"),user.Email,StringComparison.OrdinalIgnoreCase) ||
-                         string.Equals(S(x,"OwnerAccountId"),user.Id,StringComparison.OrdinalIgnoreCase) ||
-                         string.Equals(S(x,"SellerAccountId"),user.Id,StringComparison.OrdinalIgnoreCase) ||
-                         string.Equals(S(x,"AccountId"),user.Id,StringComparison.OrdinalIgnoreCase)) &&
-                        NormalizeStoreId(S(x,"StoreId")).Length>0);
-                    if(byOwner!=null) return NormalizeStoreId(S(byOwner,"StoreId"));
-                }
-                try
-                {
-                    XDocument accounts=LoadFile(_accountsFile,"NexoMarketAccounts","Users");
-                    XElement users=accounts.Root==null?null:accounts.Root.Element("Users");
-                    XElement a=users==null?null:users.Elements("User").FirstOrDefault(x=>
-                        string.Equals(S(x,"Role"),"seller",StringComparison.OrdinalIgnoreCase) &&
-                        ((S(x,"Email").Length>0 && string.Equals(S(x,"Email"),user.Email,StringComparison.OrdinalIgnoreCase)) ||
-                         (S(x,"Id").Length>0 && string.Equals(S(x,"Id"),user.Id,StringComparison.OrdinalIgnoreCase))));
-                    string legacy=NormalizeStoreId(S(a,"StoreId"));
-                    if(legacy.Length>0 && stores!=null && stores.Elements("Store").Any(x=>string.Equals(NormalizeStoreId(S(x,"StoreId")),legacy,StringComparison.OrdinalIgnoreCase))) return legacy;
-                    if(legacy.Length>0) return legacy;
-                }
-                catch { }
-            }
-            // Último respaldo: si el catálogo tiene productos vinculados al vendedor por cuenta
-            // antigua y existe un único StoreId candidato, ese StoreId se considera canónico.
-            try
-            {
-                XDocument catalog=LoadFile(_catalogFile,"NexoMarketCatalog","Products");
-                XElement products=catalog.Root==null?null:catalog.Root.Element("Products");
-                if(products!=null)
-                {
-                    HashSet<string> candidates=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    lock(_sync)
-                    {
-                        foreach(XElement p in products.Elements("Product"))
-                        {
-                            string sid=NormalizeStoreId(S(p,"StoreId"));
-                            if(sid.Length==0 || S(p,"Deleted")=="1") continue;
-                            if(current.Length>0 && string.Equals(sid,current,StringComparison.OrdinalIgnoreCase)) { candidates.Add(sid); continue; }
-                            if(string.Equals(S(p,"SellerEmail"),user.Email,StringComparison.OrdinalIgnoreCase) || string.Equals(S(p,"SellerAccountId"),user.Id,StringComparison.OrdinalIgnoreCase) || string.Equals(S(p,"OwnerEmail"),user.Email,StringComparison.OrdinalIgnoreCase) || string.Equals(S(p,"OwnerAccountId"),user.Id,StringComparison.OrdinalIgnoreCase)) candidates.Add(sid);
-                        }
-                    }
-                    if(candidates.Count==1) return candidates.First();
-                }
-            }
-            catch { }
-            return current;
-        }
-
         private CentralUser FindSellerByStore(string storeId)
         {
-            storeId=NormalizeStoreId(storeId??"");
-            if(storeId.Length==0) return null;
-            // PostgreSQL primero: es la identidad canónica de la cuenta seller Web.
-            // Nunca dejamos que un registro XML antiguo vuelva a vincular el pedido a otra cuenta.
+            if(string.IsNullOrWhiteSpace(storeId)) return null;
             if(_database!=null && _database.Enabled)
             {
-                try
+                Dictionary<string,string> a=_database.GetSellerByStore(storeId);
+                if(a!=null)
                 {
-                    Dictionary<string,string> a=_database.GetSellerByStore(storeId);
-                    if(a!=null)
-                    {
-                        CentralUser dbUser=CentralUser.From(a);
-                        if(dbUser!=null && dbUser.Role=="seller") return dbUser;
-                    }
+                    CentralUser dbUser=CentralUser.From(a);
+                    return dbUser;
                 }
-                catch { }
             }
-            CentralUser legacy=null;
             lock(_sync)
             {
                 XDocument d=LoadFile(_accountsFile,"NexoMarketAccounts","Users");
-                XElement users=d.Root==null?null:d.Root.Element("Users");
-                XElement e=users==null?null:users.Elements("User").FirstOrDefault(x=>
-                    string.Equals(S(x,"Role"),"seller",StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(NormalizeStoreId(S(x,"StoreId")),storeId,StringComparison.OrdinalIgnoreCase));
-                legacy=e==null?null:CentralUser.From(e);
+                XElement e=d.Root.Element("Users").Elements("User").FirstOrDefault(x=>string.Equals(S(x,"StoreId"),storeId,StringComparison.OrdinalIgnoreCase)&&string.Equals(S(x,"Role"),"seller",StringComparison.OrdinalIgnoreCase));
+                return e==null?null:CentralUser.From(e);
             }
-            return legacy;
         }
 
         private CentralUser FindAccount(string email)
         {
-            email=(email??"").Trim();
-            if(email.Length==0) return null;
-            CentralUser legacyUser=null;
-            try
+            if(string.IsNullOrWhiteSpace(email)) return null;
+            if (_database != null && _database.Enabled)
             {
-                lock(_sync)
+                Dictionary<string,string> a = _database.GetAccount(email);
+                if (a != null)
                 {
-                    XDocument d=LoadFile(_accountsFile,"NexoMarketAccounts","Users");
-                    XElement users=d.Root==null?null:d.Root.Element("Users");
-                    XElement e=users==null?null:users.Elements("User").FirstOrDefault(x=>string.Equals(S(x,"Email"),email,StringComparison.OrdinalIgnoreCase));
-                    if(e!=null) legacyUser=CentralUser.From(e);
+                    CentralUser dbUser=CentralUser.From(a);
+                    return dbUser;
                 }
             }
-            catch { }
-            // PostgreSQL es la identidad canónica de la cuenta Web.
-            // IMPORTANTE: no sobrescribir el StoreId de PostgreSQL con un XML legado.
-            // Esa reconciliación era la causa de que una cuenta seller pudiera terminar
-            // apuntando a otra tienda válida y, por tanto, ver un buzón de pedidos vacío.
-            if(_database!=null && _database.Enabled)
+            lock(_sync)
             {
-                try
-                {
-                    Dictionary<string,string> a=_database.GetAccount(email);
-                    if(a!=null)
-                    {
-                        CentralUser dbUser=CentralUser.From(a);
-                        if(dbUser!=null) return dbUser;
-                    }
-                }
-                catch { }
+                XDocument d=LoadFile(_accountsFile,"NexoMarketAccounts","Users");
+                XElement e=d.Root.Element("Users").Elements("User").FirstOrDefault(x=>string.Equals(S(x,"Email"),email.Trim(),StringComparison.OrdinalIgnoreCase));
+                return e==null?null:CentralUser.From(e);
             }
-            return legacyUser;
         }
 
         private bool VerifyAccount(string email,string password,out CentralUser user)
@@ -3020,7 +2516,7 @@ namespace NexoMarket.CentralServer
         {
             string token=Get(f,"pairingToken"), deviceId=Get(f,"deviceId").Trim(), deviceName=Get(f,"deviceName").Trim();
             if(string.IsNullOrWhiteSpace(token)||string.IsNullOrWhiteSpace(deviceId))return "ERROR|missing";
-            Dictionary<string,string> d=_database==null?null:_database.CompletePairing(token,deviceId,string.IsNullOrWhiteSpace(deviceName)?"Web":deviceName);
+            Dictionary<string,string> d=_database==null?null:_database.CompletePairing(token,deviceId,string.IsNullOrWhiteSpace(deviceName)?"Windows":deviceName);
             if(d==null)return "ERROR|pairing_invalid_or_expired|El código no existe, ya fue utilizado o venció.";
             return "OK|"+Escape(d["deviceId"])+"|"+Escape(d["deviceToken"])+"|"+Escape(d["storeId"])+"|"+Escape(d["email"]);
         }
@@ -3047,13 +2543,13 @@ namespace NexoMarket.CentralServer
         }
 
         // Acceso de vendedor por Store ID: el Store ID es el vínculo común entre
-        // NexoMarket Web y el Seller Center Web. No se crea una segunda tienda
+        // NexoMarket Windows y el Seller Center Web. No se crea una segunda tienda
         // ni se pide correo/contraseña para este acceso operativo.
         private void CentralSellerStoreLogin(NetworkStream stream,string method,string body)
         {
             if(method=="GET")
             {
-                string html="<div class='card seller-login-card'><div class='brand'><span>NEXO</span>MARKET <small>SELLER CENTER</small></div><div class='eyebrow'>CUENTA CENTRAL</div><h1>Ingresar como vendedor</h1><p class='muted'>Si ya tenés una cuenta de vendedor, alcanza con tu correo y contraseña.</p><form method='post' action='/seller-login'><label class='muted'>Correo</label><input name='email' type='email' autocomplete='username' required/><label class='muted'>Contraseña</label><input name='password' type='password' autocomplete='current-password' required/><button class='btn violet' type='submit'>INGRESAR AL SELLER CENTER</button></form><p class='muted small'>En Web simplemente iniciá sesión con el mismo correo y contraseña.</p></div>";
+                string html="<div class='card seller-login-card'><div class='brand'><span>NEXO</span>MARKET <small>SELLER CENTER</small></div><div class='eyebrow'>CUENTA CENTRAL</div><h1>Ingresar como vendedor</h1><p class='muted'>Si ya tenés una cuenta de vendedor, alcanza con tu correo y contraseña.</p><form method='post' action='/seller-login'><label class='muted'>Correo</label><input name='email' type='email' autocomplete='username' required/><label class='muted'>Contraseña</label><input name='password' type='password' autocomplete='current-password' required/><button class='btn violet' type='submit'>INGRESAR AL SELLER CENTER</button></form><p class='muted small'>En Windows simplemente iniciá sesión con el mismo correo y contraseña.</p></div>";
                 Write(stream,200,"text/html; charset=utf-8",AuthPage("Vendedor · Cuenta central",html)); return;
             }
             Dictionary<string,string> f=Form(body); string email=Get(f,"email").Trim().ToLowerInvariant(), password=Get(f,"password"); CentralUser u;
@@ -3066,7 +2562,7 @@ namespace NexoMarket.CentralServer
         {
             if(method=="GET")
             {
-                string html="<div class='card seller-login-card'><div class='brand'><span>NEXO</span>MARKET <small>SELLER CENTER</small></div><div class='eyebrow'>NUEVA CUENTA DE VENDEDOR</div><h1>Crear cuenta</h1><p class='muted'>Creá tu cuenta de vendedor directamente en NexoMarket Web. La tienda se crea automáticamente y queda asociada a tu cuenta.</p><form method='post' action='/seller-register'><label class='muted'>Nombre del vendedor</label><input name='name' autocomplete='name' required/><label class='muted'>Correo electrónico</label><input name='email' type='email' autocomplete='username' required/><label class='muted'>Contraseña</label><input name='password' type='password' autocomplete='new-password' minlength='6' required/><button class='btn violet' type='submit'>CREAR CUENTA DE VENDEDOR</button></form><p class='muted small'>Después de crearla, podés usar el mismo correo y contraseña en NexoMarket Web. No necesitás códigos de vinculación.</p><p class='muted small'>¿Ya tenés cuenta? <a href='/seller-login'>Iniciar sesión</a></p></div>";
+                string html="<div class='card seller-login-card'><div class='brand'><span>NEXO</span>MARKET <small>SELLER CENTER</small></div><div class='eyebrow'>NUEVA CUENTA DE VENDEDOR</div><h1>Crear cuenta</h1><p class='muted'>Creá tu cuenta de vendedor directamente en NexoMarket Web. La tienda se crea automáticamente y queda asociada a tu cuenta.</p><form method='post' action='/seller-register'><label class='muted'>Nombre del vendedor</label><input name='name' autocomplete='name' required/><label class='muted'>Correo electrónico</label><input name='email' type='email' autocomplete='username' required/><label class='muted'>Contraseña</label><input name='password' type='password' autocomplete='new-password' minlength='6' required/><button class='btn violet' type='submit'>CREAR CUENTA DE VENDEDOR</button></form><p class='muted small'>Después de crearla, podés usar el mismo correo y contraseña en NexoMarket Windows. No necesitás códigos de vinculación.</p><p class='muted small'>¿Ya tenés cuenta? <a href='/seller-login'>Iniciar sesión</a></p></div>";
                 Write(stream,200,"text/html; charset=utf-8",AuthPage("Crear cuenta de vendedor",html)); return;
             }
             Dictionary<string,string> f=Form(body);
@@ -3106,7 +2602,7 @@ namespace NexoMarket.CentralServer
             if(method=="GET")
             {
                 StringBuilder form=new StringBuilder();
-                form.Append("<form method='post' action='/register'><input name='name' placeholder='Nombre completo' required/><input name='email' type='email' placeholder='Correo electrónico' required/><select name='role'><option value='buyer'>Soy comprador</option><option value='seller'>Soy vendedor</option></select><input name='password' type='password' placeholder='Contraseña (mínimo 6 caracteres)' required/><button class='btn' type='submit'>CREAR CUENTA</button></form><p class='muted'>Para vendedores, NexoMarket crea automáticamente la tienda. No necesitás teléfono ni código de Web. ¿Ya tenés cuenta? <a href='/login'>Ingresar</a></p>");
+                form.Append("<form method='post' action='/register'><input name='name' placeholder='Nombre completo' required/><input name='email' type='email' placeholder='Correo electrónico' required/><select name='role'><option value='buyer'>Soy comprador</option><option value='seller'>Soy vendedor</option></select><input name='password' type='password' placeholder='Contraseña (mínimo 6 caracteres)' required/><button class='btn' type='submit'>CREAR CUENTA</button></form><p class='muted'>Para vendedores, NexoMarket crea automáticamente la tienda. No necesitás teléfono ni código de Windows. ¿Ya tenés cuenta? <a href='/login'>Ingresar</a></p>");
                 Write(stream,200,"text/html; charset=utf-8",AuthPage("Crear cuenta",form.ToString())); return;
             }
             Dictionary<string,string> f=Form(body); string email=Get(f,"email").Trim().ToLowerInvariant(); string password=Get(f,"password"); string role=Get(f,"role")=="seller"?"seller":"buyer"; string storeId="";
@@ -3118,7 +2614,7 @@ namespace NexoMarket.CentralServer
                 {
                     XElement stores=_doc.Root.Element("Stores");
                     // Web-first: la tienda se crea siempre de forma interna.
-                    // El usuario nunca introduce Store ID, código de Web ni teléfono.
+                    // El usuario nunca introduce Store ID, código de Windows ni teléfono.
                     storeId=Guid.NewGuid().ToString("N").ToUpperInvariant();
                     string storeName=(Get(f,"name").Trim()+" · Tienda").Trim();
                     if(string.IsNullOrWhiteSpace(storeName)) storeName="Tienda NexoMarket";
@@ -3186,17 +2682,11 @@ namespace NexoMarket.CentralServer
 
         private CentralUser SessionUser(string cookie)
         {
-            if(string.IsNullOrWhiteSpace(cookie)) return null;
-            CentralUser cached=null;
-            lock(_sync){_sessions.TryGetValue(cookie,out cached);}
-            if(cached!=null)
+            if(string.IsNullOrWhiteSpace(cookie))return null;
+            lock(_sync)
             {
-                CentralUser fresh=FindAccount(cached.Email);
-                if(fresh==null || !string.Equals(fresh.Role,"seller",StringComparison.OrdinalIgnoreCase)) return null;
-                string canonical=ResolveSellerCanonicalStore(fresh);
-                if(!string.IsNullOrWhiteSpace(canonical)) fresh.StoreId=canonical;
-                lock(_sync)_sessions[cookie]=fresh;
-                return fresh;
+                CentralUser u;
+                if(_sessions.TryGetValue(cookie,out u) && u!=null) return u;
             }
             try
             {
@@ -3204,11 +2694,8 @@ namespace NexoMarket.CentralServer
                 string encoded=parts[0].Replace('-','+').Replace('_','/'); while(encoded.Length%4!=0)encoded+="=";
                 string email=Encoding.UTF8.GetString(Convert.FromBase64String(encoded));
                 CentralUser u=FindAccount(email); if(u==null || !string.Equals(u.Role,"seller",StringComparison.OrdinalIgnoreCase))return null;
-                string expected=CreateSessionToken(u); if(!string.Equals(expected,cookie,StringComparison.Ordinal))return null;
-                string canonical=ResolveSellerCanonicalStore(u);
-                if(!string.IsNullOrWhiteSpace(canonical)) u.StoreId=canonical;
-                lock(_sync)_sessions[cookie]=u;
-                return u;
+                string expected=CreateSessionToken(u);
+                return string.Equals(expected,cookie,StringComparison.Ordinal) ? u : null;
             }
             catch{return null;}
         }
@@ -3237,7 +2724,6 @@ namespace NexoMarket.CentralServer
         private void CentralSeller(NetworkStream stream,string cookie,string query)
         {
             CentralUser u=SessionUser(cookie); if(u==null||u.Role!="seller"){WriteRedirect(stream,"/seller-login");return;}
-            string canonicalSellerStore=ResolveSellerCanonicalStore(u); if(!string.IsNullOrWhiteSpace(canonicalSellerStore)) u.StoreId=canonicalSellerStore;
             TouchStoreActivity(u.StoreId); bool platformBlocked=IsStorePlatformBlocked(u.StoreId);
             string view=(QueryValue(query,"view")??"").Trim().ToLowerInvariant();
             List<XElement> products; List<XElement> orders; List<XElement> promotions;
@@ -3246,7 +2732,8 @@ namespace NexoMarket.CentralServer
                 XDocument cd=LoadFile(_catalogFile,"NexoMarketCatalog","Products");
                 products=cd.Root.Element("Products")==null?new List<XElement>():cd.Root.Element("Products").Elements("Product").Where(x=>S(x,"StoreId")==u.StoreId).OrderBy(x=>S(x,"Name")).ToList();
                 promotions=cd.Root.Element("Promotions")==null?new List<XElement>():cd.Root.Element("Promotions").Elements("Promotion").Where(x=>S(x,"StoreId")==u.StoreId).OrderByDescending(x=>S(x,"From")).ToList();
-                orders=LoadOrdersForSeller(u);
+                XDocument od=LoadFile(_ordersFile,"NexoMarketOrders","Orders");
+                orders=od.Root.Element("Orders")==null?new List<XElement>():od.Root.Element("Orders").Elements("Order").Where(x=>S(x,"StoreId")==u.StoreId).OrderByDescending(x=>S(x,"CreatedAt")).ToList();
             }
             StringBuilder b=new StringBuilder(AuthShellStart("Seller Center · NexoMarket"));
             b.Append(SellerCenterCss());
@@ -3256,7 +2743,7 @@ namespace NexoMarket.CentralServer
             b.Append("<aside class='sc-side'><div class='account-box'><div class='avatar'>"+E((u.Name??"V").Length>0?(u.Name??"V").Substring(0,1).ToUpperInvariant():"V")+"</div><b>"+E(u.Name)+"</b><small>"+E(u.Email)+"</small><small class='store-account-name'>TIENDA: "+E(GetStoreName(u.StoreId))+"</small></div><form method='post' action='/seller/store/toggle' class='side-store-status'><input type='hidden' name='active' value='"+(storeOpen?"0":"1")+"'/><button type='submit' class='store-status-btn "+(storeOpen?"is-open":"is-closed")+"'><span class='status-dot'></span><span><b>TIENDA</b><small>"+(storeOpen?"ABIERTA":"CERRADA")+"</small></span><strong>"+(storeOpen?"CERRAR":"ABRIR")+"</strong></button></form>");
             b.Append(SellerLink("Resumen","",view)+SellerLink("Tienda Online","online",view)+SellerLink("Pedidos","orders",view)+SellerLink("Deliveries","deliveries",view)+SellerLink("Punto de venta","pos",view)+SellerLink("Productos e inventario","products",view)+SellerLink("Clientes","customers",view)+SellerLink("Analítica","analytics",view)+SellerLink("Finanzas y caja","finance",view)+SellerLink("Marketing","marketing",view)+SellerLink("Reputación","reputation",view)+SellerLink("Herramientas","tools",view)+SellerLink("Configuración","settings",view)+"</aside>");
             b.Append("<main class='sc-main'><div id='newOrderAlert' class='new-order-alert' role='alert' aria-live='assertive'><div class='oa-title'>🔴 NUEVO PEDIDO RECIBIDO</div><div class='oa-sub'>Tenés un pedido nuevo pendiente. Revisá la sección Pedidos.</div></div>");
-            b.Append("<div class='welcome'><div><span class='eyebrow'>CENTRAL DE VENTAS</span><h1>Hola, "+E(u.Name)+" 👋</h1><p>Tu Seller Center funciona directamente conectado al sistema central de NexoMarket. Los pedidos llegan en tiempo real.</p><div class='section-actions'><a class='btn ghost' href='/seller?view=products'>"+SellerIcon("Productos")+"PRODUCTOS</a><a class='btn ghost' href='/seller?view=orders'>"+SellerIcon("Pedidos")+"PEDIDOS</a></div></div><div class='account-mini'><b>CUENTA</b><strong>"+E(u.Email)+"</strong><small>TIENDA: "+E(GetStoreName(u.StoreId))+"</small><small>WEB CENTRAL EN TIEMPO REAL</small><span id='platformFeeMini' class='sync-pill'>Pago plataforma · calculando...</span></div></div>");
+            b.Append("<div class='welcome'><div><span class='eyebrow'>CENTRAL DE VENTAS</span><h1>Hola, "+E(u.Name)+" 👋</h1><p>Tu Seller Center y NexoMarket Windows usan la misma cuenta. Los cambios se sincronizan automáticamente.</p><div class='section-actions'><a class='btn ghost' href='/seller?view=products'>"+SellerIcon("Productos")+"PRODUCTOS</a><a class='btn ghost' href='/seller?view=orders'>"+SellerIcon("Pedidos")+"PEDIDOS</a></div></div><div class='account-mini'><b>CUENTA</b><strong>"+E(u.Email)+"</strong><small>TIENDA: "+E(GetStoreName(u.StoreId))+"</small><small>Windows + Web sincronizados</small><span id='platformFeeMini' class='sync-pill'>Pago plataforma · calculando...</span></div></div>");
             int pending=orders.Count(x=>S(x,"Status")=="Pendiente"); int delivery=orders.Count(x=>(S(x,"Fulfillment")=="Delivery"||S(x,"Fulfillment")=="En reparto")&&S(x,"Status")!="Entregado"&&S(x,"Status")!="Cancelado");
             decimal sales=orders.Where(x=>S(x,"Status")!="Cancelado").Sum(x=>Money(S(x,"Total"))); int low=products.Count(x=>Money(S(x,"Stock"))<=Money(S(x,"MinimumStock"))); int customers=orders.Select(x=>S(x,"CustomerEmail").Trim().ToLowerInvariant()).Where(x=>x.Length>0).Distinct().Count();
             b.Append("<div class='kpis'>"+KpiC("Ventas", "$ "+sales.ToString("N2"), "operaciones válidas", "green")+KpiC("Pedidos pendientes", pending.ToString(), "requieren atención", pending>0?"yellow":"green")+KpiC("Productos", products.Count.ToString(), low+" con stock bajo", low>0?"red":"green")+KpiC("Clientes", customers.ToString(), "compradores únicos", "green")+KpiC("Delivery", delivery.ToString(), "entregas abiertas", delivery>0?"yellow":"green")+"</div>");
@@ -3272,9 +2759,9 @@ namespace NexoMarket.CentralServer
             else if(view=="tools") b.Append(SellerToolsView(u,products,orders));
             else if(view=="settings") b.Append(SellerSettingsView(u));
             else if(view=="online") b.Append(SellerOnlineSettingsView(u));
-            else if(view=="devices") b.Append("<section class='card'><div class='eyebrow'>OPERACIÓN WEB</div><h2>Conexión central</h2><p>La gestión de la tienda es completamente web. No necesitás instalar herramientas adicionales.</p></section>");
+            else if(view=="devices") b.Append("<section class='card'><div class='eyebrow'>CUENTA WINDOWS</div><h2>Conexión automática</h2><p>Windows utiliza la misma cuenta del Seller Center. No hay que copiar códigos de vinculación.</p></section>");
             else b.Append(SellerSummaryView(orders,products));
-            b.Append("<script>(function(){\nvar boot=true,audioCtx=null,pollBusy=false,knownOrders=Object.create(null);\nfunction beep(){try{audioCtx=audioCtx||new(window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==='suspended')audioCtx.resume();var o=audioCtx.createOscillator(),g=audioCtx.createGain(),now=audioCtx.currentTime;o.type='sine';o.frequency.setValueAtTime(880,now);o.frequency.linearRampToValueAtTime(1320,now+.13);g.gain.setValueAtTime(.12,now);g.gain.exponentialRampToValueAtTime(.001,now+.25);o.connect(g);g.connect(audioCtx.destination);o.start(now);o.stop(now+.27);}catch(e){}}\nfunction esc(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;');}\nfunction requestNotify(){try{if('Notification' in window&&Notification.permission==='default')Notification.requestPermission();}catch(e){}}\nfunction showNewOrderAlert(){var el=document.getElementById('newOrderAlert');if(!el)return;clearInterval(window.__nexoOrderAlertFlash);var i=0;el.className='new-order-alert show';beep();window.__nexoOrderAlertFlash=setInterval(function(){i++;el.classList.toggle('show');beep();if(i>=10){clearInterval(window.__nexoOrderAlertFlash);el.classList.remove('show');}},300);try{if('Notification' in window&&Notification.permission==='granted')new Notification('🔴 NUEVO PEDIDO RECIBIDO',{body:'Tenés un pedido nuevo pendiente en NexoMarket.',tag:'nexomarket-new-order'});}catch(e){}}\nfunction setKpi(title,value){var ks=document.querySelectorAll('.kpi');for(var i=0;i<ks.length;i++){var sp=ks[i].querySelector('span');if(sp&&sp.textContent.trim().toLowerCase()===title.toLowerCase()){var strong=ks[i].querySelector('strong');if(strong)strong.textContent=String(value);return;}}}\nfunction itemSummary(raw){var out=[];try{var a=typeof raw==='string'?JSON.parse(raw):raw;if(Array.isArray(a))a.forEach(function(x){if(x)out.push('<div class=\"order-item-detail\"><div><b>'+esc(x.name||x.productName||'Producto')+'</b><small>Cantidad: '+esc(x.qty||x.quantity||1)+'</small></div><strong>$ '+Number(x.price||0).toFixed(2)+'</strong></div>');});}catch(e){}return out.join('')||'<div class=\"order-items-empty\">Detalle de productos disponible al abrir el pedido.</div>';}\nfunction cardHtml(o){var id=o.centralOrderId||'',short=id.length>10?id.slice(0,10):id,status=o.status||'Pendiente',pay=o.paymentStatus||'Pendiente',cls=(status==='Cancelado'||status==='Rechazado')?'red':status==='Pendiente'?'yellow':'green',payCls=pay==='Pagado'?'green':'yellow';var search=(id+' '+(o.customerName||'')+' '+(o.customerEmail||'')+' '+(o.phone||'')+' '+(o.address||'')).toLowerCase();return '<article class=\"order-card\" id=\"order-'+esc(id)+'\" data-search=\"'+esc(search)+'\" data-status=\"'+esc(status)+'\" ondblclick=\"toggleOrderDetails(this)\"><div><span class=\"eyebrow\">PEDIDO</span><h3>#'+esc(short)+'</h3><small>'+esc(o.createdAt||'')+' · '+esc(o.fulfillment||'')+'</small></div><div><b>'+esc(o.customerName||'')+'</b><small>'+esc(o.customerEmail||'')+'</small><small>'+esc(o.phone||'')+' · 📍 '+esc(o.address||'')+'</small></div><div><strong>$ '+Number(o.total||0).toFixed(2)+'</strong><div class=\"order-status-badges\"><span class=\"badge '+cls+'\">'+esc(status)+'</span> · <span class=\"badge '+payCls+'\">'+esc(pay)+'</span></div></div><div class=\"order-actions\"><button class=\"btn small violet\" type=\"button\" onclick=\"event.stopPropagation();toggleOrderDetails(this.closest(\\'.order-card\\'))\">👁 VER PEDIDO</button><form method=\"post\" action=\"/seller/order-status\" class=\"inline-form order-status-form\" onsubmit=\"return updateSellerOrderStatus(this)\"><input type=\"hidden\" name=\"id\" value=\"'+esc(id)+'\"/><select name=\"status\" aria-label=\"Estado del pedido\"><option>'+esc(status)+'</option><option>Pendiente</option><option>Preparando</option><option>Listo</option><option>Enviado</option><option>En reparto</option><option>Entregado</option><option>Rechazado</option><option>Cancelado</option></select><button class=\"btn small\" type=\"submit\">ACTUALIZAR</button><span class=\"order-saving\" aria-live=\"polite\"></span></form></div><div class=\"order-details\" hidden><div class=\"order-details-title\">🛒 PRODUCTOS PEDIDOS</div>'+itemSummary(o.itemsJson)+'<div class=\"order-detail-total\">TOTAL DEL PEDIDO <strong>$ '+Number(o.total||0).toFixed(2)+'</strong></div></div></article>';}\nfunction syncOrderCards(orders){var box=document.getElementById('sellerOrderCards');if(!box||!Array.isArray(orders))return;orders.slice().reverse().forEach(function(o){if(!o||!o.centralOrderId)return;var id=o.centralOrderId,old=document.getElementById('order-'+id);if(!old){box.insertAdjacentHTML('beforeend',cardHtml(o));old=document.getElementById('order-'+id);}if(old){old.setAttribute('data-status',o.status||'Pendiente');var badges=old.querySelector('.order-status-badges');if(badges){var st=o.status||'Pendiente',pc=(st==='Cancelado'||st==='Rechazado')?'red':st==='Pendiente'?'yellow':'green',ps=o.paymentStatus||'Pendiente',pp=ps==='Pagado'?'green':'yellow';badges.innerHTML='<span class=\"badge '+pc+'\">'+esc(st)+'</span> · <span class=\"badge '+pp+'\">'+esc(ps)+'</span>';}var sel=old.querySelector('select[name=\"status\"]');if(sel&&document.activeElement!==sel)sel.value=o.status||'Pendiente';}});}\nfunction detectNewOrder(orders){var fresh=false;if(!Array.isArray(orders))return false;orders.forEach(function(o){if(!o||!o.centralOrderId)return;var id=o.centralOrderId,isPending=(o.status||'').toLowerCase()==='pendiente',isKnown=!!knownOrders[id];if(!isKnown&&isPending&&!boot)fresh=true;knownOrders[id]=true;});return fresh;}\nfunction poll(){if(pollBusy)return;pollBusy=true;var x=new XMLHttpRequest();x.open('GET','/api/seller/live?_='+Date.now(),true);x.setRequestHeader('Cache-Control','no-cache');x.timeout=10000;x.onreadystatechange=function(){if(x.readyState!==4)return;pollBusy=false;if(x.status!==200)return;try{var d=JSON.parse(x.responseText);if(!d||d.ok!==true)return;var pending=parseInt(d.pendingOrders||0,10),delivery=parseInt(d.deliveryOrders||0,10),orders=Array.isArray(d.orders)?d.orders:[];setKpi('Pedidos pendientes',pending);setKpi('Delivery',delivery);if(detectNewOrder(orders))showNewOrderAlert();syncOrderCards(orders);boot=false;}catch(e){}};x.onerror=function(){pollBusy=false;};x.ontimeout=function(){pollBusy=false;};x.send();}\nrequestNotify();document.addEventListener('click',function(){try{if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume();}catch(e){}});setTimeout(poll,250);setInterval(poll,1800);\nfunction loadPlatformFee(){var x=new XMLHttpRequest();x.open('GET','/api/seller/platform-fee?_='+Date.now(),true);x.setRequestHeader('Cache-Control','no-cache');x.onreadystatechange=function(){if(x.readyState===4&&x.status===200){try{var d=JSON.parse(x.responseText),el=document.getElementById('platformFeeMini');if(!el)return;var rate=Number(d.rate||0),amount=Number(d.amount||0);el.textContent=rate>0?('Pago plataforma · '+rate+'% · $ '+amount.toFixed(2)+' · '+d.month):'Pago plataforma · sin porcentaje';}catch(e){}}};x.send();}loadPlatformFee();setInterval(loadPlatformFee,30000);\nwindow.shareMyStore=function(btn){btn=btn||document.querySelector('.share-store-btn');var u=btn&&btn.dataset.storeUrl?new URL(btn.dataset.storeUrl,location.origin).href:location.origin+'/';var storeName=btn&&btn.dataset.storeName?btn.dataset.storeName:'Mi tienda';if(navigator.share){navigator.share({title:storeName+' · NexoMarket',text:'Mirá el catálogo de '+storeName+' en NexoMarket y comprá directo.',url:u}).catch(function(){});}else if(navigator.clipboard){navigator.clipboard.writeText(storeName+' · NexoMarket\\\\n'+u).then(function(){alert('Catálogo copiado: '+storeName);});}else{prompt('Copiá el catálogo de '+storeName,u);}};\ndocument.addEventListener('click',function(){if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume();},{once:true});\n})();</script>");
+            b.Append("<script>(function(){var last='',lastPending=-1,audioCtx=null;function beep(){try{audioCtx=audioCtx||new(window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==='suspended')audioCtx.resume();var o=audioCtx.createOscillator(),g=audioCtx.createGain(),now=audioCtx.currentTime;o.type='sine';o.frequency.setValueAtTime(880,now);o.frequency.linearRampToValueAtTime(1320,now+.13);g.gain.setValueAtTime(.12,now);g.gain.exponentialRampToValueAtTime(.001,now+.25);o.connect(g);g.connect(audioCtx.destination);o.start(now);o.stop(now+.27);}catch(e){}}function requestNotify(){try{if('Notification' in window&&Notification.permission==='default')Notification.requestPermission();}catch(e){}}function showNewOrderAlert(){var el=document.getElementById('newOrderAlert');if(!el)return;clearInterval(window.__nexoOrderAlertFlash);var i=0;el.className='new-order-alert show';window.__nexoOrderAlertFlash=setInterval(function(){i++;el.classList.toggle('show');beep();if(i>=10){clearInterval(window.__nexoOrderAlertFlash);el.classList.remove('show');}},300);try{if('Notification' in window&&Notification.permission==='granted')new Notification('🔴 NUEVO PEDIDO RECIBIDO',{body:'Tenés un pedido nuevo pendiente en NexoMarket.',tag:'nexomarket-new-order'});}catch(e){}}function live(){var x=new XMLHttpRequest();x.open('GET','/api/seller/live',true);x.onreadystatechange=function(){if(x.readyState===4&&x.status===200){try{var d=JSON.parse(x.responseText),v=d.updatedAt||'',pending=parseInt(d.pendingOrders||0,10);if(lastPending>=0&&pending>lastPending){showNewOrderAlert();}lastPending=pending;var editing=document.querySelector('form.product-form input:focus,form.product-form textarea:focus,form.edit-form input:focus,form.edit-form textarea:focus,form.settings-form input:focus,form.settings-form textarea:focus');var hasDraft=document.querySelector('form.product-form input:not([type=hidden])[value]:not([value=\"\"])')||document.querySelector('form.product-form textarea:not(:placeholder-shown)');if(last&&v!==last&&!editing&&!document.querySelector('details[open]')&&!hasDraft&&!document.querySelector('.order-cards'))location.reload();last=v;}catch(e){}}};x.send();}requestNotify();document.addEventListener('click',function(){try{if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume();}catch(e){}});setTimeout(live,900);setInterval(live,2500);function loadPlatformFee(){var x=new XMLHttpRequest();x.open('GET','/api/seller/platform-fee',true);x.onreadystatechange=function(){if(x.readyState===4&&x.status===200){try{var d=JSON.parse(x.responseText),el=document.getElementById('platformFeeMini');if(!el)return;var rate=Number(d.rate||0),amount=Number(d.amount||0);el.textContent=rate>0?('Pago plataforma · '+rate+'% · $ '+amount.toFixed(2)+' · '+d.month):'Pago plataforma · sin porcentaje';}catch(e){}}};x.send();}loadPlatformFee();setInterval(loadPlatformFee,30000);window.shareMyStore=function(btn){btn=btn||document.querySelector('.share-store-btn');var u=btn&&btn.dataset.storeUrl?new URL(btn.dataset.storeUrl,location.origin).href:location.origin+'/';var storeName=btn&&btn.dataset.storeName?btn.dataset.storeName:'Mi tienda';if(navigator.share){navigator.share({title:storeName+' · NexoMarket',text:'Mirá el catálogo de '+storeName+' en NexoMarket y comprá directo.',url:u}).catch(function(){});}else if(navigator.clipboard){navigator.clipboard.writeText(storeName+' · NexoMarket\n'+u).then(function(){alert('Catálogo copiado: '+storeName);});}else{prompt('Copiá el catálogo de '+storeName,u);}};document.addEventListener('click',function(){if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume();},{once:true});})();</script>");
             b.Append("</main>").Append(AuthShellEnd()); Write(stream,200,"text/html; charset=utf-8",b.ToString());
         }
 
@@ -3375,7 +2862,7 @@ namespace NexoMarket.CentralServer
 
         private string SellerPosView(List<XElement> products)
         {
-            StringBuilder b=new StringBuilder();b.Append("<div class='section-title'><div><span class='eyebrow'>PUNTO DE VENTA WEB</span><h2>POS / Ticket de venta</h2><p>Buscá por nombre, SKU o código de barras, armá el ticket y generá un comprobante imprimible o guardable como PDF.</p></div><span class='sync-pill'>● SINCRONIZADO CON LA PLATAFORMA WEB</span></div>");
+            StringBuilder b=new StringBuilder();b.Append("<div class='section-title'><div><span class='eyebrow'>PUNTO DE VENTA WEB</span><h2>POS / Ticket de venta</h2><p>Buscá por nombre, SKU o código de barras, armá el ticket y generá un comprobante imprimible o guardable como PDF.</p></div><span class='sync-pill'>● SINCRONIZADO CON WINDOWS</span></div>");
             b.Append("<div class='checkout-grid'><section class='card'><div class='inventory-toolbar'><input id='posSearch' autofocus placeholder='Escaneá o escribí código de barras / nombre...' oninput='filterPos()' onkeydown='if(event.key===\"Enter\"){event.preventDefault();addFirstPos();}'/><button class='btn violet' type='button' onclick='addFirstPos()'>AGREGAR</button></div><div id='posProducts' class='pos-products'>");
             foreach(XElement p in products.Where(x=>S(x,"Active")!="0")){decimal price=Money(S(p,"SalePrice")=="0"?S(p,"Price"):S(p,"SalePrice"));b.Append("<button type='button' class='pos-product' data-search='").Append(E((S(p,"Name")+" "+S(p,"SKU")+" "+S(p,"Barcode")).ToLowerInvariant())).Append("' onclick=\"addPos(").Append(JsonString(S(p,"ProductId"))).Append(",").Append(JsonString(S(p,"Name"))).Append(",").Append(price.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append(")\"><span>").Append(E(S(p,"Name"))).Append("</span><small>SKU ").Append(E(S(p,"SKU"))).Append(" · CB ").Append(E(S(p,"Barcode"))).Append(" · Stock ").Append(E(S(p,"Stock"))).Append("</small><b>$ ").Append(price.ToString("N2")).Append("</b></button>");}
             b.Append("</div></section><aside class='card'><h3>Ticket actual</h3><div id='posCart'>Vacío.</div><div class='cart-total'><span>TOTAL</span><strong>$ <span id='posTotal'>0.00</span></strong></div><input id='posCustomer' placeholder='Cliente (opcional)'/><select id='posPayment'><option>Efectivo</option><option>Mercado Pago</option><option>Transferencia</option><option>Tarjeta</option></select><input id='posReference' placeholder='Referencia / comprobante interno (opcional)'/><button class='btn' style='width:100%' onclick='finishPosSale()'>COBRAR Y GENERAR TICKET</button><div id='posResult' class='muted' style='margin-top:10px'></div></aside></div><script>var posCart=[];function filterPos(){var q=(document.getElementById('posSearch').value||'').toLowerCase();document.querySelectorAll('.pos-product').forEach(function(p){p.style.display=p.getAttribute('data-search').indexOf(q)>=0?'grid':'none';});}function addFirstPos(){var q=(document.getElementById('posSearch').value||'').toLowerCase(),a=Array.prototype.slice.call(document.querySelectorAll('.pos-product')).filter(function(p){return p.getAttribute('data-search').indexOf(q)>=0});if(a.length)a[0].click();}function addPos(id,name,price){var x=posCart.filter(function(i){return i.id===id})[0];if(x)x.qty++;else posCart.push({id:id,name:name,price:price,qty:1});renderPos();}function renderPos(){var h='',t=0;posCart.forEach(function(i,n){h+='<div class=\"line\"><span>'+i.name+' × '+i.qty+'</span><span><b>$ '+(i.price*i.qty).toFixed(2)+'</b> <button type=\"button\" onclick=\"removePos('+n+')\">×</button></span></div>';t+=i.price*i.qty});document.getElementById('posCart').innerHTML=h||'Vacío.';document.getElementById('posTotal').textContent=t.toFixed(2);}function removePos(n){posCart.splice(n,1);renderPos();}function finishPosSale(){if(!posCart.length){alert('Agregá productos al ticket.');return}var total=posCart.reduce(function(a,i){return a+i.price*i.qty},0),data='itemsJson='+encodeURIComponent(JSON.stringify(posCart))+'&total='+encodeURIComponent(total.toFixed(2))+'&customerName='+encodeURIComponent(document.getElementById('posCustomer').value)+'&paymentMethod='+encodeURIComponent(document.getElementById('posPayment').value)+'&paymentReference='+encodeURIComponent(document.getElementById('posReference').value);var x=new XMLHttpRequest();x.open('POST','/seller/pos-sale',true);x.setRequestHeader('Content-Type','application/x-www-form-urlencoded;charset=UTF-8');x.onreadystatechange=function(){if(x.readyState===4){try{var d=JSON.parse(x.responseText);if(d.ok){document.getElementById('posResult').innerHTML='✓ Venta registrada. <a href=\"'+d.ticket+'\" target=\"_blank\">ABRIR / GUARDAR PDF</a>';posCart=[];renderPos();}else document.getElementById('posResult').textContent=d.message||'No se pudo registrar.';}catch(e){document.getElementById('posResult').textContent=x.responseText||'Error';}}};x.send(data);}renderPos();</script>");return b.ToString();
@@ -3399,7 +2886,7 @@ namespace NexoMarket.CentralServer
             b.Append("<section class='card'><h3>Oportunidades</h3><div class='insights'><div>📦 "+products.Count(x=>Money(S(x,"Stock"))<=Money(S(x,"MinimumStock")))+" productos tienen stock bajo.</div><div>🧾 "+pending+" pedidos pendientes necesitan atención.</div><div>📈 El gráfico usa datos de pedidos reales y se actualiza con la sincronización central.</div></div></section>"); return b.ToString();
         }
 
-        private string SellerFinanceView(List<XElement> orders){decimal total=orders.Where(x=>S(x,"Status")!="Cancelado").Sum(x=>Money(S(x,"Total")));decimal cash=orders.Where(x=>S(x,"PaymentMethod")=="Efectivo"&&S(x,"Status")!="Cancelado").Sum(x=>Money(S(x,"Total")));decimal mp=orders.Where(x=>S(x,"PaymentMethod")=="Mercado Pago"&&S(x,"Status")!="Cancelado").Sum(x=>Money(S(x,"Total")));decimal tr=orders.Where(x=>S(x,"PaymentMethod")=="Transferencia"&&S(x,"Status")!="Cancelado").Sum(x=>Money(S(x,"Total")));return "<div class='section-title'><div><span class='eyebrow'>FINANZAS</span><h2>Ventas y medios de cobro</h2><p>Resumen central de las operaciones web. La apertura/cierre física de caja continúa en Web.</p></div></div><div class='kpis mini-kpis'>"+KpiC("Total vendido","$ "+total.ToString("N2"),"operaciones web","green")+KpiC("Efectivo","$ "+cash.ToString("N2"),"ventas","green")+KpiC("Mercado Pago","$ "+mp.ToString("N2"),"ventas","green")+KpiC("Transferencias","$ "+tr.ToString("N2"),"ventas","green")+"</div><section class='card'><h3>Conciliación</h3><p>Los números del Seller Center se alimentan de los pedidos centralizados. La operación web queda centralizada en NexoMarket; las funciones de caja física se incorporarán posteriormente.</p></section>";}
+        private string SellerFinanceView(List<XElement> orders){decimal total=orders.Where(x=>S(x,"Status")!="Cancelado").Sum(x=>Money(S(x,"Total")));decimal cash=orders.Where(x=>S(x,"PaymentMethod")=="Efectivo"&&S(x,"Status")!="Cancelado").Sum(x=>Money(S(x,"Total")));decimal mp=orders.Where(x=>S(x,"PaymentMethod")=="Mercado Pago"&&S(x,"Status")!="Cancelado").Sum(x=>Money(S(x,"Total")));decimal tr=orders.Where(x=>S(x,"PaymentMethod")=="Transferencia"&&S(x,"Status")!="Cancelado").Sum(x=>Money(S(x,"Total")));return "<div class='section-title'><div><span class='eyebrow'>FINANZAS</span><h2>Ventas y medios de cobro</h2><p>Resumen central de las operaciones web. La apertura/cierre física de caja continúa en Windows.</p></div></div><div class='kpis mini-kpis'>"+KpiC("Total vendido","$ "+total.ToString("N2"),"operaciones web","green")+KpiC("Efectivo","$ "+cash.ToString("N2"),"ventas","green")+KpiC("Mercado Pago","$ "+mp.ToString("N2"),"ventas","green")+KpiC("Transferencias","$ "+tr.ToString("N2"),"ventas","green")+"</div><section class='card'><h3>Conciliación</h3><p>Los números del Seller Center se alimentan de los pedidos centralizados. La caja de mostrador, apertura, arqueo y retenciones se mantienen sincronizados desde NexoMarket Windows.</p></section>";}
         private string SellerMarketingView(List<XElement> promotions)
         {
             List<XElement> coupons=new List<XElement>();
@@ -3409,7 +2896,7 @@ namespace NexoMarket.CentralServer
                 coupons=d.Root.Element("Coupons")==null?new List<XElement>():d.Root.Element("Coupons").Elements("Coupon").Where(x=>S(x,"StoreId")==CurrentSellerStoreId()).OrderByDescending(x=>S(x,"UpdatedAt")).ToList();
             }
             StringBuilder b=new StringBuilder();
-            b.Append("<div class='section-title'><div><span class='eyebrow'>CRECIMIENTO</span><h2>Marketing y promociones</h2><p>Promociones y cupones gestionados directamente desde el Seller Center Web.</p></div></div>");
+            b.Append("<div class='section-title'><div><span class='eyebrow'>CRECIMIENTO</span><h2>Marketing y promociones</h2><p>Promociones y cupones sincronizados entre NexoMarket Windows y Seller Center.</p></div></div>");
             b.Append("<section class='card'><h3>Generador de cupones</h3><form method='post' action='/seller/coupon/save' class='form-grid'>");
             b.Append("<input name='code' placeholder='Código, ejemplo VERANO10' required/><input name='description' placeholder='Descripción'/>");
             b.Append("<input name='percent' type='number' step='0.01' min='0' max='100' placeholder='% de descuento'/>");
@@ -3465,7 +2952,7 @@ namespace NexoMarket.CentralServer
             string summary=ReviewSummaryForStore(storeId);string[] sp=summary.Split('|');string avg=sp.Length>0?sp[0]:"0.0";string count=sp.Length>1?sp[1]:"0";
             StringBuilder b=new StringBuilder();b.Append("<div class='section-title'><div><span class='eyebrow'>REPUTACIÓN</span><h2>Reputación del local</h2><p>Promedio de estrellas y comentarios publicados por clientes desde Web.</p></div></div><div class='kpis mini-kpis'>").Append(KpiC("Puntaje",avg+" / 5",count+" opiniones","green")).Append(KpiC("Entregados",delivered.ToString(),"pedidos finalizados","green")).Append(KpiC("Cancelados/Rechazados",cancel.ToString(),"incidencias","red")).Append(KpiC("Pendientes",orders.Count(x=>S(x,"Status")=="Pendiente").ToString(),"atención","yellow")).Append("</div><section class='card'><h3>Últimas opiniones</h3>");
             lock(_sync){XDocument d=LoadFile(_reviewsFile,"NexoMarketReviews","Reviews");XElement root=d.Root.Element("Reviews");var rows=root.Elements("Review").Where(x=>string.Equals(S(x,"StoreId"),storeId,StringComparison.OrdinalIgnoreCase)).OrderByDescending(x=>S(x,"CreatedAt")).Take(12).ToList();if(rows.Count==0)b.Append("<p class='muted'>Todavía no hay opiniones reales. Cuando un cliente deje una, aparecerá acá y se incorporará al promedio.</p>");else{b.Append("<div class='reviews-list'>");foreach(XElement r in rows){string stars=new string('★',Math.Max(1,Math.Min(5,(int)Money(S(r,"Rating")))));b.Append("<article class='review-card'><div class='review-stars'>").Append(stars).Append("</div><div class='review-author'>").Append(E(string.IsNullOrWhiteSpace(S(r,"CustomerName"))?"Cliente":S(r,"CustomerName"))).Append("</div><div class='review-text'>").Append(E(S(r,"Text"))).Append("</div></article>");}b.Append("</div>");}}
-            b.Append("</section><section class='card'><h3>Buenas prácticas</h3><div class='insights'><div>🟢 Actualizá estados rápidamente para que el comprador vea el seguimiento.</div><div>🟡 Mantené stock y precios sincronizados con Web.</div><div>🔴 Revisá pedidos rechazados o cancelados para detectar problemas.</div></div></section>");return b.ToString();
+            b.Append("</section><section class='card'><h3>Buenas prácticas</h3><div class='insights'><div>🟢 Actualizá estados rápidamente para que el comprador vea el seguimiento.</div><div>🟡 Mantené stock y precios sincronizados con Windows.</div><div>🔴 Revisá pedidos rechazados o cancelados para detectar problemas.</div></div></section>");return b.ToString();
         }
 
 
@@ -3473,11 +2960,11 @@ namespace NexoMarket.CentralServer
         {
             CentralUser u=SessionUser(cookie);
             if(u==null||u.Role!="seller"){WriteRedirect(stream,"/seller-login");return;}
-            // El vínculo Web ya no usa códigos ni Store ID visibles.
+            // El vínculo Windows ya no usa códigos ni Store ID visibles.
             // Se conserva esta ruta para instalaciones antiguas, pero no forma parte
-            // del flujo actual. Web autentica directamente con correo + contraseña.
-            string html="<div class='card'><div class='eyebrow'>OPERACIÓN WEB</div><h1>Conexión central</h1><p class='muted'>Toda la gestión de tu tienda se realiza directamente desde el Seller Center Web.</p><a class='btn violet' href='/seller'>VOLVER AL SELLER CENTER</a></div>";
-            Write(stream,200,"text/html; charset=utf-8",AuthPage("Conexión Web",html));
+            // del flujo actual. Windows autentica directamente con correo + contraseña.
+            string html="<div class='card'><div class='eyebrow'>CUENTA WINDOWS</div><h1>Conexión automática</h1><p class='muted'>No necesitás código de vinculación. Abrí NexoMarket Windows e iniciá sesión con el mismo correo y contraseña de esta cuenta.</p><a class='btn violet' href='/seller'>VOLVER AL SELLER CENTER</a></div>";
+            Write(stream,200,"text/html; charset=utf-8",AuthPage("Conexión Windows",html));
         }
 
         private string CentralSellerMediaUpload(NetworkStream stream,string cookie,Dictionary<string,string> f)
@@ -3489,39 +2976,12 @@ namespace NexoMarket.CentralServer
 
         private string UploadOrderProof(Dictionary<string,string> f)
         {
-            string rawStoreId=(Get(f,"storeId")??"").Trim();
-            string storeSlug=(Get(f,"storeSlug")??"").Trim();
-            string itemsJson=Get(f,"itemsJson")??"";
-            string storeId=NormalizeStoreId(rawStoreId);
-            if(string.IsNullOrWhiteSpace(storeId)&&string.IsNullOrWhiteSpace(storeSlug)) return "ERROR|storeId";
-
-            // El comprobante se sube ANTES de crear el pedido. Por eso no podemos
-            // depender únicamente del registro Stores: la misma tienda puede seguir
-            // teniendo catálogo/productos válidos aunque ese registro esté desfasado.
-            // Usamos exactamente la misma fuente de verdad que CreateOrder:
-            // productos del carrito -> StoreId real -> registro de tienda.
+            string storeId=NormalizeStoreId(Get(f,"storeId"));
+            if(string.IsNullOrWhiteSpace(storeId)) return "ERROR|storeId";
             lock(_sync)
             {
-                string evidenceStoreId=ResolveOrderStoreFromProductsLocked(itemsJson,rawStoreId);
-                XElement st=null;
-                if(!string.IsNullOrWhiteSpace(evidenceStoreId))
-                    st=ResolveStoreIdentityLocked(evidenceStoreId,storeSlug);
-                if(st==null)
-                    st=ResolveStoreIdentityLocked(rawStoreId,storeSlug);
-                if(st==null && !string.IsNullOrWhiteSpace(evidenceStoreId))
-                    st=ResolveStoreIdentityLocked(evidenceStoreId,"");
-                if(st==null)
-                {
-                    string recoveryId=string.IsNullOrWhiteSpace(evidenceStoreId)?rawStoreId:evidenceStoreId;
-                    st=RecoverStoreRegistryEntryLocked(recoveryId,storeSlug);
-                }
-                if(st==null)
-                {
-                    Console.Error.WriteLine("[NexoMarket] PAYMENT_PROOF_STORE_RESOLUTION_FAILED storeId='"+rawStoreId+"' slug='"+storeSlug+"' productEvidence='"+evidenceStoreId+"'");
-                    return "ERROR|store";
-                }
-                storeId=NormalizeStoreId(S(st,"StoreId"));
-                if(string.IsNullOrWhiteSpace(storeId)) return "ERROR|store";
+                XElement st=_doc.Root.Element("Stores")==null?null:_doc.Root.Element("Stores").Elements("Store").FirstOrDefault(x=>string.Equals(S(x,"StoreId"),storeId,StringComparison.OrdinalIgnoreCase));
+                if(st==null)return "ERROR|store";
             }
             if(_r2==null||!_r2.Enabled)return "ERROR|R2_NOT_CONFIGURED";
             string fileName=Path.GetFileName(Get(f,"fileName"));
@@ -3538,10 +2998,10 @@ namespace NexoMarket.CentralServer
                 string safeName=Regex.Replace(fileName,"[^a-zA-Z0-9._-]","_");
                 string safeStore=Regex.Replace(storeId,"[^a-zA-Z0-9_-]","_");
                 string key="stores/"+safeStore+"/payment-proofs/"+DateTime.UtcNow.ToString("yyyyMMddHHmmssfff")+"-"+safeName;
-                string url=MediaUrl(key);
-                if(string.IsNullOrWhiteSpace(url))return "ERROR|PUBLIC_BASE_URL_NOT_CONFIGURED";
                 string r2Error;
                 if(!_r2.PutBytes(key,bytes,contentType,out r2Error))return "ERROR|upload|"+Escape(r2Error);
+                string url=MediaUrl(key);
+                if(string.IsNullOrWhiteSpace(url))return "ERROR|PUBLIC_BASE_URL_NOT_CONFIGURED";
                 return "OK|"+key+"|"+url+"|expires=3d";
             }
             catch { return "ERROR|upload_exception"; }
@@ -3663,7 +3123,7 @@ namespace NexoMarket.CentralServer
             XElement store=null; lock(_sync){XElement stores=_doc.Root.Element("Stores"); if(stores!=null) store=stores.Elements("Store").FirstOrDefault(x=>string.Equals(S(x,"StoreId"),NormalizeStoreId(u.StoreId),StringComparison.OrdinalIgnoreCase));}
             if(store==null) return "<section class='card'><div class='error'>No se encontró la tienda asociada a esta cuenta.</div></section>";
             string logo=S(store,"Logo"), photo=S(store,"StorePhoto");
-            return "<div class='section-title'><div><span class='eyebrow'>TIENDA ONLINE</span><h2>Configurar mi tienda online</h2><p>Acá editás nombre, logo, foto del local, ubicación y horario. Todo queda centralizado y se replica a NexoMarket Web.</p></div><span class='sync-pill'>● CONFIGURACIÓN CENTRAL</span></div>"+
+            return "<div class='section-title'><div><span class='eyebrow'>TIENDA ONLINE</span><h2>Configurar mi tienda online</h2><p>Acá editás nombre, logo, foto del local, ubicación y horario. Todo queda centralizado y se replica a NexoMarket Windows.</p></div><span class='sync-pill'>● CONFIGURACIÓN CENTRAL</span></div>"+
             "<section class='card'><form method='post' action='/seller/store/save' class='settings-form' id='storeOnlineForm'><input type='hidden' name='logo' id='storeLogoUrl' value='"+E(logo)+"'/><input type='hidden' name='storePhoto' id='storePhotoUrl' value='"+E(photo)+"'/><div class='form-grid'>"+
             "<label>Nombre público de la tienda<input name='name' value='"+E(S(store,"Name"))+"' required/></label>"+
             "<label>Nombre del sistema / marca<input name='systemName' value='"+E(S(store,"SystemName"))+"' placeholder='Ej.: Mi Sistema POS'/></label>"+
@@ -3687,7 +3147,7 @@ namespace NexoMarket.CentralServer
             decimal rate=CommissionDecimal(u);decimal sales=StoreMonthSales(u.StoreId,CurrentMonth());decimal amount=Math.Round(sales*rate/100m,2,MidpointRounding.AwayFromZero);string month=CurrentMonth();string status=rate>0?"Pendiente":"Sin porcentaje";string paidAt="";lock(_sync){XElement p=FindPlatformPayment(u.StoreId,month);if(p!=null){status=S(p,"Status");paidAt=S(p,"PaidAt");}} DateTime due=PlatformDueDate(u.StoreId,month);int grace=0;lock(_sync){XElement st=FindStoreElement(u.StoreId);if(st!=null)int.TryParse(S(st,"PlatformGraceDays"),out grace);} bool blocked=IsStorePlatformBlocked(u.StoreId);
             StringBuilder b=new StringBuilder();b.Append("<section class='card platform-payment-card'><div class='eyebrow'>PAGO MENSUAL DE PLATAFORMA</div><h3>Comisión de tu cuenta</h3>");if(rate<=0)b.Append("<p>Actualmente no tenés porcentaje configurado. Cuando el SuperAdmin establezca uno, este panel calculará automáticamente el importe mensual.</p>");else{b.Append("<div class='kpis'>").Append(KpiC("Ventas del mes","$ "+sales.ToString("N2"),month,"green")).Append(KpiC("Porcentaje",rate.ToString("0.####")+"%","configurado por plataforma","yellow")).Append(KpiC("A pagar","$ "+amount.ToString("N2"),status,status=="Pagado"?"green":"yellow")).Append("</div><p class='muted'>Vencimiento: <b>"+due.ToString("dd/MM/yyyy")+"</b> · Tolerancia: <b>"+grace.ToString(CultureInfo.InvariantCulture)+" días</b></p>");if(blocked)b.Append("<div class='closed-store-banner'>🔴 La cuenta está bloqueada por falta de pago. La tienda no fue eliminada.</div>");if(status!="Pagado")b.Append("<form method='post' action='/seller/platform-payment/request' style='margin-top:12px'><input type='hidden' name='month' value='").Append(E(month)).Append("'/><button class='btn violet' type='submit'>SOLICITAR PAGO MENSUAL</button></form>");else b.Append("<p class='sync-pill'>✓ Pago registrado como pagado ").Append(E(paidAt)).Append("</p>");}b.Append("</section>");return b.ToString();
         }
-        private string SellerToolsView(CentralUser u,List<XElement> products,List<XElement> orders){return "<div class='section-title'><div><span class='eyebrow'>HERRAMIENTAS</span><h2>Centro de operaciones</h2><p>Accesos rápidos para gestionar tienda, catálogo, pedidos, clientes y conexión.</p></div></div><div class='quick-grid'><a href='/store/"+Uri.EscapeDataString(u.StoreId??"")+"'>"+SellerIcon("Herramientas")+"Ver escaparate público</a><a href='/seller?view=products'>"+SellerIcon("Productos")+"Catálogo e inventario ("+products.Count+")</a><a href='/seller?view=orders'>"+SellerIcon("Pedidos")+"Pedidos ("+orders.Count+")</a><a href='/seller?view=customers'>"+SellerIcon("Clientes")+"Clientes</a><a href='/seller?view=analytics'>"+SellerIcon("Analítica")+"Analítica y gráficos</a><a href='/seller?view=finance'>"+SellerIcon("Finanzas")+"Finanzas</a><a href='/seller?view=settings'>"+SellerIcon("Configuración")+"Configuración</a><a href='/seller?view=marketing'>"+SellerIcon("Marketing")+"Marketing</a></div><section class='card'><h3>Sincronización</h3><p>El Seller Center Web publica y administra productos, promociones y pedidos directamente desde la plataforma central.</p><div class='sync-pill'>● CUENTA: "+E(u.Email)+" · ● WEB ACTIVA</div></section>";}
+        private string SellerToolsView(CentralUser u,List<XElement> products,List<XElement> orders){return "<div class='section-title'><div><span class='eyebrow'>HERRAMIENTAS</span><h2>Centro de operaciones</h2><p>Accesos rápidos para gestionar tienda, catálogo, pedidos, clientes y conexión.</p></div></div><div class='quick-grid'><a href='/store/"+Uri.EscapeDataString(u.StoreId??"")+"'>"+SellerIcon("Herramientas")+"Ver escaparate público</a><a href='/seller?view=products'>"+SellerIcon("Productos")+"Catálogo e inventario ("+products.Count+")</a><a href='/seller?view=orders'>"+SellerIcon("Pedidos")+"Pedidos ("+orders.Count+")</a><a href='/seller?view=customers'>"+SellerIcon("Clientes")+"Clientes</a><a href='/seller?view=analytics'>"+SellerIcon("Analítica")+"Analítica y gráficos</a><a href='/seller?view=finance'>"+SellerIcon("Finanzas")+"Finanzas</a><a href='/seller?view=settings'>"+SellerIcon("Configuración")+"Configuración</a><a href='/seller?view=marketing'>"+SellerIcon("Marketing")+"Marketing</a></div><section class='card'><h3>Sincronización</h3><p>La PC con NexoMarket Windows publica productos, promociones, cuentas y recibe pedidos del marketplace. La misma cuenta de vendedor se utiliza en Web y Windows.</p><div class='sync-pill'>● CUENTA: "+E(u.Email)+" · ● WEB + WINDOWS ACTIVOS</div></section>";}
         private string SellerCenterCss(){return "<style>body{font-family:'Segoe UI',Arial,sans-serif;background:#000;color:#fff;margin:0;position:relative;overflow-x:hidden}body:before{content:'';position:fixed;inset:-25%;pointer-events:none;z-index:0;background:radial-gradient(ellipse at 8% 18%,transparent 0 28%,rgba(255,255,255,.045) 28.15%,transparent 28.45%),radial-gradient(ellipse at 92% 72%,transparent 0 25%,rgba(57,255,102,.035) 25.15%,transparent 25.45%);transform:rotate(-8deg);opacity:.9}body:after{content:'';position:fixed;width:70vw;height:36vh;right:-18vw;top:12vh;border:1px solid rgba(255,255,255,.07);border-left-color:rgba(57,255,102,.12);border-radius:50%;transform:rotate(-18deg);pointer-events:none;z-index:0;box-shadow:0 0 70px rgba(255,255,255,.025)}.wrap{max-width:1500px;margin:auto;padding:18px;position:relative;z-index:1}.sc-top{display:flex;justify-content:space-between;align-items:center;padding:8px 0 18px}.brand{font-weight:900;font-size:23px}.brand span{color:#39ff66}.brand small{color:#a978ff}.brand small{color:#8292a3;font-size:10px;letter-spacing:2px;margin-left:8px}.top-actions{display:flex;gap:8px}.sc-side{position:fixed;width:230px;top:78px;bottom:18px;background:#0c131c;border:1px solid #23364b;border-radius:18px;padding:14px;box-sizing:border-box;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin}.account-box{border-bottom:1px solid #223246;padding:8px 5px 15px;margin-bottom:10px}.avatar{width:42px;height:42px;border-radius:12px;background:#39ff66;color:#061009;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:20px;margin-bottom:8px}.account-box b,.account-box small{display:block}.account-box small{color:#788b9e;margin-top:4px;font-size:11px;word-break:break-word}.account-box .store-account-name{color:#39ff66;text-shadow:0 0 10px rgba(57,255,102,.16);font-weight:800}.btn .nav-ico{display:inline-block;vertical-align:middle;margin-right:6px}.sc-link{display:flex;align-items:center;gap:9px;color:#a8b8c8;text-decoration:none;padding:11px 12px;border-radius:10px;margin:3px 0;font-weight:700;font-size:13px}.nav-ico{width:17px;height:17px;flex:none}.quick-grid a{display:flex;align-items:center;gap:9px}.sc-link:hover,.sc-link.active{background:linear-gradient(90deg,#17231f,#1a1230);color:#b98cff;border-left:2px solid #9b5cff}.sc-main{margin-left:248px}.welcome{display:flex;justify-content:space-between;gap:15px;align-items:center;padding:24px;border:1px solid #202025;border-radius:20px;background:linear-gradient(135deg,#101923,#0b1118)}.welcome h1{margin:6px 0;font-size:31px}.welcome p,.section-title p,.card p{color:#899bac;line-height:1.5}.account-mini{min-width:180px;padding:14px;border:1px solid #2c445c;border-radius:14px;background:#0b141d}.account-mini b,.account-mini strong,.account-mini small{display:block}.account-mini strong{color:#39ff66;margin:5px 0}.account-mini small{color:#8292a3;word-break:break-word}.eyebrow{color:#b98cff;font-size:10px;letter-spacing:2px;font-weight:900}.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:15px 0}.kpi{padding:17px;border:1px solid #202025;border-radius:16px;background:#050507}.kpi span,.kpi small{display:block;color:#8293a5;font-size:11px}.kpi strong{display:block;font-size:25px;margin:8px 0}.kpi.green{border-top:2px solid #39ff66}.kpi.yellow{border-top:2px solid #ffd34d}.kpi.red{border-top:2px solid #ff5967}.section-title{display:flex;justify-content:space-between;align-items:end;margin:22px 2px 12px}.section-title h2{margin:4px 0}.two-col{display:grid;grid-template-columns:1.3fr .7fr;gap:14px}.card{background:#050507;border:1px solid #202025;border-radius:18px;padding:18px;margin-bottom:14px}.table-wrap{overflow:auto}.table{width:100%;border-collapse:collapse}.table th,.table td{padding:12px 10px;border-bottom:1px solid #223144;text-align:left;font-size:12px;vertical-align:middle}.table th{color:#7f92a6;font-size:10px;text-transform:uppercase;letter-spacing:1px}.table td small{display:block;color:#718397;margin-top:4px}.badge{display:inline-block;padding:5px 8px;border-radius:999px;font-size:10px;font-weight:900}.badge.green{background:#153a22;color:#69ff91}.badge.yellow{background:#403816;color:#ffe36b}.badge.red{background:#401b22;color:#ff7380}.stock.low{color:#ff6572;font-weight:900}.mini-list{display:grid;gap:4px}.mini-row{display:flex;justify-content:space-between;gap:10px;padding:11px;border-bottom:1px solid #223144}.mini-row small{display:block;color:#718397;margin-top:4px}.quick-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.quick-grid a{display:block;text-decoration:none;color:#dce8f2;background:#020204;border:1px solid #273b50;border-radius:12px;padding:14px;font-weight:800}.quick-grid a:hover{border-color:#39ff66}.sync-pill{color:#8dffac;font-size:11px;font-weight:900}.form-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.product-form input,.product-form textarea,.edit-form input,.edit-form textarea{box-sizing:border-box;background:#020204;color:#fff;border:1px solid #2a2a30;border-radius:8px;padding:9px;width:100%;margin:4px 0}.product-form textarea,.edit-form textarea{min-height:70px;grid-column:1/-1}.edit-form{min-width:650px;background:#010102;padding:10px;border:1px solid #202025;border-radius:12px}.inventory-head{margin:0 0 12px}.inventory-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}.inventory-card{background:#020204;border:1px solid #202025;border-radius:14px;padding:10px;min-width:0}.inventory-photo{width:100%;aspect-ratio:1/1;border-radius:10px;overflow:hidden;background:#101a24;border:1px solid #24384c;display:flex;align-items:center;justify-content:center}.inventory-photo img{width:100%;height:100%;object-fit:cover}.no-image{width:100%;height:100%;display:flex;align-items:center;justify-content:center;text-align:center;color:#62778a;font-size:11px;font-weight:900;line-height:1.4}.inventory-name{font-weight:900;margin-top:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.inventory-meta{color:#718397;font-size:10px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.inventory-bottom{display:flex;justify-content:space-between;gap:5px;margin:9px 0;font-size:11px}.inventory-stock{color:#69ff91;font-weight:900}.inventory-stock.low{color:#ff6572}.empty-inventory{padding:30px;text-align:center;color:#8194a6;border:1px dashed #2d465e;border-radius:12px}@media(max-width:1150px){.inventory-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}@media(max-width:900px){.inventory-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:650px){.inventory-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}.danger{background:#401b22;color:#ff7380}@media(max-width:900px){.form-grid{grid-template-columns:repeat(2,1fr)}}.inline-form{display:flex;gap:5px}.inline-form select{min-width:115px;background:#020204;color:#fff;border:1px solid #2a2a30;border-radius:8px;padding:7px}.btn.violet{background:#fff;color:#000;box-shadow:0 0 18px rgba(255,255,255,.22)}.small{font-size:12px}.btn{display:inline-block;background:#39ff66;color:#061009;border:0;border-radius:9px;padding:9px 13px;font-weight:900;text-decoration:none;cursor:pointer}.btn.small{padding:7px 9px;font-size:10px}.btn.ghost{background:#101a24;color:#d9e5ef;border:1px solid #2a4056}.metric-list{display:grid;gap:10px}.metric-list div{padding:12px;border:1px solid #24374b;border-radius:10px;color:#91a1b0}.metric-list b{float:right;color:#fff}.insights{display:grid;gap:8px}.insights div{padding:12px;border-radius:10px;background:#020204;border:1px solid #223448}.section-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.media-pickers{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:10px 0}.upload-box{display:flex;flex-direction:column;gap:5px;padding:14px;border:1px dashed #3b5570;border-radius:14px;background:#020204;cursor:pointer}.upload-box span{font-size:24px}.upload-box b{font-size:13px}.upload-box small{color:#74879a}.upload-box input{margin-top:5px;width:100%}.native-picker{position:absolute!important;left:-10000px!important;top:auto!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important}.media-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.media-preview{min-height:140px;border:1px solid #202025;border-radius:14px;background:#010102;display:flex;align-items:center;justify-content:center;color:#64788b;overflow:hidden}.media-preview img,.media-preview video{width:100%;height:100%;min-height:140px;object-fit:cover}.form-checks,.form-actions{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:10px}.form-actions{justify-content:space-between}.inventory-toolbar{display:flex;gap:8px;margin-bottom:12px}.inventory-toolbar input,.inventory-toolbar select{background:#020204;color:#fff;border:1px solid #2a2a30;border-radius:9px;padding:10px}.inventory-toolbar input{flex:1}.card-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.video-link{font-size:10px;color:#9b5cff;font-weight:900;text-decoration:none;border:1px solid #3b2c5d;border-radius:8px;padding:7px 8px}.tool-strip{display:flex;gap:8px;flex-wrap:wrap}.tool-strip span{background:#101b26;border:1px solid #2a2a30;border-radius:999px;padding:8px 11px;color:#9aacbd;font-size:11px;font-weight:800}.pairing-card{text-align:center;max-width:720px;margin:20px auto}.pair-code{font-size:30px;font-weight:900;letter-spacing:5px;padding:20px;margin:16px 0;border:2px solid #fff;box-shadow:0 0 22px rgba(255,255,255,.16),0 0 42px rgba(57,255,102,.10);border-radius:16px;background:#090e15;word-break:break-all}.pair-instructions{background:#050509;border:1px solid #2a2a30;border-radius:12px;padding:14px;margin:14px 0;text-align:left}.pairing-shortcut{display:flex;justify-content:space-between;align-items:center;gap:15px}.settings-form label{display:block;color:#9aacbd;font-size:11px;font-weight:800}.settings-form input,.settings-form textarea{box-sizing:border-box;background:#020204;color:#fff;border:1px solid #2a2a30;border-radius:8px;padding:9px;width:100%;margin-top:5px}.settings-form textarea{min-height:120px}.identity-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.identity-grid div{background:#020204;border:1px solid #202025;border-radius:12px;padding:14px}.identity-grid small,.identity-grid b{display:block}.identity-grid small{color:#718397;margin-bottom:6px}.identity-grid b{word-break:break-word}.chart-bars{height:205px;display:flex;align-items:end;justify-content:space-around;gap:8px;padding:15px 5px 5px;border-bottom:1px solid #26384e}.bar-col{height:190px;flex:1;display:flex;flex-direction:column;justify-content:end;align-items:center;gap:5px;color:#8293a5;font-size:9px}.bar-col span{font-size:9px;color:#dce8f2;min-height:14px}.bar{width:70%;max-width:42px;background:linear-gradient(180deg,#9b5cff,#39ff66);border-radius:7px 7px 2px 2px;min-height:4px}.status-bars{display:grid;gap:12px}.status-bars div{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}.status-bars div:after{content:'';grid-column:1/-1;height:8px;background:linear-gradient(90deg,#9b5cff 0 55%,#1a2633 55%);border-radius:99px}.order-cards{display:grid;gap:10px}.order-card{display:grid;grid-template-columns:minmax(130px,1fr) minmax(180px,1.25fr) minmax(105px,.7fr) minmax(155px,.9fr);gap:12px;align-items:center;background:#020204;border:1px solid #202025;border-radius:14px;padding:14px;cursor:pointer}.order-card h3{margin:4px 0}.order-card small{display:block;color:#718397;margin-top:4px}.order-card .inline-form{justify-content:flex-end}.order-actions{display:flex;flex-direction:column;gap:7px;min-width:0;width:100%}.order-details{grid-column:1/-1;margin-top:4px;padding:14px;border-top:1px solid #26384e;background:linear-gradient(145deg,#070b10,#0d141d);border-radius:12px}.order-details-title{font-size:12px;font-weight:900;letter-spacing:1px;color:#39ff66;margin-bottom:9px}.order-item-detail{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #1d2937}.order-item-detail small{color:#8292a3}.order-detail-total{display:flex;justify-content:space-between;margin-top:12px;font-weight:900}.order-detail-total strong{color:#39ff66}.order-items-empty{color:#8292a3;padding:8px 0}.order-card.expanded{border-color:#39ff66;box-shadow:0 0 20px rgba(57,255,102,.08)}@media(max-width:900px){.media-pickers{grid-template-columns:1fr 1fr}.order-card{grid-template-columns:1fr 1fr}.order-card .order-actions{grid-column:1/-1;min-width:0}.order-card .inline-form{justify-content:flex-start}.identity-grid{grid-template-columns:1fr}}@media(max-width:650px){.media-pickers{grid-template-columns:1fr}.inventory-toolbar{flex-direction:column}.order-card{grid-template-columns:1fr}.pair-code{font-size:22px;letter-spacing:2px}}@media(max-width:1050px){.kpis{grid-template-columns:repeat(2,1fr)}.sc-side{position:static;width:auto;margin-bottom:14px}.sc-main{margin-left:0}.two-col{grid-template-columns:1fr}}@media(max-width:650px){.wrap{padding:10px}.welcome,.sc-top{align-items:flex-start;flex-direction:column}.kpis,.quick-grid{grid-template-columns:1fr}.top-actions{flex-wrap:wrap}}/* NexoMarket Neon Premium UI v5.2 */body:before{background:radial-gradient(ellipse at 6% 14%,transparent 0 24%,rgba(255,255,255,.055) 24.15%,transparent 24.55%),radial-gradient(ellipse at 94% 28%,transparent 0 20%,rgba(57,255,102,.075) 20.15%,transparent 20.55%),radial-gradient(ellipse at 72% 88%,transparent 0 22%,rgba(167,103,255,.075) 22.15%,transparent 22.55%),radial-gradient(circle at 18% 82%,rgba(57,255,102,.045),transparent 22%),radial-gradient(circle at 82% 12%,rgba(167,103,255,.045),transparent 20%);opacity:1}.wrap:before{content:'';position:fixed;inset:-15%;pointer-events:none;z-index:-1;background:radial-gradient(ellipse at 12% 52%,transparent 0 27%,rgba(57,255,102,.045) 27.1%,transparent 27.45%),radial-gradient(ellipse at 86% 62%,transparent 0 23%,rgba(167,103,255,.055) 23.1%,transparent 23.45%),linear-gradient(112deg,transparent 0 42%,rgba(255,255,255,.025) 42.05%,transparent 42.2%,transparent 61%,rgba(57,255,102,.02) 61.05%,transparent 61.2%);transform:rotate(-5deg);animation:neonDrift 18s ease-in-out infinite alternate}@keyframes neonDrift{from{transform:translate3d(-1%,0,0) rotate(-5deg)}to{transform:translate3d(1%,1%,0) rotate(-3deg)}}.kpi{position:relative;overflow:hidden;background:linear-gradient(145deg,rgba(7,9,12,.96),rgba(12,15,20,.92));border-color:rgba(255,255,255,.09);box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 10px 30px rgba(0,0,0,.28);transition:transform .22s ease,border-color .22s ease,box-shadow .22s ease}.kpi:before{content:'';position:absolute;left:0;right:0;top:0;height:2px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.9),transparent);opacity:.8}.kpi:after{content:'';position:absolute;width:130px;height:130px;right:-70px;top:-70px;border-radius:50%;border:1px solid rgba(255,255,255,.08);box-shadow:0 0 35px rgba(255,255,255,.04)}.kpi:hover{transform:translateY(-4px);border-color:rgba(255,255,255,.18);box-shadow:0 0 24px rgba(255,255,255,.045),0 14px 38px rgba(0,0,0,.38)}.kpi.green{border-top:2px solid #39ff66;box-shadow:0 0 24px rgba(57,255,102,.055),inset 0 1px 0 rgba(255,255,255,.03)}.kpi.yellow{border-top:2px solid #fff;box-shadow:0 0 24px rgba(255,255,255,.045),inset 0 1px 0 rgba(255,255,255,.03)}.kpi.red{border-top:2px solid #a767ff;box-shadow:0 0 24px rgba(167,103,255,.055),inset 0 1px 0 rgba(255,255,255,.03)}.kpi strong{color:#fff;text-shadow:0 0 14px rgba(255,255,255,.16)}.kpi.green strong{color:#dffff0;text-shadow:0 0 14px rgba(57,255,102,.16)}.kpi.red strong{color:#f1e8ff;text-shadow:0 0 14px rgba(167,103,255,.16)}.welcome,.card,.account-mini,.sc-side{background:linear-gradient(145deg,rgba(7,9,12,.94),rgba(11,14,19,.91));border-color:rgba(255,255,255,.075);box-shadow:0 16px 45px rgba(0,0,0,.24),inset 0 1px 0 rgba(255,255,255,.025)}.quick-grid a{position:relative;overflow:hidden;background:linear-gradient(145deg,#030405,#0a0d12);border-color:rgba(255,255,255,.10);box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 8px 24px rgba(0,0,0,.25);transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}.quick-grid a:before{content:'';position:absolute;left:-25%;right:-25%;top:0;height:1px;background:linear-gradient(90deg,transparent,#39ff66,#fff,#a767ff,transparent);opacity:.65}.quick-grid a:hover{transform:translateY(-3px);border-color:rgba(255,255,255,.25);box-shadow:0 0 22px rgba(167,103,255,.08),0 12px 30px rgba(0,0,0,.35)}.btn{transition:transform .18s ease,box-shadow .18s ease,filter .18s ease}.btn:hover{transform:translateY(-1px);filter:brightness(1.06);box-shadow:0 0 20px rgba(255,255,255,.10)}.btn.violet{background:#fff;color:#050505;box-shadow:0 0 20px rgba(255,255,255,.20),inset 0 -1px 0 rgba(0,0,0,.18)}.sc-link:hover,.sc-link.active{background:linear-gradient(90deg,rgba(57,255,102,.08),rgba(167,103,255,.10));color:#fff;border-left:2px solid #39ff66;box-shadow:0 0 18px rgba(57,255,102,.05)}.inventory-card{transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease}.inventory-card:hover{border-color:rgba(255,255,255,.18);box-shadow:0 0 24px rgba(167,103,255,.06);transform:translateY(-2px)}.eyebrow{color:#a767ff;text-shadow:0 0 12px rgba(167,103,255,.18)}.sync-pill{color:#bfffd3;text-shadow:0 0 12px rgba(57,255,102,.15)}.store-toggle{display:inline-flex;margin:0}.danger-outline{background:rgba(255,255,255,.025)!important;color:#fff!important;border:1px solid rgba(167,103,255,.55)!important;box-shadow:0 0 16px rgba(167,103,255,.08)}.danger-outline:hover{border-color:#fff!important;box-shadow:0 0 20px rgba(255,255,255,.16),0 0 28px rgba(167,103,255,.10)!important}.btn,.sc-link,.quick-grid a{transition:all .22s ease}.btn:not(.violet):hover{background:rgba(255,255,255,.035)!important;color:#fff!important;border-color:rgba(255,255,255,.75)!important;box-shadow:0 0 10px rgba(255,255,255,.12),0 0 22px rgba(255,255,255,.08),inset 0 0 10px rgba(255,255,255,.025)!important}.btn.violet:hover{box-shadow:0 0 12px rgba(255,255,255,.55),0 0 30px rgba(255,255,255,.20),inset 0 0 12px rgba(255,255,255,.25)!important}.sc-link:hover{border-left-color:#fff!important;box-shadow:0 0 16px rgba(255,255,255,.07),inset 0 0 14px rgba(255,255,255,.025)!important}.kpi.green strong{text-shadow:0 0 6px rgba(57,255,102,.30),0 0 16px rgba(57,255,102,.12)!important}.kpi.green{border-top-color:#39ff66!important;box-shadow:0 0 22px rgba(57,255,102,.08),inset 0 1px 0 rgba(255,255,255,.04)!important}.welcome,.card{position:relative;overflow:hidden}.welcome:before,.card:before{content:'';display:block;position:absolute;pointer-events:none;left:8%;right:8%;top:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.34),rgba(57,255,102,.20),rgba(167,103,255,.24),transparent);opacity:.75}.sc-top{position:relative}.sc-top:after{content:'';position:absolute;left:0;right:0;bottom:5px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.18),rgba(57,255,102,.20),rgba(167,103,255,.18),transparent);pointer-events:none}.side-store-status{margin:10px 0 12px}.store-status-btn{width:100%;display:flex;align-items:center;gap:10px;background:#050507;border:1px solid rgba(255,255,255,.12);border-radius:13px;padding:11px;color:#fff;cursor:pointer;text-align:left;box-shadow:0 0 18px rgba(0,0,0,.25);transition:.2s}.store-status-btn:hover{border-color:#fff;box-shadow:0 0 20px rgba(255,255,255,.13),0 0 30px rgba(57,255,102,.06)}.store-status-btn .status-dot{width:10px;height:10px;border-radius:50%;flex:none}.store-status-btn span:nth-child(2){display:flex;flex-direction:column;gap:2px;flex:1}.store-status-btn b{font-size:10px;letter-spacing:1px}.store-status-btn small{font-size:11px}.store-status-btn strong{font-size:10px;letter-spacing:.8px}.store-status-btn.is-open .status-dot{background:#39ff66;box-shadow:0 0 10px #39ff66}.store-status-btn.is-open small{color:#39ff66}.store-status-btn.is-closed .status-dot{background:#ff3b5f;box-shadow:0 0 10px #ff3b5f}.store-status-btn.is-closed small{color:#ff6b83}.open.closed{color:#ff6b83}.store-toggle{display:inline-flex;margin:0}.new-order-alert{position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:99999;display:none;min-width:min(680px,calc(100vw - 28px));padding:18px 24px;border:2px solid #ff304f;border-radius:16px;background:linear-gradient(135deg,#5a0714,#a9001f 55%,#4d0612);color:#fff;text-align:center;font-weight:900;box-shadow:0 0 22px rgba(255,48,79,.55),0 16px 45px rgba(0,0,0,.55);animation:orderAlertPulse 1s ease-in-out infinite alternate}.new-order-alert.show{display:block}.new-order-alert .oa-title{font-size:20px;letter-spacing:1px}.new-order-alert .oa-sub{font-size:12px;margin-top:5px;color:#ffe7eb}@keyframes orderAlertPulse{from{filter:brightness(1)}to{filter:brightness(1.16)}}</style>";}
 
         private void CentralSellerProductSave(NetworkStream stream, string cookie, Dictionary<string,string> f)

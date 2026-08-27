@@ -1,0 +1,7 @@
+NexoMarket 5.12.0 - cambios
+
+1. Buscador de tiendas: el texto "Buscar tienda por nombre" ahora es el placeholder/hint del campo; se elimina el título separado y el input queda transparente para integrarse con la interfaz oscura.
+2. Superadministrador: nuevo botón amarillo "VOLVER A HABILITAR TIENDA". Permite seleccionar una tienda bloqueada y definir días de habilitación (1-365, 7 por defecto). Reactiva la tienda y la cuenta vendedora asociada.
+3. Backend: nuevo endpoint /api/admin/store/reactivate y bandera PlatformManualUnlock. Mientras dure la habilitación manual no se muestra el bloqueo por pago ni se rechazan pedidos.
+4. Al marcar un pago de plataforma como Pagado, se limpia la habilitación manual y vuelve a funcionar el control normal de vencimiento.
+Nota: no se cambió la configuración de Render/R2 ni se eliminaron archivos del proyecto en esta entrega para evitar borrar componentes necesarios.

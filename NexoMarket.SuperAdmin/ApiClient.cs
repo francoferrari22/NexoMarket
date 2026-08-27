@@ -49,7 +49,8 @@ namespace NexoMarket.SuperAdmin
         public string Accounts(){return Request("/api/admin/accounts","GET",null);}
         public string CreateStore(Dictionary<string,string> d){return Request("/api/admin/store/create","POST",d);}
         public string DeleteStore(string id){return Request("/api/admin/store/delete","POST",new Dictionary<string,string>{{"storeId",id}});}
-        public string SetStoreActive(string id,bool active){return Request("/api/admin/store/active","POST",new Dictionary<string,string>{{"storeId",id},{"active",active?"1":"0"}});} public string ReactivateStore(string id){return Request("/api/admin/store/reactivate","POST",new Dictionary<string,string>{{"storeId",id}});}
+        public string SetStoreActive(string id,bool active){return Request("/api/admin/store/active","POST",new Dictionary<string,string>{{"storeId",id},{"active",active?"1":"0"}});}
+        public string ReactivateStore(string id,int days){return Request("/api/admin/store/reactivate","POST",new Dictionary<string,string>{{"storeId",id},{"days",days.ToString()}});}
         public string SetStoreFeatured(string id,string mode,string color){return Request("/api/admin/store/featured","POST",new Dictionary<string,string>{{"storeId",id},{"mode",mode},{"color",color}});}
         public string SetStorePlatformGrace(string id,int days,int dueDay){return Request("/api/admin/store/platform-grace","POST",new Dictionary<string,string>{{"storeId",id},{"days",days.ToString()},{"dueDay",dueDay.ToString()}});}
         public string SetTrial(string email,int days){return Request("/api/admin/account/trial","POST",new Dictionary<string,string>{{"email",email},{"days",days.ToString()}});}

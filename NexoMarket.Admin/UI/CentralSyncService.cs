@@ -45,9 +45,6 @@ namespace NexoMarket.Admin.UI
                 string baseUrl = ResolveCentralBaseUrl();
                 if (baseUrl.Length == 0 || string.IsNullOrWhiteSpace(_store.StoreId)) return;
                 ApplyLocalStoreSchedule();
-                // Public web availability must follow Windows quickly, even when no catalog
-                // field changed. This avoids a stale Central "closed" state blocking web orders.
-                SendOperationalHeartbeat(baseUrl);
                 if (string.IsNullOrWhiteSpace(_store.GetSetting("central_sync_key", "")))
                 {
                     string connectedName, connectedEmail, connectedSeller;
@@ -90,15 +87,14 @@ namespace NexoMarket.Admin.UI
                 string lastPublishedStoreSignature = _store.GetSetting("central_store_published_signature", "") ?? "";
                 localStoreDirty = !string.Equals(localStoreSignatureBeforePull, lastPublishedStoreSignature, StringComparison.Ordinal);
                 if (!localStoreDirty) PullStoreState(baseUrl);
-                string newCursor = "";
-                PullProducts(baseUrl, ref changed);
+                string newCursor = PullProductsDelta(baseUrl, cursor, ref changed);
                 PullAccounts(baseUrl);
                 PullCoupons(baseUrl);
-                PullPromotions(baseUrl);
                 PullPlatformFee(baseUrl);
                 _syncCycle++;
                 // Reconciliación completa periódica: repara cualquier delta perdido por una
                 // desconexión, cambio de reloj o actualización realizada justo durante un cursor.
+                if ((_syncCycle % 3) == 0) PullProducts(baseUrl, ref changed);
                 if (!string.IsNullOrWhiteSpace(newCursor))
                 {
                     _store.SetSetting("central_sync_cursor", newCursor);
@@ -202,30 +198,6 @@ namespace NexoMarket.Admin.UI
         }
         private bool Enabled() { return true; }
         private bool AlreadyImported(string id) { foreach (Order o in _store.GetOrders("")) if (string.Equals(o.CentralOrderId,id,StringComparison.OrdinalIgnoreCase)) return true; return false; }
-        private void SendOperationalHeartbeat(string baseUrl)
-        {
-            try
-            {
-                string syncKey = (_store.GetSetting("central_sync_key", "") ?? "").Trim();
-                if (syncKey.Length == 0) syncKey = ComputeStorePairKey(_store.StoreId);
-                Dictionary<string,string> f = new Dictionary<string,string>
-                {
-                    {"storeId", _store.StoreId},
-                    {"syncKey", syncKey},
-                    {"active", _store.GetSetting("store_web_active", "1")},
-                    {"delivery", _store.GetSetting("delivery_enabled", "1")},
-                    {"pickup", _store.GetSetting("pickup_enabled", "1")}
-                };
-                string response = Request(baseUrl + "/api/sync/heartbeat", "POST", Form(f));
-                if (!string.IsNullOrWhiteSpace(response) && response.StartsWith("OK|", StringComparison.OrdinalIgnoreCase))
-                    _store.SetSetting("central_sync_last_error", "");
-            }
-            catch (Exception ex)
-            {
-                try { _store.SetSetting("central_sync_last_error", "heartbeat:" + ex.GetType().Name); } catch { }
-            }
-        }
-
         private void ApplyLocalStoreSchedule()
         {
             if (_store.GetSetting("store_auto_schedule", "0") != "1") return;
@@ -752,32 +724,6 @@ namespace NexoMarket.Admin.UI
                         local.DiscountPercent=pct; local.DiscountAmount=amt; local.MaxUses=max; local.Used=used;
                         local.Active=Decode(p[7])!="0"; local.From=ParseDate(Decode(p[8])); local.To=ParseDate(Decode(p[9]));
                         _store.SaveCoupon(local);
-                    }
-                }
-            }
-            catch{}
-        }
-
-        private void PullPromotions(string baseUrl)
-        {
-            try
-            {
-                string syncKey=(_store.GetSetting("central_sync_key","")??"").Trim();
-                if(syncKey.Length==0||string.IsNullOrWhiteSpace(_store.StoreId))return;
-                string response=Request(baseUrl+"/api/promotions?storeId="+Uri.EscapeDataString(_store.StoreId)+"&syncKey="+Uri.EscapeDataString(syncKey),"GET",null);
-                using(StringReader reader=new StringReader(response??""))
-                {
-                    string line;
-                    while((line=reader.ReadLine())!=null)
-                    {
-                        string[] p=line.Split('|');
-                        if(p.Length<9||!string.Equals(p[0],"PROMOTION",StringComparison.OrdinalIgnoreCase))continue;
-                        Promotion local=_store.GetPromotions().FirstOrDefault(x=>x.Id==ParseLong(Decode(p[1])));
-                        if(local==null)local=new Promotion();
-                        local.Id=ParseLong(Decode(p[1])); local.Name=Decode(p[2]); local.ProductIds=Decode(p[3]);
-                        decimal price=0m; decimal.TryParse(Decode(p[4]),NumberStyles.Any,CultureInfo.InvariantCulture,out price); local.PromotionalPrice=price;
-                        local.Active=Decode(p[5])!="0"; local.From=ParseDate(Decode(p[6])); local.To=ParseDate(Decode(p[7]));
-                        _store.SavePromotion(local);
                     }
                 }
             }
