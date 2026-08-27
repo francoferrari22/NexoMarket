@@ -1,0 +1,2 @@
+NexoMarket 5.19.3 - corrección de sintaxis del Storefront.
+Se corrigió la construcción de la cadena HTML/CSS de Storefront: el CSS de productos/cupones había quedado fuera de un literal C# entre las líneas ~2029-2049, provocando errores de compilación y el CS0106 posterior.
