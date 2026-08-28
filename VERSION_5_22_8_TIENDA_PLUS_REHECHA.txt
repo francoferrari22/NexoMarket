@@ -1,0 +1,27 @@
+NexoMarket 5.22.8 — TIENDA PLUS
+
+CAMBIO ESTRUCTURAL
+La función anterior DESTACADA PLUS fue retirada del flujo operativo y reemplazada por una función independiente llamada TIENDA PLUS.
+
+Persistencia
+- Campo central único: StorePlus (0/1).
+- La publicación del vendedor no modifica StorePlus.
+- Al iniciar el servidor se migra una sola vez cualquier registro antiguo con FeaturedPlus=1 o FeaturedTier=PLUS a StorePlus=1 y luego se eliminan esos campos antiguos.
+
+Super Administrador
+- Nuevo botón: ✦ TIENDA PLUS.
+- Nuevo menú contextual: ✦ TIENDA PLUS.
+- Nuevo endpoint: /api/admin/store/store-plus.
+- Nueva columna: Tienda Plus.
+
+Directorio público
+- StorePlus=1 se transmite en el registro STORE.
+- El directorio ordena TIENDA PLUS antes de las tiendas destacadas comunes.
+- La tarjeta general imprime directamente sobre la portada: ✦ TIENDA PLUS.
+- Diseño violeta premium con acentos dorados y glow.
+- No depende de Featured ni de ninguna capa de la ficha individual.
+
+Ficha individual
+- StorePlus=1 imprime: ✦ TIENDA PLUS.
+
+La publicación continúa visible.
