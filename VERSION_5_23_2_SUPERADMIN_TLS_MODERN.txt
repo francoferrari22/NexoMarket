@@ -1,0 +1,6 @@
+NexoMarket 5.23.2
+- Una sola herramienta Super Administrador.
+- TLS 1.2 explícito para conexión HTTPS a Render, sin desactivar validación SSL.
+- Interfaz Super Admin modernizada visualmente.
+- Tienda Plus y reinicio de estatus conservados.
+- Servidor central basado en la versión estable anterior; web pública preservada salvo etiqueta Tienda Plus.

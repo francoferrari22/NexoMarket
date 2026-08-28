@@ -2,12 +2,18 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
+using System.Security.Authentication;
 using System.Text;
 
 namespace NexoMarket.SuperAdmin
 {
     internal sealed class ApiClient
     {
+        static ApiClient()
+        {
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+            ServicePointManager.Expect100Continue = false;
+        }
         public string BaseUrl { get; set; }
         public string AdminKey { get; set; }
 
@@ -18,6 +24,8 @@ namespace NexoMarket.SuperAdmin
             req.Method = method;
             req.Timeout = 30000;
             req.ReadWriteTimeout = 30000;
+            req.UserAgent = "NexoMarket-SuperAdmin/5.23.2";
+            req.KeepAlive = false;
             req.Headers["X-Nexo-Admin-Key"] = AdminKey ?? "";
             if (method == "POST")
             {
@@ -35,7 +43,7 @@ namespace NexoMarket.SuperAdmin
             catch(WebException ex)
             {
                 if(ex.Response!=null) using(StreamReader r=new StreamReader(ex.Response.GetResponseStream(),Encoding.UTF8)) return r.ReadToEnd();
-                return "ERROR|"+ex.Message;
+                return "ERROR|No se pudo establecer la conexión segura con el servidor. Verificá la URL y que Render esté activo. Detalle: "+ex.Message;
             }
         }
         private static string Encode(Dictionary<string,string> data)
