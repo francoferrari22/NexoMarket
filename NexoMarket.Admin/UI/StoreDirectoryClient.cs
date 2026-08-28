@@ -107,7 +107,7 @@ namespace NexoMarket.Admin.UI
                         s.Address = Decode(p.Length > 17 ? p[17] : "");
                         s.Description = Decode(p.Length > 18 ? p[18] : "");
                         s.RatingSummary = Decode(p.Length > 19 ? p[19] : "0.0|0");
-                        s.FeaturedPlus = Decode(p.Length > 20 ? p[20] : "") == "1";
+                        s.FeaturedPlus = Decode(p.Length > 20 ? p[20] : "") == "1" || string.Equals(Decode(p.Length > 22 ? p[22] : ""), "PLUS", StringComparison.OrdinalIgnoreCase);
                         result.Add(s);
                     }
                 }

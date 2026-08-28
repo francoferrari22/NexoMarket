@@ -1,0 +1,23 @@
+NexoMarket 5.22.6 — DESTACADA PLUS REHECHA DESDE CERO
+
+OBJETIVO
+DESTACADA PLUS debía aparecer en el directorio general exactamente igual que DESTACADA común, pero con su propia identidad visual y máxima prioridad.
+
+RECONSTRUCCIÓN
+- Se eliminó la dependencia de la vista general respecto de la bandera visual Featured.
+- Se creó una fuente única de verdad: FeaturedTier = PLUS / COMMON / NONE.
+- FeaturedPlus se conserva como compatibilidad, pero el directorio público valida también FeaturedTier.
+- Al activar PLUS desde Super Admin: FeaturedTier=PLUS, FeaturedPlus=1 y Featured=0.
+- Al activar DESTACADA común: FeaturedTier=COMMON, Featured=1, FeaturedPlus=0.
+- Al desactivar: FeaturedTier=NONE y ambas banderas quedan en 0.
+- La sincronización/registro del vendedor conserva el nivel administrado por Super Admin.
+- Los registros antiguos se migran automáticamente a FeaturedTier al iniciar Central.
+- StoreLines transmite explícitamente el nivel PLUS al directorio general.
+- La pantalla general vuelve a interpretar PLUS por el nuevo nivel explícito y no solo por Featured.
+- La ficha individual, JSON público y tarjetas generales utilizan la misma fuente de nivel.
+- PLUS mantiene prioridad máxima sobre DESTACADA común.
+- Publicación permanece siempre activa/visible.
+- Se conserva el diseño premium: etiqueta ✦ DESTACADA PLUS, borde violeta y glow.
+
+IMPORTANTE
+Esta versión requiere desplegar el proyecto completo, especialmente NexoMarket.CentralServer, porque el cambio principal está en la lógica central que construye el directorio público.

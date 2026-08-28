@@ -1,0 +1,6 @@
+NexoMarket 5.22.7 — DESTACADA PLUS VISIBLE EN DIRECTORIO
+
+- El directorio general usa FeaturedTier como fuente explícita para distinguir PLUS de COMMON.
+- La tarjeta pública imprime la etiqueta ✦ DESTACADA PLUS directamente dentro de la portada de la tarjeta, con z-index alto, evitando que overlays visuales la oculten.
+- Se mantiene la prioridad PLUS y la ficha individual.
+- La publicación continúa siempre visible.
