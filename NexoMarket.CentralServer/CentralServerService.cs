@@ -511,13 +511,19 @@ namespace NexoMarket.CentralServer
                 string active = Get(f, "active"); if (active != "0") active = "1";
                 string activity = old == null ? DateTime.UtcNow.ToString("o") : S(old, "LastActivityAt");
                 if (string.IsNullOrWhiteSpace(activity)) activity = DateTime.UtcNow.ToString("o");
+                // DESTACADA/DESTACADA PLUS son controles exclusivos del Super Admin.
+                // Nunca deben ser sobrescritos por una publicación/sincronización del vendedor.
+                // Si la tienda ya existe, conservamos exactamente el nivel administrado en Central.
+                string adminFeatured = old == null ? (Get(f,"featured") == "1" ? "1" : "0") : (S(old,"Featured") == "1" ? "1" : "0");
+                string adminFeaturedPlus = old == null ? (Get(f,"featuredPlus") == "1" ? "1" : "0") : (S(old,"FeaturedPlus") == "1" ? "1" : "0");
+                if (adminFeaturedPlus == "1") adminFeatured = "0";
                 XElement e = new XElement("Store", new XAttribute("UpdatedAt", string.IsNullOrWhiteSpace(Get(f,"updatedAt")) ? DateTime.UtcNow.ToString("o") : Get(f, "updatedAt")),
                     new XElement("LastActivityAt", DateTime.UtcNow.ToString("o")),
                     new XElement("StoreId", id), new XElement("SyncKey", syncKey), new XElement("Name", Get(f, "name")), new XElement("LegalName", Get(f, "legalName")),
                     new XElement("Category", Get(f, "category")), new XElement("Address", Get(f, "address")), new XElement("City", Get(f, "city")),
                     new XElement("Province", Get(f, "province")), new XElement("Description", Get(f, "description")), new XElement("SystemName", Get(f, "systemName")), new XElement("Logo", Get(f, "logo")), new XElement("StorePhoto", Get(f, "storePhoto")),
                     new XElement("AutoSchedule", Get(f,"autoSchedule") == "1" ? "1" : "0"), new XElement("OpenTime", string.IsNullOrWhiteSpace(Get(f,"openTime")) ? "08:00" : Get(f,"openTime")), new XElement("CloseTime", string.IsNullOrWhiteSpace(Get(f,"closeTime")) ? "22:00" : Get(f,"closeTime")),
-                    new XElement("Slug", Get(f, "slug")), new XElement("PublicUrl", Get(f, "publicUrl")), new XElement("Featured", Get(f,"featured") == "1" ? "1" : "0"), new XElement("FeaturedPlus", Get(f,"featuredPlus") == "1" ? "1" : "0"), new XElement("Listed", Get(f,"listed") == "0" ? "0" : "1"), new XElement("Active", active),
+                    new XElement("Slug", Get(f, "slug")), new XElement("PublicUrl", Get(f, "publicUrl")), new XElement("Featured", adminFeatured), new XElement("FeaturedPlus", adminFeaturedPlus), new XElement("Listed", "1"), new XElement("Active", active),
                     new XElement("Delivery", Get(f, "delivery") == "0" ? "0" : "1"), new XElement("Pickup", Get(f, "pickup") == "0" ? "0" : "1"),
                     new XElement("Latitude", Get(f, "latitude")), new XElement("Longitude", Get(f, "longitude")),
                     new XElement("CommissionPercent", string.IsNullOrWhiteSpace(Get(f,"commissionPercent")) ? "1" : Get(f,"commissionPercent")), new XElement("CommissionPaidMonth", Get(f,"commissionPaidMonth")), new XElement("CommissionDueDate", Get(f,"commissionDueDate")));

@@ -1,0 +1,7 @@
+NexoMarket 5.22.5 — DESTACADA PLUS PERSISTENTE
+
+- Corregido un problema de sincronización que podía borrar DESTACADA PLUS después de que el vendedor volvía a registrar/sincronizar la tienda.
+- DESTACADA y DESTACADA PLUS quedan bajo control exclusivo del Super Admin.
+- Si una tienda ya existe en Central, /api/stores/register conserva su Featured/FeaturedPlus administrado en Central.
+- DESTACADA PLUS sigue teniendo prioridad superior y desactiva DESTACADA común.
+- Listed/publicación queda siempre activa (1) en el registro central.
