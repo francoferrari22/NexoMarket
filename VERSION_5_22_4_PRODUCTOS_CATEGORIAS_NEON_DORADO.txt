@@ -1,0 +1,9 @@
+NexoMarket 5.22.4 — PRODUCTOS COMPACTOS + CATEGORÍAS NEON DORADO
+
+Cambios:
+- En la tienda web del comprador, la altura de las imágenes de productos se redujo de 220px a 110px (mitad), manteniendo el ancho de cada tarjeta.
+- Se mantiene object-fit: cover para aprovechar el ancho sin deformar las imágenes.
+- La navegación por categorías ahora usa TODO el catálogo publicado para que las categorías sigan visibles aunque haya una búsqueda o filtro activo.
+- Se agregó una barra de categorías horizontal, apta para móvil, con tipografía/detalles en dorado neón.
+- La categoría actualmente seleccionada queda resaltada.
+- Se conserva el estilo oscuro premium de NexoMarket.
