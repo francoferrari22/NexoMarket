@@ -6,7 +6,7 @@ COPY NexoMarket.CentralServer/NexoMarket.CentralServer.csproj ./NexoMarket.Centr
 RUN dotnet restore ./NexoMarket.CentralServer/NexoMarket.CentralServer.csproj --verbosity minimal
 
 COPY NexoMarket.CentralServer/ ./NexoMarket.CentralServer/
-RUN echo "=== NEXOMARKET BUILD 5.19.3 ===" && \
+RUN echo "=== NEXOMARKET BUILD 5.23.0 ===" && \
     echo "Source: CentralServerService.cs" && \
     wc -l ./NexoMarket.CentralServer/CentralServerService.cs && \
     echo "=== COMPILANDO ===" && \

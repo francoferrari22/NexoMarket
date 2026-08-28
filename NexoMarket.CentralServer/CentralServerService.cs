@@ -2988,67 +2988,9 @@ namespace NexoMarket.CentralServer
             Audit("commission_due_date_changed",id,"","",due.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture));
             return "OK|due_date|"+due.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture);
         }
-        private string AdminCommissionAction(string key, Dictionary<string,string> f)
+        private string AdminCommissionAction(string key,Dictionary<string,string> f)
         {
-            string denied = AdminDenied(key);
-            if (denied != null) return denied;
-
-            string id = NormalizeStoreId(Get(f, "storeId"));
-            string action = (Get(f, "action") ?? "").Trim().ToLowerInvariant();
-            if (id.Length == 0) return "ERROR|store_required";
-
-            if (action == "paid")
-            {
-                lock (_sync)
-                {
-                    XElement st = _doc.Root.Element("Stores").Elements("Store").FirstOrDefault(x => S(x, "StoreId") == id);
-                    if (st == null) return "ERROR|store_not_found";
-                    st.SetElementValue("CommissionPaidMonth", CurrentMonthKey());
-                    st.SetElementValue("CommissionPaidAt", DateTime.UtcNow.ToString("o"));
-                    Save();
-                }
-                Audit("commission_marked_paid", id, "", "", CurrentMonthKey());
-                return "OK|paid";
-            }
-
-            if (action == "postpone")
-            {
-                int days;
-                if (!int.TryParse(Get(f, "days"), out days) || days < 1 || days > 365)
-                    return "ERROR|invalid_days";
-                DateTime due = DateTime.UtcNow.Date.AddDays(days);
-                lock (_sync)
-                {
-                    XElement st = _doc.Root.Element("Stores").Elements("Store").FirstOrDefault(x => S(x, "StoreId") == id);
-                    if (st == null) return "ERROR|store_not_found";
-                    st.SetElementValue("CommissionDueDate", due.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
-                    st.SetElementValue("CommissionPostponedUntil", due.ToString("o"));
-                    Save();
-                }
-                return "OK|postponed|" + due.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-            }
-
-            if (action == "block" || action == "enable")
-            {
-                bool on = action == "enable";
-                Dictionary<string,string> storeFields = new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
-                storeFields["storeId"] = id;
-                storeFields["active"] = on ? "1" : "0";
-                string result = AdminSetStoreActive(key, storeFields);
-                if (!result.StartsWith("OK|", StringComparison.OrdinalIgnoreCase)) return result;
-
-                CentralUser seller = FindSellerByStore(id);
-                if (seller != null)
-                {
-                    Dictionary<string,string> accountFields = new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
-                    accountFields["email"] = seller.Email;
-                    accountFields["active"] = on ? "1" : "0";
-                    AdminSetAccountActive(key, accountFields);
-                }
-                return "OK|" + (on ? "enabled" : "blocked");
-            }
-
-            return "ERROR|unknown_action";
+            string denied=AdminDenied(key);if(denied!=null)return denied;string id=NormalizeStoreId(Get(f,"storeId")),action=Get(f,"action").Trim().ToLowerInvariant();if(id.Length==0)return "ERROR|store_required";if(action=="paid"){lock(_sync){XElement st=_doc.Root.Element("Stores").Elements("Store").FirstOrDefault(x=>S(x,"StoreId")==id);if(st==null)return "ERROR|store_not_found";st.SetElementValue("CommissionPaidMonth",CurrentMonthKey());st.SetElementValue("CommissionPaidAt",DateTime.UtcNow.ToString("o"));Save();}Audit("commission_marked_paid",id,"","",CurrentMonthKey());return "OK|paid";}if(action=="postpone"){int days;if(!int.TryParse(Get(f,"days"),out days)||days<1||days>365)return "ERROR|invalid_days";DateTime due=DateTime.UtcNow.Date.AddDays(days);lock(_sync){XElement st=_doc.Root.Element("Stores").Elements("Store").FirstOrDefault(x=>S(x,"StoreId")==id);if(st==null)return "ERROR|store_not_found";st.SetElementValue("CommissionDueDate",due.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture));st.SetElementValue("CommissionPostponedUntil",due.ToString("o"));Save();}return "OK|postponed|"+due.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture);}if(action=="block"||action=="enable"){bool on=action=="enable";CentralUser seller=FindSellerByStore(id);string r=AdminSetStoreActive(key,new Dictionary<string,string>{{"storeId",id},{"active",on?"1":"0"}});if(!r.StartsWith("OK|",StringComparison.OrdinalIgnoreCase))return r;if(seller!=null)AdminSetAccountActive(key,new Dictionary<string,string>{{"email",seller.Email},{"active",on?"1":"0"}});return "OK|"+(on?"enabled":"blocked");}return "ERROR|unknown_action";
         }
         private string SellerCommissionCard(string storeId)
         {
