@@ -1,0 +1,6 @@
+NexoMarket 5.21.1
+DESTACADA PLUS = prioridad máxima.
+Frente público = TIENDA DESTACADA, sin DESTACADA COMÚN.
+Super Admin = control de DESTACADA COMÚN y DESTACADA PLUS.
+Comisiones = porcentaje + fecha límite + seguimiento de ventas/deuda/estado/pago.
+Seller Center = aviso de liquidación visible al vendedor.

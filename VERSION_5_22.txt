@@ -1,0 +1,3 @@
+NexoMarket 5.22
+Prioridad: DESTACADA PLUS > DESTACADA > NORMAL.
+Web publica: TIENDA DESTACADA para comun; DESTACADA PLUS para Plus.

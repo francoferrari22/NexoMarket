@@ -1,0 +1,6 @@
+NexoMarket Super Admin 5.20.2
+- Boton superior visible: ★ DESTACADA.
+- Menu contextual con clic derecho: ✦ SUPER DESTACADA, ★ DESTACADA COMÚN, 🟡 ABRIR / HABILITAR TIENDA, BLOQUEAR / CERRAR.
+- Super Destacada sigue siendo exclusiva y elimina Destacada común.
+- Nuevo BAT único de compilación + Setup: CREAR_SETUP_SUPERADMIN_5_20_2.bat.
+- Se eliminaron los BAT anteriores de esta sección.

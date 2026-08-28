@@ -1,0 +1,32 @@
+NEXOMARKET 5.20.4 - REEMPLAZAR TODO GITHUB
+
+Este ZIP contiene el contenido del repositorio para reemplazo completo.
+IMPORTANTE: al extraer, hacerlo sobre la RAIZ del repositorio, no dentro de otra carpeta.
+
+INCLUYE:
+- NexoMarket.Admin completo
+- NexoMarket.CentralServer completo
+- NexoMarket.SuperAdmin completo
+- Installer completo
+- Herramientas/Admin
+- Herramientas/SuperAdminWeb con Super Admin Web 5.16.1
+- Dockerfile, render.yaml y archivos de configuración/documentación
+
+SUPER ADMIN:
+- Clic derecho en tienda: DESTACADA PLUS / DESTACADA COMUN / ABRIR-HABILITAR / BLOQUEAR-CERRAR.
+- DESTACADA PLUS anula DESTACADA COMUN.
+- DESTACADA COMUN anula DESTACADA PLUS.
+- ABRIR/HABILITAR fuerza Active=1.
+
+PUBLICO:
+- La interfaz pública muestra solo TIENDA DESTACADA.
+- Destacada Plus mantiene prioridad y resplandor violeta lento.
+- Destacada común mantiene estela verde.
+- Cupones compactos en filas de 3.
+
+COMPILACION SUPER ADMIN:
+- NexoMarket.SuperAdmin/CREAR_SETUP_SUPERADMIN_5_20_4.bat
+- SIN MSBuild; usa csc.exe de .NET Framework y luego Inno Setup si está instalado.
+- Genera log si falla.
+
+NO SE INCLUYEN bin/obj generados: el BAT los crea al compilar.

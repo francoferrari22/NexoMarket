@@ -1,0 +1,16 @@
+NexoMarket 5.20.2 - Reemplazo completo GitHub
+
+Cambios principales:
+1. Super Admin conserva SUPER DESTACADA y vuelve a mostrar un boton superior ★ DESTACADA.
+2. Clic derecho sobre una tienda muestra, en este orden:
+   - ✦ SUPER DESTACADA
+   - ★ DESTACADA COMÚN
+   - 🟡 ABRIR / HABILITAR TIENDA
+   - ⛔ BLOQUEAR / CERRAR
+3. SUPER DESTACADA es exclusiva: al activarla se pone FeaturedPlus=1 y Featured=0.
+4. DESTACADA COMÚN se puede activar desde el boton superior o desde clic derecho.
+5. HABILITAR fuerza Active=1 en el servidor.
+6. Se eliminaron los BAT anteriores de NexoMarket.SuperAdmin y queda un unico BAT: CREAR_SETUP_SUPERADMIN_5_20_2.bat.
+7. El BAT compila sin MSBuild y genera el Setup con Inno Setup si ISCC.exe esta instalado.
+
+Reemplazar el proyecto completo por este ZIP.

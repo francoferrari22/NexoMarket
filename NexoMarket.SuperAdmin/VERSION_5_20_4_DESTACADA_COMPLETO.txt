@@ -1,0 +1,9 @@
+NexoMarket Super Admin 5.20.4
+
+'
+'Esta versión conserva el proyecto completo y agrega/recupera: DESTACADA COMÚN en Super Admin, menú contextual con clic derecho, prioridad de DESTACADA PLUS, habilitar/desbloquear tienda, y SuperAdmin Web 5.16.1 en Herramientas/SuperAdminWeb.
+
+Reglas:
+- Destacada común: Featured=1, FeaturedPlus=0.
+- Destacada Plus: FeaturedPlus=1, Featured=0.
+- Destacada Plus siempre tiene prioridad.

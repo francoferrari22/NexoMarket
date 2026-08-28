@@ -1,0 +1,9 @@
+NexoMarket 5.21.0
+
+- DESTACADA PLUS es la mayor prioridad.
+- En el frente público se muestra solamente TIENDA DESTACADA; no DESTACADA COMÚN.
+- Super Admin conserva el control de DESTACADA COMÚN y DESTACADA PLUS.
+- Nuevo panel dorado de comisiones: porcentaje, ventas del mes, deuda, fecha límite, vencido/pagado.
+- El vendedor recibe la liquidación en Seller Center.
+- Fecha límite configurable desde Super Admin.
+- Diseño con grids responsivos para evitar superposiciones.

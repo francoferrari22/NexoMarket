@@ -1,0 +1,9 @@
+NexoMarket 5.20.5 — DESTACADA PLUS
+
+- Terminología pública corregida: DESTACADA PLUS (no “Super Destacada”).
+- DESTACADA PLUS es el nivel de mayor prioridad.
+- DESTACADA COMÚN continúa disponible en Super Admin y menú contextual.
+- Al activar DESTACADA PLUS se desactiva DESTACADA COMÚN.
+- En el panel frontal ambas muestran “TIENDA DESTACADA”; Plus conserva la prioridad y el efecto violeta lento.
+- Destacada común conserva la estela verde.
+- No se cambia el campo interno FeaturedPlus ni la lógica de prioridad existente.

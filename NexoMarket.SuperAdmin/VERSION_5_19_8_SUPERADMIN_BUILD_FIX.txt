@@ -1,0 +1,10 @@
+NexoMarket 5.19.8 - Super Admin Build Fix
+
+Correccion principal:
+- CREAR_SETUP_SUPERADMIN.bat comprobaba la carpeta bin incorrecta (duplicaba NexoMarket.SuperAdmin).
+- Ahora usa la salida real: NexoMarket.SuperAdmin\bin\Release\NexoMarket.SuperAdmin.exe.
+- Limpieza correcta de bin/obj.
+- Rebuild con MSBuild y Platform Any CPU.
+- Verificacion explicita del EXE generado antes de crear el instalador.
+- Rutas del Inno Setup corregidas para ejecutarse desde la carpeta NexoMarket.SuperAdmin.
+- COMPILAR_FACIL_SUPERADMIN.bat actualizado con la misma logica.

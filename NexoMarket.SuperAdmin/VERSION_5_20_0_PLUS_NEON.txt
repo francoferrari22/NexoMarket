@@ -1,0 +1,9 @@
+NexoMarket Super Admin 5.20.1 — Featured controls fix
+
+- Restored ★ DESTACADA control in Super Admin.
+- Right-click on a store: ✦ SUPER DESTACADA, ★ DESTACADA, 🟡 ABRIR / HABILITAR, ⛔ BLOQUEAR / CERRAR.
+- Plus remains exclusive: enabling Plus automatically clears normal Featured.
+- Enabling normal Featured clears Plus, so the two levels never coexist.
+- Public storefront shows only “★ TIENDA DESTACADA” for both levels; Plus is distinguished by its violet animated glow.
+- Fixed Super Admin API client active endpoint and restored normal Featured endpoint.
+- Yellow ABRIR / HABILITAR explicitly forces Active=1.

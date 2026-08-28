@@ -1,0 +1,6 @@
+NexoMarket 5.19.7
+- Cupones en tarjetas compactas 3 columnas.
+- MI CUENTA del vendedor sin salto de línea.
+- DESTACADA PLUS exclusiva y prioritaria sobre DESTACADA común.
+- Super Admin con controles explícitos DESTACAR / DESTACADA PLUS.
+- Setup BAT + instalador Inno Setup para Super Admin.

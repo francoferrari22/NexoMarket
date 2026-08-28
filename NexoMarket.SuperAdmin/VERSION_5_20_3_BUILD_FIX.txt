@@ -1,0 +1,11 @@
+NexoMarket Super Admin 5.20.4
+
+Correccion del build:
+- MainForm.cs recupera Stat(), Grid(), RefreshAll() y LoadStores() coherente con la respuesta STORE| del servidor.
+- Menu contextual real con clic derecho sobre una tienda.
+- Opciones: SUPER DESTACADA, DESTACADA COMUN, ABRIR/HABILITAR y BLOQUEAR/CERRAR.
+- SUPER DESTACADA y DESTACADA son excluyentes; el servidor ya fuerza esa regla.
+- El boton ABRIR/HABILITAR fuerza Active=1 mediante el endpoint existente.
+- Unico BAT de Super Admin: CREAR_SETUP_SUPERADMIN_5_20_4.bat.
+- Compila con csc.exe, sin MSBuild.
+- Inno Setup usa la ruta relativa correcta al EXE generado.
