@@ -1,0 +1,9 @@
+NexoMarket 5.23.4
+
+BASE ESTABLE + SUPER ADMIN UNICO
+- CentralServerService restaurado a la base estable 5.22.2 para evitar los CS0106/CS1513 introducidos por parches anteriores.
+- SuperAdmin unico: se elimina NexoMarket.Admin.
+- Conexion SuperAdmin fuerza TLS 1.2, desactiva Expect100Continue, KeepAlive y proxy automatico sin desactivar validacion de certificados.
+- La accion TIENDA PLUS del SuperAdmin usa el endpoint existente y estable featured-plus, pero se presenta al usuario como TIENDA PLUS.
+- Reiniciar estatus ejecuta PLUS=0 y DESTACADA=0 mediante endpoints estables.
+- Web/servidor no se reescriben con parches experimentales.
