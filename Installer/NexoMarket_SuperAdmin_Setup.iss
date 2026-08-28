@@ -1,5 +1,5 @@
 #define MyAppName "NexoMarket Super Administrador"
-#define MyAppVersion "5.22"
+#define MyAppVersion "5.22.2"
 #define MyAppPublisher "NexoMarket"
 #define MyAppExeName "NexoMarket.SuperAdmin.exe"
 

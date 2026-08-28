@@ -1,0 +1,9 @@
+NexoMarket 5.22.1
+
+Correcciones:
+- ABRIR/HABILITAR TIENDA ahora reactiva también la cuenta del vendedor asociada.
+- Super Admin Web permite cambiar logo, portada y fotos de productos desde la ficha de tienda.
+- Restablecimiento de contraseña de vendedor se mantiene disponible sin conocer la anterior.
+- Web pública: DESTACADA = “★ TIENDA DESTACADA”; nivel superior = “✦ DESTACADA PLUS”.
+- Destacada Plus conserva prioridad y halo violeta pulsante cada 5 segundos.
+- Destacada común conserva estela verde sin parpadeo.

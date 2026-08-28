@@ -1,3 +1,9 @@
-NexoMarket 5.22
-Prioridad: DESTACADA PLUS > DESTACADA > NORMAL.
-Web publica: TIENDA DESTACADA para comun; DESTACADA PLUS para Plus.
+NexoMarket 5.22.2
+
+- Publicación del directorio permanentemente activa.
+- NEXOMARKET en la ficha de tienda vuelve al inicio sin cerrar sesión.
+- Web pública: DESTACADA PLUS se muestra como “✦ DESTACADA PLUS”.
+- Web pública: destacada común se muestra como “★ TIENDA DESTACADA”.
+- DESTACADA PLUS conserva prioridad máxima y halo violeta con pulso lento de 5 segundos.
+- Super Admin Web sin opción de ocultar publicaciones.
+- Compilador fácil sin MSBuild, con log y apertura automática de carpetas EXE/Setup.

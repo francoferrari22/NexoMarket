@@ -1,0 +1,2 @@
+NexoMarket 5.22.2
+Publicacion permanente + navegacion al inicio + nomenclatura publica Destacada Plus + compilacion facil sin MSBuild.

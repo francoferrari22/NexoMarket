@@ -1,0 +1,34 @@
+NexoMarket 5.22.2
+
+CAMBIOS DE ESTA VERSION
+
+1. Navegacion de tienda
+- El logotipo/texto NEXOMARKET de la ficha de tienda ahora es un enlace al inicio (/).
+- El enlace no ejecuta logout y conserva la sesion activa del comprador o vendedor.
+
+2. Publicacion permanente
+- Las tiendas del directorio central siempre se consideran publicadas.
+- Se elimina la posibilidad funcional de ocultarlas.
+- El Super Admin muestra PUBLICADA / PUBLICADA SIEMPRE.
+- Al habilitar una tienda se fuerza Listed=1.
+
+3. Destacaciones publicas
+- DESTACADA PLUS: prioridad maxima, etiqueta publica "✦ DESTACADA PLUS".
+- DESTACADA comun: etiqueta publica "★ TIENDA DESTACADA".
+- Nunca se muestra "DESTACADA COMUN" al cliente.
+- Plus conserva halo violeta y pulso lento de 5 segundos.
+- Comun conserva estela verde sin parpadeo.
+
+4. Super Admin Web
+- Version 5.22.2.
+- Publicacion siempre activa.
+- Se mantiene control de activar/bloquear, Destacada, Destacada Plus, comisiones, imagenes y contrasena.
+- El boton Abrir/Habilitar informa el resultado y actualiza la ficha.
+
+5. Compilacion
+- Nuevo COMPILAR_FACIL_SUPERADMIN_5_22_2.bat.
+- No usa MSBuild.
+- Genera el EXE con csc.exe de .NET Framework.
+- Genera Setup con Inno Setup si esta instalado.
+- Abre automaticamente las carpetas del EXE y Setup.
+- Genera SUPERADMIN_5_22_2_BUILD_LOG.txt.
