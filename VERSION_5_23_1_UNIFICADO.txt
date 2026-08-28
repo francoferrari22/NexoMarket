@@ -1,0 +1,4 @@
+VERSION 5.23.1 - SUPER ADMIN UNIFICADO
+Se conserva una sola herramienta de administración: NexoMarket.SuperAdmin.
+Se elimina del paquete la herramienta administrativa duplicada/legacy y su HTA separado.
+Tienda Plus y Destacada común son estados exclusivos. Reiniciar estatus limpia ambos y mantiene Listed=1.

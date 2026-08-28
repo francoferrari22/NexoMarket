@@ -53,7 +53,6 @@ namespace NexoMarket.SuperAdmin
         public string SetStoreFeatured(string id,bool featured){return Request("/api/admin/store/featured","POST",new Dictionary<string,string>{{"storeId",id},{"featured",featured?"1":"0"}});}
         public string StoreMedia(Dictionary<string,string> d){return Request("/api/admin/store/media","POST",d);}
         public string SetStorePlus(string id,bool storePlus){return Request("/api/admin/store/store-plus","POST",new Dictionary<string,string>{{"storeId",id},{"storePlus",storePlus?"1":"0"}});}
-        public string SetStoreStatus(string id,string status){return Request("/api/admin/store/status","POST",new Dictionary<string,string>{{"storeId",id},{"status",status}});}
         public string ResetStoreStatus(string id){return Request("/api/admin/store/reset-status","POST",new Dictionary<string,string>{{"storeId",id}});}
         public string SetTrial(string email,int days){return Request("/api/admin/account/trial","POST",new Dictionary<string,string>{{"email",email},{"days",days.ToString()}});}
         public string SetAccountActive(string email,bool active){return Request("/api/admin/account/active","POST",new Dictionary<string,string>{{"email",email},{"active",active?"1":"0"}});}
