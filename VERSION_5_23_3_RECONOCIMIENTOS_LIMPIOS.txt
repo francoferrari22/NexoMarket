@@ -1,0 +1,8 @@
+NexoMarket 5.23.3
+
+- Una sola herramienta administrativa: NexoMarket Super Administrador.
+- Primer arranque: reset único de DESTACADA/TIENDA PLUS y eliminación de campos legacy.
+- Botón Super Admin: RESETEAR TODOS LOS RECONOCIMIENTOS.
+- TIENDA PLUS y DESTACADA común se administran desde un único flujo de estatus.
+- Conexión del Super Admin: TLS 1.2, sin desactivar validación de certificados.
+- Web pública conservada; el directorio recibe StorePlus directamente desde el registro central.
