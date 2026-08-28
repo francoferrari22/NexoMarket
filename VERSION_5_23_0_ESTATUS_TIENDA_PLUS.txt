@@ -1,0 +1,20 @@
+NexoMarket 5.23.0 — ESTATUS TIENDA PLUS REHECHO
+
+CAMBIO CENTRAL
+- Se conserva la web y su diseño general.
+- El reconocimiento público TIENDA PLUS se renderiza como un elemento frontal independiente de la portada, con z-index propio, para evitar que capas de imagen/sombreado lo oculten.
+- El estado que llega desde Super Administrador usa un nuevo canal: /api/admin/store/status.
+- Estados permitidos: PLUS, FEATURED y NONE.
+- PLUS y DESTACADA son excluyentes mediante el nuevo canal.
+- Nuevo endpoint /api/admin/store/reset-status para dejar la tienda sin estatus promocional.
+- La publicación Listed permanece en 1.
+- Se eliminan restos de FeaturedPlus/FeaturedTier al cambiar o reiniciar estado.
+
+SUPER ADMINISTRADOR
+- TIENDA PLUS usa el nuevo canal de estatus.
+- DESTACADA común usa el mismo canal nuevo.
+- Nuevo botón rojo/naranja: REINICIAR ESTATUS DE LA TIENDA.
+
+NOTA DE VALIDACION
+- Se revisó que el paquete contiene los nuevos endpoints, cliente API, botón de reinicio y markup frontal de TIENDA PLUS.
+- No se pudo ejecutar una compilación .NET dentro de este entorno porque no están instalados dotnet/msbuild/xbuild.

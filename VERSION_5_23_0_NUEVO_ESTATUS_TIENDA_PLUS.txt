@@ -1,0 +1,5 @@
+NexoMarket 5.23.0
+Nuevo canal Super Admin -> Central -> Directorio para estatus promocionales.
+TIENDA PLUS se renderiza como badge frontal independiente sobre la tarjeta pública.
+Nuevo botón REINICIAR ESTATUS DE LA TIENDA.
+La web mantiene el resto del funcionamiento intacto.
